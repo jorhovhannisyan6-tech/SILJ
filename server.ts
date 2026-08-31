@@ -85,6 +85,10 @@ try {
       vehicleOrPropertyDetails TEXT,
       createdAt TEXT
     );
+    CREATE TABLE IF NOT EXISTS cba_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
 } catch (e) {
   console.warn("Could not load native better-sqlite3 module. Using pure JSON file persistence fallback.", e);
@@ -92,7 +96,8 @@ try {
   const tableFiles: Record<string, string> = {
     users: path.join(dbDir, 'sil_users.json'),
     audit_events: path.join(dbDir, 'sil_audit_events.json'),
-    client_leads: path.join(dbDir, 'sil_client_leads.json')
+    client_leads: path.join(dbDir, 'sil_client_leads.json'),
+    cba_settings: path.join(dbDir, 'sil_cba_settings.json')
   };
 
   const loadTable = (table: string): any[] => {
@@ -1645,10 +1650,41 @@ app.post("/api/insurance/calculate", (req, res) => {
 
 // Live Central Bank of Armenia (CBA.am) Exchange Rates Service
 let cbaRatesCache: { data: any; timestamp: number } | null = null;
+let customCbaRatesOverride: any = null;
+
+async function getStoredCustomRates() {
+  if (customCbaRatesOverride) return customCbaRatesOverride;
+  try {
+    const row = db.prepare ? db.prepare("SELECT value FROM cba_settings WHERE key = ?").get("custom_rates") : null;
+    if (row && row.value) {
+      customCbaRatesOverride = JSON.parse(row.value);
+      return customCbaRatesOverride;
+    }
+  } catch {
+    try {
+      const file = path.join(dbDir, 'sil_cba_settings.json');
+      if (fs.existsSync(file)) {
+        const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const found = data.find((x: any) => x.key === 'custom_rates');
+        if (found && found.value) {
+          customCbaRatesOverride = JSON.parse(found.value);
+          return customCbaRatesOverride;
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
 
 async function fetchLiveCbaRates(force = false) {
+  if (!force) {
+    const custom = await getStoredCustomRates();
+    if (custom) {
+      return custom;
+    }
+  }
+
   const now = Date.now();
-  // Cache for 60 seconds unless forced
   if (!force && cbaRatesCache && now - cbaRatesCache.timestamp < 60 * 1000) {
     return cbaRatesCache.data;
   }
@@ -1662,6 +1698,27 @@ async function fetchLiveCbaRates(force = false) {
   };
 
   try {
+    const frankRes = await fetch("https://api.frankfurter.app/latest?from=USD&to=AMD,EUR,RUB,GBP").catch(() => null);
+    if (frankRes && frankRes.ok) {
+      const frankData = await frankRes.json();
+      if (frankData?.rates?.AMD) {
+        const usdToAmd = frankData.rates.AMD;
+        const eurToUsd = frankData.rates.EUR || 0.92;
+        const rubToUsd = frankData.rates.RUB || 90;
+        const gbpToUsd = frankData.rates.GBP || 0.78;
+
+        const liveRates = {
+          AMD: defaultRates.AMD,
+          USD: { ...defaultRates.USD, rateToAMD: Math.round(usdToAmd * 100) / 100, lastUpdated: new Date().toISOString() },
+          EUR: { ...defaultRates.EUR, rateToAMD: Math.round((usdToAmd / eurToUsd) * 100) / 100, lastUpdated: new Date().toISOString() },
+          RUB: { ...defaultRates.RUB, rateToAMD: Math.round((usdToAmd / rubToUsd) * 100) / 100, lastUpdated: new Date().toISOString() },
+          GBP: { ...defaultRates.GBP, rateToAMD: Math.round((usdToAmd / gbpToUsd) * 100) / 100, lastUpdated: new Date().toISOString() },
+        };
+        cbaRatesCache = { data: liveRates, timestamp: now };
+        return liveRates;
+      }
+    }
+
     const cbRes = await fetch("https://cb.am/latest.json").catch(() => null);
     if (cbRes && cbRes.ok) {
       const cbData = await cbRes.json();
@@ -1716,10 +1773,34 @@ app.get("/api/cba-rates", async (req, res) => {
   const rates = await fetchLiveCbaRates(force);
   res.json({
     status: "ok",
-    source: "ՀՀ Կենտրոնական Բանկ (CBA.am) - Live Exchange Rates",
+    source: "ՀՀ Կենտրոնական Բանկ (CBA.am & Frankfurter) - Live Exchange Rates",
     lastUpdated: new Date().toISOString(),
     rates,
   });
+});
+
+app.post("/api/cba-rates/admin-save", (req, res) => {
+  try {
+    const { rates } = req.body || {};
+    if (!rates) return res.status(400).json({ error: "Missing rates" });
+    customCbaRatesOverride = rates;
+    cbaRatesCache = { data: rates, timestamp: Date.now() };
+
+    try {
+      if (db.prepare) {
+        db.prepare("INSERT OR REPLACE INTO cba_settings (key, value) VALUES (?, ?)").run("custom_rates", JSON.stringify(rates));
+      } else {
+        const file = path.join(dbDir, 'sil_cba_settings.json');
+        fs.writeFileSync(file, JSON.stringify([{ key: 'custom_rates', value: JSON.stringify(rates) }], null, 2), 'utf8');
+      }
+    } catch (err) {
+      console.warn("Failed to persist custom rates to db:", err);
+    }
+
+    res.json({ status: "ok", rates });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message });
+  }
 });
 
 app.post("/api/valuation/property-market-value", async (req, res) => {

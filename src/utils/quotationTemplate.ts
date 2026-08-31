@@ -2,6 +2,8 @@ import { InsuranceProductType, QuotationProposal } from "../types";
 import { formatCurrency, formatPercent } from "./insuranceCalculator";
 import horizontalLogo from "../assets/images/sil-logo-horizontal.png";
 import { translatePhraseLocally, PRODUCT_TITLES_LOCALIZED } from "./quotationTranslation";
+import { SIL_PRODUCT_CONDITIONS, OfficialConditionInfo } from "../data/productConditionsData";
+import { transliterateLatinToArmenian } from "./transliteration";
 
 const esc = (value: unknown) => String(value ?? "—")
   .replace(/&/g, "&amp;")
@@ -24,19 +26,123 @@ const PRODUCT_LABELS: Record<InsuranceProductType, {
   franchiseLabel: string;
   riskLabel: string;
 }> = {
-  property: { title: "Գույքի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող գույք", amountLabel: "Արժեք / ապահովագրական գումար", tariffLabel: "Տարեկան սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Գույքային ռիսկեր" },
-  mortgage: { title: "Հիփոթեքային վարկառուների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող օբյեկտ / վարկառու", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Հիփոթեքային ծածկույթներ" },
-  casco: { title: "ԿԱՍԿՈ ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող ավտոմեքենա", amountLabel: "Շուկայական արժեք / ապահովագրական գումար", tariffLabel: "Վերջնական սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "ԿԱՍԿՈ ծածկույթներ և ռիսկեր" },
-  health: { title: "Առողջության ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող անձինք / ծրագիր", amountLabel: "Ապահովագրական սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Բժշկական ծածկույթներ" },
-  travel: { title: "Ճանապարհորդության ապահովագրության առաջարկ", objectLabel: "Ճանապարհորդ / ուղևորություն", amountLabel: "Ծածկույթի սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "Ճանապարհորդական ծածկույթներ" },
-  cargo: { title: "Բեռների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող բեռ", amountLabel: "Բեռի արժեք / ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Բեռի ապահովագրական ռիսկեր" },
-  liability: { title: "Պատասխանատվության ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող գործունեություն / պատասխանատվություն", amountLabel: "Պատասխանատվության սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Պատասխանատվության ծածկույթներ" },
-  construction: { title: "Շինմոնտաժային ապահովագրության առաջարկ", objectLabel: "Շինարարական / շինմոնտաժային աշխատանքներ", amountLabel: "Աշխատանքների / ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Շինմոնտաժային ռիսկեր" },
-  accident: { title: "Դժբախտ պատահարների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող անձինք", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "Դժբախտ պատահարների ծածկույթներ" },
-  agro: { title: "Ագրոապահովագրության առաջարկ", objectLabel: "Ապահովագրվող մշակաբույս / հողատարածք", amountLabel: "Ապահովագրական արժեք", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Ագրոապահովագրական ռիսկեր" },
-  financial: { title: "Ֆինանսական ռիսկերի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող ֆինանսական պարտավորություն", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Ֆինանսական ռիսկեր" },
-  aviation: { title: "Ավիացիոն ռիսկերի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող օդանավ / ավիացիոն գործունեություն", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Ավիացիոն ռիսկեր" },
-  bundle: { title: "Կորպորատիվ համալիր ապահովագրական առաջարկ", objectLabel: "Ապահովագրական փաթեթ / օբյեկտներ", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Փաթեթում ներառված ծածկույթներ" },
+  property: {
+    title: "Գույքի ապահովագրության առաջարկ",
+    objectLabel: "Ապահովագրվող գույք (Շենք, Սարքավորումներ, Ապրանքներ)",
+    amountLabel: "Գույքի արժեք / Ապահովագրական գումար",
+    tariffLabel: "Տարեկան գույքային սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Գույքային ֆրանշիզա (Չհատուցվող գումար)",
+    riskLabel: "Գույքային ապահովագրական ռիսկեր (FLEXA, Ջրի վնաս, ԵԱԱԳ, Աղետներ)",
+  },
+  mortgage: {
+    title: "Հիփոթեքային վարկառուների ապահովագրության առաջարկ",
+    objectLabel: "Գրավադրված անշարժ գույք և վարկառու",
+    amountLabel: "Վարկի մնացորդ / Ապահովագրական գումար",
+    tariffLabel: "Հիփոթեքային սակագին (ԱՀԸ / ԲԵ / Բանկ)",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Չհատուցվող գումար",
+    riskLabel: "Հիփոթեքային համալիր ծածկույթ (Գույք + Կյանք/ԴՊ)",
+  },
+  casco: {
+    title: "ԿԱՍԿՈ ավտոտրանսպորտային միջոցների ապահովագրության առաջարկ",
+    objectLabel: "Ապահովագրվող ավտոտրանսպորտային միջոց",
+    amountLabel: "Շուկայական արժեք / Ապահովագրական գումար",
+    tariffLabel: "ԿԱՍԿՈ վերջնական սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "ԿԱՍԿՈ ֆրանշիզա (Չհատուցվող գումար)",
+    riskLabel: "ԿԱՍԿՈ ապահովագրական ծածկույթներ (ՃՏՊ, Հրդեհ, ԵԱԱԳ, Գողություն)",
+  },
+  health: {
+    title: "Կամավոր բժշկական ապահովագրության առաջարկ (ԿԲԱ)",
+    objectLabel: "Ապահովագրվող անձնակազմ / Բժշկական ծրագիր",
+    amountLabel: "Տարեկան բժշկական ծածկույթի սահմանաչափ",
+    tariffLabel: "Բժշկական սակագին / Անձի վճար",
+    premiumLabel: "Ընդհանուր ապահովագրավճար",
+    franchiseLabel: "Ծառայությունների ֆրանշիզա",
+    riskLabel: "Բժշկական ծածկույթներ (Ստացիոնար, Ամբուլատոր, Դեղորայք, Ատամնաբուժություն)",
+  },
+  travel: {
+    title: "Ճանապարհորդության (Արտերկիր մեկնողների) ապահովագրության առաջարկ",
+    objectLabel: "Ճանապարհորդ(ներ) / Երթուղի և ժամանակահատված",
+    amountLabel: "Արտերկրում բժշկական ծախսերի սահմանաչափ",
+    tariffLabel: "Օրական սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Ճամփորդական ֆրանշիզա",
+    riskLabel: "Արտերկրում անհետաձգելի բժշկական ծածկույթներ և տարհանում",
+  },
+  cargo: {
+    title: "Բեռնափոխադրումների ապահովագրության առաջարկ",
+    objectLabel: "Ապահովագրվող բեռ և փոխադրամիջոց",
+    amountLabel: "Բեռի ինվոյսային արժեք / Ապահովագրական գումար",
+    tariffLabel: "Բեռնափոխադրման սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Բեռի ֆրանշիզա (Չհատուցվող գումար)",
+    riskLabel: "Բեռնափոխադրման ռիսկեր (ICC A / B / C Կլաուզաներ)",
+  },
+  liability: {
+    title: "Պատասխանատվության ապահովագրության առաջարկ",
+    objectLabel: "Ապահովագրվող գործունեություն / Պատասխանատվության ոլորտ",
+    amountLabel: "Պատասխանատվության առավելագույն սահմանաչափ (TPL / PI)",
+    tariffLabel: "Պատասխանատվության սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Ֆրանշիզա յուրաքանչյուր պահանջի համար",
+    riskLabel: "Քաղաքացիական և մասնագիտական պատասխանատվության ծածկույթներ",
+  },
+  construction: {
+    title: "Շինմոնտաժային ռիսկերի համալիր (CAR / EAR) առաջարկ",
+    objectLabel: "Շինարարական օբյեկտ և կապալառուի աշխատանքներ",
+    amountLabel: "Կապալի պայմանագրային արժեք / Ապահովագրական գումար",
+    tariffLabel: "Շինմոնտաժային սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Շինմոնտաժային ֆրանշիզա",
+    riskLabel: "Շինարարական, մոնտաժային և երրորդ անձանց (TPL) ռիսկեր",
+  },
+  accident: {
+    title: "Դժբախտ պատահարներից ապահովագրության առաջարկ (ԴՊ)",
+    objectLabel: "Ապահովագրվող աշխատակիցներ / Անձնակազմ",
+    amountLabel: "Ապահովագրական գումար 1 անձի համար",
+    tariffLabel: "ԴՊ սակագին",
+    premiumLabel: "Ընդհանուր ապահովագրավճար",
+    franchiseLabel: "Ֆրանշիզա (Չի կիրառվում)",
+    riskLabel: "Դժբախտ պատահարների ծածկույթներ (Մահ, Հաշմանդամություն, Բուժծախսեր)",
+  },
+  agro: {
+    title: "Գյուղատնտեսական (Ագրո) ապահովագրության առաջարկ",
+    objectLabel: "Ապահովագրվող մշակաբույս և այգետարածք",
+    amountLabel: "Բերքի ապահովագրական արժեք",
+    tariffLabel: "Ագրոապահովագրական սակագին",
+    premiumLabel: "Ապահովագրավճար (ներառյալ 50% սուբսիդիան)",
+    franchiseLabel: "Ոչ պայմանական ֆրանշիզա",
+    riskLabel: "Ագրոռիսկեր (Կարկուտ, Գարնանային ցրտահարություն, Հրդեհ)",
+  },
+  financial: {
+    title: "Ֆինանսական ռիսկերի և կանխավճարի երաշխիքի առաջարկ",
+    objectLabel: "Ապահովագրվող պայմանագիր / Ֆինանսական պարտավորություն",
+    amountLabel: "Երաշխիքի / Կանխավճարի գումար",
+    tariffLabel: "Երաշխիքային սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Չհատուցվող գումար (Առանց ֆրանշիզայի)",
+    riskLabel: "Ֆինանսական ռիսկեր և երաշխիքային պարտավորություններ",
+  },
+  aviation: {
+    title: "Ավիացիոն ռիսկերի և դրոնների (ԱԹՍ) ապահովագրության առաջարկ",
+    objectLabel: "Ապահովագրվող թռչող սարք (Hull) / Կոմերցիոն դրոն",
+    amountLabel: "Թռչող սարքի արժեք / TPL պատասխանատվության լիմիտ",
+    tariffLabel: "Ավիացիոն սակագին",
+    premiumLabel: "Ապահովագրավճար",
+    franchiseLabel: "Ավիացիոն ֆրանշիզա",
+    riskLabel: "Ավիացիոն ռիսկեր (Օդանավի վթար, Ավիացիոն TPL, Օդաչուների ԴՊ)",
+  },
+  bundle: {
+    title: "Կորպորատիվ համալիր (All-In-One) ապահովագրական առաջարկ",
+    objectLabel: "Համալիր կորպորատիվ փաթեթ (Գույք + TPL + ԴՊ + Բեռներ)",
+    amountLabel: "Համախառն ապահովագրական գումար",
+    tariffLabel: "Համալիր միջինացված սակագին",
+    premiumLabel: "Ընդհանուր համալիր ապահովագրավճար",
+    franchiseLabel: "Համակցված ֆրանշիզա",
+    riskLabel: "Կորպորատիվ համալիր փաթեթի ծածկույթներ",
+  },
 };
 
 function getProductLabels(type: InsuranceProductType, lang: QuotationLanguage = "hy") {
@@ -44,23 +150,23 @@ function getProductLabels(type: InsuranceProductType, lang: QuotationLanguage = 
   if (lang === "en") {
     return {
       title: `${type.toUpperCase()} Insurance Quotation Proposal`,
-      objectLabel: "Insured Object / Details",
-      amountLabel: "Sum Insured / Limit",
+      objectLabel: "Insured Object / Scope",
+      amountLabel: "Sum Insured / Limit of Indemnity",
       tariffLabel: "Annual Tariff Rate",
       premiumLabel: "Insurance Premium",
       franchiseLabel: "Deductible / Franchise",
-      riskLabel: "Insurance Coverage & Risks",
+      riskLabel: "Insurance Coverage & Perils",
     };
   }
   if (lang === "ru") {
     return {
       title: `Предложение по страхованию ${type.toUpperCase()}`,
-      objectLabel: "Объект страхования / Описание",
-      amountLabel: "Страховая сумма / Лимит",
+      objectLabel: "Объект страхования / Спецификация",
+      amountLabel: "Страховая сумма / Лимит ответственности",
       tariffLabel: "Страховой тариф",
       premiumLabel: "Страховая премия",
       franchiseLabel: "Франшиза / Невозмещаемая сумма",
-      riskLabel: "Покрываемые риски и условия",
+      riskLabel: "Покрываемые риски и страховое покрытие",
     };
   }
   return base;
@@ -307,19 +413,61 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
 
   const labels = getProductLabels(proposal.type, lang);
   const localizedTitles = PRODUCT_TITLES_LOCALIZED[proposal.type];
-  const rawTitle = proposal.productNameArm;
+  const officialCond = SIL_PRODUCT_CONDITIONS[proposal.type] || SIL_PRODUCT_CONDITIONS.property;
+  const rawTitle = proposal.productNameArm || officialCond?.titleArm;
   const product = isEn
     ? (localizedTitles?.en || `${proposal.type.toUpperCase()} Insurance Quotation`)
     : isRu
     ? (localizedTitles?.ru || `Коммерческое предложение по страхованию ${proposal.type.toUpperCase()}`)
     : (rawTitle || localizedTitles?.hy || "Գնառաջարկ");
 
+  const defaultPerilsSource = officialCond?.coveredPerils?.length
+    ? officialCond.coveredPerils.map((p) => `${p.name}: ${p.desc}`)
+    : [isEn ? "Standard perils per SIL Insurance policy conditions." : isRu ? "Стандартные риски согласно условиям страхования." : "Ռիսկերի և ծածկույթների վերջնական ցանկը սահմանվում է ընտրված պրոդուկտի գործող պայմաններով։"];
+
   const rawPerils = proposal.coveredPerilsList?.length
     ? proposal.coveredPerilsList
-    : [isEn ? "Standard perils per SIL Insurance policy conditions." : isRu ? "Стандартные риски согласно условиям страхования." : "Ռիսկերի և ծածկույթների վերջնական ցանկը սահմանվում է ընտրված պրոդուկտի գործող պայմաններով։"];
+    : defaultPerilsSource;
+
   const perils = isEn || isRu
     ? rawPerils.map((p) => translatePhraseLocally(p, lang))
     : rawPerils;
+
+  const officialTermsHtml = `
+    <section class="quote-page">
+      <h2 class="section-heading">${isEn ? "OFFICIAL PRODUCT TERMS & CONDITIONS" : isRu ? "ОФИЦИАЛЬНЫЕ УСЛОВИЯ И ПРАВИЛА ПРОДУКТА" : "ՊՐՈԴՈՒԿՏԻ ՊԱՇՏՈՆԱԿԱՆ ՊԱՅՄԱՆՆԵՐ ԵՎ ԿԱՆՈՆՆԵՐ"}</h2>
+      <div style="font-size: 11px; color: #00235B; margin-bottom: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">
+        ${esc(officialCond.sourceDocName)}
+      </div>
+      <div class="body-text" style="font-size: 11px; line-height: 1.4; margin-bottom: 12px; background: #f8fafc; padding: 10px 14px; border-left: 3px solid #00235B; border-radius: 4px;">
+        ${esc(officialCond.summary)}
+      </div>
+
+      <h3 style="font-size: 12px; font-weight: 800; margin: 10px 0 4px; text-transform: uppercase; color: #00235B;">
+        ${isEn ? "1. Covered Perils & Risks" : isRu ? "1. Покрываемые риски" : "1. Ապահովագրական ռիսկեր և ծածկույթներ (կոնկրետ պրոդուկտի բառապաշարով)"}
+      </h3>
+      <ul class="template-list" style="margin: 0 0 8px 16px; font-size: 11px; line-height: 1.35;">
+        ${officialCond.coveredPerils.map((p) => `<li><strong>${esc(p.name)}:</strong> ${esc(p.desc)}</li>`).join("")}
+      </ul>
+
+      <h3 style="font-size: 12px; font-weight: 800; margin: 10px 0 4px; text-transform: uppercase; color: #00235B;">
+        ${isEn ? "2. General Exclusions" : isRu ? "2. Исключения из страхования" : "2. Հիմնական բացառություններ ըստ պրոդուկտի կանոնների"}
+      </h3>
+      <ul class="template-list" style="margin: 0 0 8px 16px; font-size: 11px; line-height: 1.35;">
+        ${officialCond.exclusions.map((e) => `<li><strong>${esc(e.name)}:</strong> ${esc(e.reason)}</li>`).join("")}
+      </ul>
+
+      <h3 style="font-size: 12px; font-weight: 800; margin: 10px 0 4px; text-transform: uppercase; color: #00235B;">
+        ${isEn ? "3. Settlement Basis & Franchise" : isRu ? "3. Урегулирование и франшиза" : "3. Հատուցման հիմքեր, ֆրանշիզա և պահանջվող փաստաթղթեր"}
+      </h3>
+      <table class="general-table" style="font-size: 11px;"><tbody>
+        <tr><td>${isEn ? "Franchise Terms" : isRu ? "Условия франшизы" : "Ֆրանշիզայի պայմաններ"}</td><td>${esc(officialCond.settlementAndFranchise.typicalFranchise)}</td></tr>
+        <tr><td>${isEn ? "Settlement Basis" : isRu ? "Порядок урегулирования" : "Հատուցման հիմքեր"}</td><td>${esc(officialCond.settlementAndFranchise.settlementBasis)}</td></tr>
+        <tr><td>${isEn ? "Notice Period" : isRu ? "Срок уведомления" : "Ծանուցման ժամկետ"}</td><td>${esc(officialCond.settlementAndFranchise.noticePeriodHours)} ${isEn ? "hours" : isRu ? "часов" : "ժամ"}</td></tr>
+        <tr><td>${isEn ? "Required Claim Docs" : isRu ? "Необходимые документы" : "Պահանջվող փաստաթղթեր"}</td><td>${officialCond.settlementAndFranchise.claimDocsRequired.join("; ")}</td></tr>
+      </tbody></table>
+    </section>
+  `;
 
   const rawConditions = proposal.specialConditions?.length
     ? proposal.specialConditions
@@ -332,7 +480,9 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
   const object = isEn || isRu ? translatePhraseLocally(rawObject, lang) : rawObject;
 
   const rawClient = proposal.clientName || "—";
-  const client = isEn || isRu ? translatePhraseLocally(rawClient, lang) : rawClient;
+  const client = isEn || isRu 
+    ? translatePhraseLocally(rawClient, lang) 
+    : transliterateLatinToArmenian(rawClient);
 
   const rawPayment = proposal.paymentTerms || "—";
   const payment = isEn || isRu ? translatePhraseLocally(rawPayment, lang) : rawPayment;
@@ -478,6 +628,8 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
     </section>
 
     ${customTemplateHtml}
+
+    ${officialTermsHtml}
 
     ${proposal.aiAnalysisText ? `
     <section class="quote-page">

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, BarChart3, CheckCircle2, FileText, KeyRound, Lock, RefreshCw, Save, Shield, Users, XCircle, Settings2, Download, Database as DatabaseIcon, Trash2, AlertTriangle, UserPlus, Edit3, Search } from 'lucide-react';
 import { FIXED_QUOTATION_RULES, type FixedProductRule } from '../data/quotationRules';
+import { getProductConditions, saveProductConditions } from '../data/productConditionsData';
+import { fetchCBARates } from '../utils/exchangeRates';
 import { getDraftQuotationRules, getSiteContent, saveQuotationRules, saveSiteContent, publishQuotationRules } from '../utils/rulesStore';
 import { getAuditLog, getRulesVersion, publishRules, addAuditEvent, clearClientAuditLog, deleteClientAuditEvent } from '../utils/auditStore';
 import { runCascoRegression } from '../utils/cascoRegression';
@@ -34,7 +36,7 @@ const exportJSON = (filename: string, data: any[]) => {
   a.click();
 };
 
-type Tab='dashboard'|'users'|'approvals'|'logs'|'rules'|'templates'|'security'|'analytics'|'database'|'settings';
+type Tab='dashboard'|'users'|'approvals'|'logs'|'rules'|'templates'|'conditions'|'cba'|'security'|'analytics'|'database'|'settings';
 const roles=['agent','underwriter','manager','auditor','admin','casco_sales','support'];
 const ROLE_NAMES: Record<string, string> = {
   admin: 'Ադմինիստրատոր (Admin)',
@@ -88,8 +90,8 @@ export function AdminSettings(){
    return combinedLogs.filter(x => JSON.stringify(x).toLowerCase().includes(query));
  }, [combinedLogs, q]);
 
- const cards=[['dashboard','Գլխավոր',Activity],['users','Օգտատերեր',Users],['approvals','Հաստատումներ',CheckCircle2],['logs','Աուդիտ (Logs)',FileText],['rules','Հաշվիչի Կանոններ',Settings2],['templates','Ձևանմուշներ',FileText],['security','Անվտանգություն',Shield],['analytics','Վերլուծություն',BarChart3],['database','Տվյալների Բազա',DatabaseIcon],['settings','Կարգավորումներ',Settings2]] as const;
- return <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-8 space-y-6"><div className="rounded-[28px] bg-gradient-to-br from-[#061A40] to-[#075bd5] text-white p-7 shadow-xl"><div className="flex flex-wrap justify-between gap-5"><div><div className="text-cyan-200 text-xs font-black tracking-[.18em]">SIL CONTROL CENTER</div><h1 className="text-3xl font-black mt-2">Կառավարման կենտրոն</h1><p className="text-blue-100 text-sm mt-2">Օգտատերեր, հաստատումներ, աուդիտ, հաշվիչի կանոններ և անվտանգություն մեկ վայրում։</p></div><div className="rounded-2xl bg-white/10 px-4 py-3 text-sm"><b>{me?.name}</b><div className="text-blue-100 text-xs mt-1">{me?.role}</div></div></div></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2">{cards.map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id)} className={`rounded-2xl border px-3 py-3 text-left transition hover:-translate-y-0.5 ${tab===id?'bg-[#075bd5] text-white border-[#075bd5] shadow-lg':'bg-white border-slate-200 hover:border-blue-300'}`}><Icon size={17}/><div className="text-xs font-black mt-2">{label}</div></button>)}</div>
+ const cards=[['dashboard','Գլխավոր',Activity],['users','Օգտատերեր',Users],['approvals','Հաստատումներ',CheckCircle2],['logs','Աուդիտ (Logs)',FileText],['rules','Հաշվիչի Կանոններ',Settings2],['templates','Ձևանմուշներ',FileText],['conditions','Պայմաններ & Word',FileText],['cba','ԿԲ Փոխարժեքներ',RefreshCw],['security','Անվտանգություն',Shield],['analytics','Վերլուծություն',BarChart3],['database','Տվյալների Բազա',DatabaseIcon],['settings','Կարգավորումներ',Settings2]] as const;
+ return <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-8 space-y-6"><div className="rounded-[28px] bg-gradient-to-br from-[#061A40] to-[#075bd5] text-white p-7 shadow-xl"><div className="flex flex-wrap justify-between gap-5"><div><div className="text-cyan-200 text-xs font-black tracking-[.18em]">SIL CONTROL CENTER</div><h1 className="text-3xl font-black mt-2">Կառավարման կենտրոն</h1><p className="text-blue-100 text-sm mt-2">Օգտատերեր, հաստատումներ, աուդիտ, հաշվիչի կանոններ և անվտանգություն մեկ վայրում։</p></div><div className="rounded-2xl bg-white/10 px-4 py-3 text-sm"><b>{me?.name}</b><div className="text-blue-100 text-xs mt-1">{me?.role}</div></div></div></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-10 gap-2">{cards.map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id)} className={`rounded-2xl border px-3 py-3 text-left transition hover:-translate-y-0.5 ${tab===id?'bg-[#075bd5] text-white border-[#075bd5] shadow-lg':'bg-white border-slate-200 hover:border-blue-300'}`}><Icon size={17}/><div className="text-xs font-black mt-2">{label}</div></button>)}</div>
  {tab==='dashboard'&&<Dashboard users={users} logs={filteredLogs} onTab={setTab} />}
  {tab==='users'&&<UsersPanel users={users} onUpdate={updateUser} onCreate={createUser} onDelete={deleteUser} onApprove={approve} currentUser={me} />} 
  {tab==='approvals'&&<Approvals users={users} onApprove={approve}/>} 
@@ -97,6 +99,8 @@ export function AdminSettings(){
  {tab==='security'&&<Security users={users} logs={filteredLogs}/>} 
  {tab==='analytics'&&<Analytics users={users} logs={filteredLogs}/>} 
  {tab==='templates'&&<Templates/>}
+ {tab==='conditions'&&<ConditionsPanel/>}
+ {tab==='cba'&&<CBASettingsPanel/>}
  {tab==='rules'&&<Rules rules={rules} setRules={setRules} product={product} setProduct={setProduct} version={version} onHealth={async()=>setHealth(await runSystemHealthCheck())} health={health} onRegression={()=>setReg(runCascoRegression())} regression={reg}/>} 
  {tab==='database'&&<DatabasePanel headers={headers}/>}
   {tab==='settings'&&<SystemSettings content={content} setContent={setContent}/>} 
@@ -1060,6 +1064,299 @@ function DatabasePanel({headers}:{headers:any}){
             <Download size={18} /> {downloading ? 'Ներբեռնվում է...' : 'Ներբեռնել SQL Բազան (.db)'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ConditionsPanel() {
+  const [conditions, setConditions] = useState(getProductConditions());
+  const prodKeys = Object.keys(conditions) as string[];
+  const [selectedProd, setSelectedProd] = useState<string>(prodKeys[0]);
+  const [saved, setSaved] = useState(false);
+
+  const current = conditions[selectedProd] || {
+    productId: selectedProd,
+    titleArm: "",
+    sourceDocName: "",
+    sourceFile: "",
+    summary: "",
+    coveredPerils: [],
+    exclusions: [],
+    settlementAndFranchise: { typicalFranchise: "", franchiseType: "", settlementBasis: "", noticePeriodHours: 24, claimDocsRequired: [] },
+    sampleScenarios: []
+  };
+
+  const updateCurrent = (patch: any) => {
+    setConditions(prev => ({
+      ...prev,
+      [selectedProd]: { ...prev[selectedProd], ...patch }
+    }));
+  };
+
+  const handleSave = () => {
+    saveProductConditions(conditions);
+    setSaved(true);
+    addAuditEvent({ action: "admin.conditions.save", entity: "product-conditions", details: { productId: selectedProd } });
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    updateCurrent({ sourceFile: file.name });
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      if (text) {
+        updateCurrent({ summary: text.slice(0, 2000) });
+      }
+    };
+    reader.readAsText(file, "UTF-8");
+  };
+
+  return (
+    <div className="sil-card p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
+        <div>
+          <h2 className="text-xl font-black">Պայմաններ և ԱԲ Հիմք (Product Conditions & Word Files)</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Այս բաժնում կարող եք խմբագրել յուրաքանչյուր ապահովագրական պրոդուկտի պաշտոնական պայմանները, ռիսկերը, բացառությունները և Word ֆայլի հղումը, որոնք ծառայում են որպես հիմք Անդերռայթերի (ԱԲ) և գնառաջարկների համար:
+          </p>
+        </div>
+        <button
+          onClick={handleSave}
+          className="sil-primary px-5 py-2.5 rounded-xl text-xs font-black flex gap-2 items-center cursor-pointer shadow-md"
+        >
+          <Save size={16} /> {saved ? "Պահպանված է ✓" : "Պահպանել Պայմանները"}
+        </button>
+      </div>
+
+      <div className="flex gap-2 overflow-auto pb-2">
+        {prodKeys.map(k => (
+          <button
+            key={k}
+            onClick={() => setSelectedProd(k)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap cursor-pointer transition ${
+              selectedProd === k ? "bg-[#075bd5] text-white shadow" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            }`}
+          >
+            {conditions[k]?.titleArm ? conditions[k].titleArm.split(' ')[0] + ' ' + (conditions[k].titleArm.split(' ')[1] || '') : k}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1">Պրոդուկտի Անվանում (Հայերեն)</label>
+          <input
+            value={current.titleArm || ""}
+            onChange={e => updateCurrent({ titleArm: e.target.value })}
+            className="sil-input text-xs w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1">Պաշտոնական Փաստաթղթի Անվանում</label>
+          <input
+            value={current.sourceDocName || ""}
+            onChange={e => updateCurrent({ sourceDocName: e.target.value })}
+            className="sil-input text-xs w-full"
+          />
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1">
+            Word Ֆայլ / Աղբյուր (օր. .docx, .xlsx, .txt)
+          </label>
+          <div className="flex gap-2 items-center">
+            <input
+              value={current.sourceFile || ""}
+              onChange={e => updateCurrent({ sourceFile: e.target.value })}
+              className="sil-input text-xs w-full font-mono"
+            />
+            <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold cursor-pointer whitespace-nowrap transition">
+              📂 Բեռնել Word/Տեքստ
+              <input type="file" accept=".docx,.doc,.txt,.xlsx,.md" onChange={handleFileUpload} className="hidden" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1">
+          ԱԲ Հիմք և Ընդհանուր Նկարագրություն (AI Underwriting Basis Summary)
+        </label>
+        <textarea
+          value={current.summary || ""}
+          onChange={e => updateCurrent({ summary: e.target.value })}
+          className="sil-input text-xs w-full min-h-[140px] leading-relaxed"
+          placeholder="Մուտքագրեք պրոդուկտի պայմանների համառոտագրությունը, որն օգտագործվում է ԱԲ և գնառաջարկների վերլուծության համար..."
+        />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+          <h3 className="font-bold text-xs text-slate-800">Հատուցման և Ֆրանշիզայի Պայմաններ</h3>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Տիպիկ Ֆրանշիզա</label>
+            <input
+              value={current.settlementAndFranchise?.typicalFranchise || ""}
+              onChange={e => updateCurrent({
+                settlementAndFranchise: { ...current.settlementAndFranchise, typicalFranchise: e.target.value }
+              })}
+              className="sil-input text-xs w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Հատուցման Հիմք (Settlement Basis)</label>
+            <input
+              value={current.settlementAndFranchise?.settlementBasis || ""}
+              onChange={e => updateCurrent({
+                settlementAndFranchise: { ...current.settlementAndFranchise, settlementBasis: e.target.value }
+              })}
+              className="sil-input text-xs w-full"
+            />
+          </div>
+        </div>
+
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+          <h3 className="font-bold text-xs text-slate-800">Ծածկված Ռիսկերի Քանակ ({current.coveredPerils?.length || 0})</h3>
+          <p className="text-[11px] text-slate-500">
+            Այս ռիսկերը ավտոմատ կերպով ներառվում են պաշտոնական առաջարկներում և ԱԲ վերլուծության մեջ։
+          </p>
+          <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+            {current.coveredPerils?.map((p: any, i: number) => (
+              <div key={i} className="text-xs bg-white p-2 rounded-lg border border-slate-200 flex justify-between items-center">
+                <div>
+                  <span className="font-bold text-slate-800">{p.name}</span>
+                  <div className="text-[10px] text-slate-500">{p.desc}</div>
+                </div>
+                {p.isCore && <span className="px-1.5 py-0.5 bg-blue-50 text-[#075bd5] font-bold text-[9px] rounded">Հիմնական</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CBASettingsPanel() {
+  const [rates, setRates] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    fetchCBARates().then(setRates);
+  }, []);
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const res = await fetchCBARates(true);
+      setRates(res);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveOverride = async () => {
+    if (!rates) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/cba-rates/admin-save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rates }),
+      });
+      if (res.ok) {
+        setSuccess(true);
+        addAuditEvent({ action: "admin.cba.rates.save", entity: "exchange-rates", details: { rates } });
+        setTimeout(() => setSuccess(false), 2500);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateRate = (cur: string, val: number) => {
+    if (!rates) return;
+    setRates({
+      ...rates,
+      [cur]: {
+        ...rates[cur],
+        rateToAMD: val,
+        lastUpdated: new Date().toISOString()
+      }
+    });
+  };
+
+  if (!rates) return <div className="sil-card p-6">Բեռնվում է ԿԲ փոխարժեքները...</div>;
+
+  return (
+    <div className="sil-card p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
+        <div>
+          <h2 className="text-xl font-black">ՀՀ ԿԲ & Live Արտարժույթի Փոխարժեքներ</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Կառավարեք և ստուգեք ՀՀ Կենտրոնական բանկի (CBA) և համաշխարհային շուկայի իրական փոխարժեքները, որոնք կիրառվում են ապահովագրական պայմանագրերում և վճարումներում։
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black flex gap-2 items-center cursor-pointer transition"
+          >
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Թարմացնել Live (CBA/ECB)
+          </button>
+          <button
+            onClick={handleSaveOverride}
+            disabled={saving}
+            className="sil-primary px-5 py-2.5 rounded-xl text-xs font-black flex gap-2 items-center cursor-pointer shadow-md"
+          >
+            <Save size={16} /> {success ? "Պահպանված է ✓" : "Պահպանել Փոխարժեքները"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Object.entries(rates).map(([code, item]: [string, any]) => {
+          if (code === 'AMD') return null;
+          return (
+            <div key={code} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="font-black text-sm text-slate-900">{item.nameArm} ({code})</span>
+                <span className="text-lg font-bold text-[#075bd5]">{item.symbol}</span>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">Փոխարժեք (AMD - 1 {code})</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={item.rateToAMD}
+                  onChange={e => updateRate(code, parseFloat(e.target.value) || 0)}
+                  className="sil-input text-xs w-full font-black text-slate-900"
+                />
+              </div>
+              <div className="text-[10px] text-slate-400">
+                Թարմացված է: {new Date(item.lastUpdated || Date.now()).toLocaleTimeString()}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 text-xs text-blue-900 space-y-2">
+        <div className="font-bold flex items-center gap-1.5 text-[#075bd5]">
+          <AlertTriangle size={15} /> Ծանուցում ԿԲ Փոխարժեքների մասին
+        </div>
+        <p className="leading-relaxed">
+          Համակարգն ավտոմատ կերպով ստանում է իրական փոխարժեքները ՀՀ Կենտրոնական բանկի և Եվրոպական կենտրոնական բանկի (Frankfurter API / CBA.am) վերջին տվյալներից։ Անհրաժեշտության դեպքում Ադմինիստրատորը կարող է ուղղակիորեն խմբագրել և հաստատել փոխարժեքները վերը նշված դաշտերում և սեղմել «Պահպանել Փոխարժեքները»։
+        </p>
       </div>
     </div>
   );
