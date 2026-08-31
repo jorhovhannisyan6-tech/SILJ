@@ -1,0 +1,86 @@
+{
+  "version": "1.0",
+  "language": "hy",
+  "authority": "User-provided SIL Insurance documents and calculator files",
+  "rule": "The AI agent must ground coverage/exclusion answers in these source documents. If the source does not support an answer, say that the case requires policy-specific/manual review.",
+  "products": [
+    {
+      "productId": "property",
+      "sourceFile": "Գույք Պայմաններ.docx",
+      "textFile": "text/Գույք_Պայմաններ.docx.txt",
+      "characters": 116582
+    },
+    {
+      "productId": "cargo",
+      "sourceFile": "Բեռի Պայմաններ.docx",
+      "textFile": "text/Բեռի_Պայմաններ.docx.txt",
+      "characters": 1069
+    },
+    {
+      "productId": "general-liability",
+      "sourceFile": "Ընդհանուր Պատասխանատվության պայմաներ.docx",
+      "textFile": "text/Ընդհանուր_Պատասխանատվության_պայմաներ.docx.txt",
+      "characters": 18930
+    },
+    {
+      "productId": "cash-in-transit",
+      "sourceFile": "Ինկասացյոն Ռիսկ.docx",
+      "textFile": "text/Ինկասացյոն_Ռիսկ.docx.txt",
+      "characters": 32801
+    },
+    {
+      "productId": "advance-payment",
+      "sourceFile": "Կանխավճարի ապահովագրության Կոսպեկտ.docx",
+      "textFile": "text/Կանխավճարի_ապահովագրության_Կոսպեկտ.docx.txt",
+      "characters": 10387
+    },
+    {
+      "productId": "advance-payment",
+      "sourceFile": "Կանխավճարի ապահովագրության պայմաններ-12 09 2018.docx",
+      "textFile": "text/Կանխավճարի_ապահովագրության_պայմաններ-12_09_2018.docx.txt",
+      "characters": 41364
+    },
+    {
+      "productId": "construction-all-risks",
+      "sourceFile": "Կապալառու Պայմաններ(Շինմոնտաժ).docx",
+      "textFile": "text/Կապալառու_Պայմաններ_Շինմոնտաժ_.docx.txt",
+      "characters": 28749
+    },
+    {
+      "productId": "professional-liability",
+      "sourceFile": "Մասնագիտական պատասխանատվության ապահովագրության պայմաններ.docx",
+      "textFile": "text/Մասնագիտական_պատասխանատվության_ապահովագրության_պայմաններ.docx.txt",
+      "characters": 40860
+    },
+    {
+      "productId": "machinery-breakdown",
+      "sourceFile": "Մեքենաների խափանման ապ-ն Պայմաններ հայերեն.docx",
+      "textFile": "text/Մեքենաների_խափանման_ապ-ն_Պայմաններ_հայերեն.docx.txt",
+      "characters": 12260
+    },
+    {
+      "productId": "warehouse-liability",
+      "sourceFile": "Պահեստների պատասխանատվություն-հարցաթերթիկ.doc",
+      "textFile": "text/Պահեստների_պատասխանատվություն-հարցաթերթիկ.doc.txt",
+      "characters": 18157
+    },
+    {
+      "productId": "construction-all-risks",
+      "sourceFile": "Շինմոնտաժի քննական թեսթ.docx",
+      "textFile": "text/Շինմոնտաժի_քննական_թեսթ.docx.txt",
+      "characters": 16252
+    },
+    {
+      "productId": "construction-all-risks",
+      "sourceFile": "Շինմոնտաժի քննական թեսթ Պատասխաններ.docx",
+      "textFile": "text/Շինմոնտաժի_քննական_թեսթ_Պատասխաններ.docx.txt",
+      "characters": 736
+    },
+    {
+      "productId": "casco",
+      "sourceFile": "casco calculator 2024 - առանց ՃՈՈ.xlsx",
+      "textFile": null,
+      "note": "Original Excel calculator retained as authoritative calculation source for the CASCO calculator."
+    }
+  ]
+}

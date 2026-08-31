@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root = process.cwd();
+const required = ['package.json','index.html','server.ts','src/main.tsx','src/App.tsx','src/utils/insuranceCalculator.ts','src/utils/quotationTemplate.ts','src/utils/documentExport.ts','src/utils/systemHealth.ts','templates/SIL_Quotation_Template_Source.docx','knowledge-base/index.json'];
+const missing = required.filter(f => !fs.existsSync(path.join(root,f)));
+if (missing.length) throw new Error(`Missing: ${missing.join(', ')}`);
+const pkg = JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+if (pkg.name !== 'sil-insurance-quotation-portal') throw new Error('Unexpected package name');
+if (!pkg.scripts?.build || !pkg.scripts?.start || !pkg.scripts?.qa) throw new Error('Required npm scripts missing');
+const server = fs.readFileSync(path.join(root,'server.ts'),'utf8');
+if (server.includes('gemini-2.5')) throw new Error('Legacy Gemini 2.5 reference');
+if (!server.includes('gemini-3.6-flash')) throw new Error('Gemini 3.6 Flash not configured');
+if (/temperature\s*:|top_p\s*:|top_k\s*:/i.test(server)) throw new Error('Deprecated sampling parameters found');
+const index = JSON.parse(fs.readFileSync(path.join(root,'knowledge-base/index.json'),'utf8'));
+for (const e of index.products ?? []) if (e.textFile && !fs.existsSync(path.join(root,'knowledge-base',e.textFile))) throw new Error(`KB missing: ${e.textFile}`);
+const images = fs.readdirSync(path.join(root,'src/assets/images')).filter(x => /logo/i.test(x));
+if (images.length !== 2) throw new Error(`Expected 2 SIL logos, got ${images.length}`);
+console.log('PROJECT VERIFY PASS');

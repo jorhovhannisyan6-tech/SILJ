@@ -1,0 +1,6 @@
+{
+  "name": "SIL Insurance Agent & Quotation System",
+    "description": "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ապահովագրական ագենտ և բոլոր պրոդուկտների (ԿԱՍԿՈ, Բժշկական ԿԲԱ, Ճամփորդական, Բեռներ, Շինմոնտաժ CAR, Գույք, Հիփոթեք, Ագրո) պաշտոնական գնառաջարկների համակարգ",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
