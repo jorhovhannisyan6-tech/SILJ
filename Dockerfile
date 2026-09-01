@@ -1,27 +1,23 @@
-# Use the official Node.js 22 image on Alpine for better-sqlite3 compatibility
-FROM node:22-alpine
+FROM node:22-slim
 
-# Install build dependencies for better-sqlite3 native compilation
-RUN apk add --no-cache python3 make g++ gcc sqlite-dev
-
-# Set working directory
 WORKDIR /app
 
-# Copy dependency files first
+# Copy package manifests
 COPY package*.json ./
 
-# Install dependencies (use npm install to avoid lockfile mismatch issues)
+# Install ALL dependencies (needed for Vite build)
 RUN npm install
 
-# Copy the rest of the application files
+# Copy application files (dist is ignored in .dockerignore)
 COPY . .
 
-# Build the frontend and bundle the backend
+# Build Vite frontend and compile server.ts to dist/server.cjs
 RUN npm run build
 
-# Expose port
-EXPOSE 3000
+# Prune devDependencies to reduce image size (optional, but good)
 
-# Start the application using npm start
-CMD ["npm", "start"]
+# Cloud Run environment settings
+ENV NODE_ENV=production
+# We set PORT to 3000 to instruct Cloud Run (if it reads ENV) that we expect 3000
 
+CMD ["node", "dist/server.cjs"]

@@ -186,25 +186,176 @@ function GenericQuickQuoteView({
     return { valid: errors.length === 0, errors };
   };
 
-  // Step 2 Validation
+  // Step 2 Validation - Tailored specifically per insurance product
   const validateStep2 = (): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
-    if (input.product !== "property") {
-      const details = input.productDetails || {};
-      if (Object.keys(details).length === 0) {
-        errors.push(`Լրացրեք ${rule.nameArm}-ի համար նախատեսված տվյալները։`);
-      }
-      return { valid: errors.length === 0, errors };
+    const details = input.productDetails || {};
+
+    switch (input.product) {
+      case "travel":
+        if (!details.destination) {
+          errors.push("Ընտրեք ճանապարհորդության ուղղությունը / գոտին։");
+        }
+        if (!details.tripDays || Number(details.tripDays) < 1) {
+          errors.push("Մուտքագրեք ճանապարհորդության տևողությունը (առնվազն 1 օր)։");
+        }
+        if (!details.travelerCount || Number(details.travelerCount) < 1) {
+          errors.push("Մուտքագրեք ճամփորդների քանակը (առնվազն 1 անձ)։");
+        }
+        if (!input.insuredAmount || input.insuredAmount <= 0) {
+          errors.push("Ապահովագրական գումարը հաշվարկված չէ։");
+        }
+        break;
+
+      case "health":
+        if (!details.insuredCount || Number(details.insuredCount) < 1) {
+          errors.push("Մուտքագրեք ապահովագրվող աշխատակիցների/անձանց քանակը։");
+        }
+        if (!details.planLevel) {
+          errors.push("Ընտրեք առողջության ապահովագրության ծրագրի մակարդակը։");
+        }
+        if (!details.limitPerPerson || Number(details.limitPerPerson) <= 0) {
+          errors.push("Ընտրեք 1 անձի տարեկան ծածկույթի լիմիտը։");
+        }
+        if (!input.insuredAmount || input.insuredAmount <= 0) {
+          errors.push("Ապահովագրական գումարը պետք է լինի 0-ից մեծ։");
+        }
+        break;
+
+      case "cargo":
+        if (!details.cargoType) {
+          errors.push("Ընտրեք փոխադրվող բեռի տեսակը։");
+        }
+        if ((!details.cargoValue || Number(details.cargoValue) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք բեռի ապահովագրական արժեքը։");
+        }
+        if (!details.origin || details.origin.trim().length < 2) {
+          errors.push("Լրացրեք բեռնափոխադրման մեկնման վայրը (երկիր/քաղաք)։");
+        }
+        if (!details.destination || details.destination.trim().length < 2) {
+          errors.push("Լրացրեք բեռնափոխադրման ժամանման վայրը (երկիր/քաղաք)։");
+        }
+        if (!details.transportMode) {
+          errors.push("Ընտրեք փոխադրամիջոցի / տրանսպորտի տեսակը։");
+        }
+        break;
+
+      case "construction":
+        if (!details.projectName || details.projectName.trim().length < 2) {
+          errors.push("Լրացրեք շինարարական նախագծի անվանումը։");
+        }
+        if (!details.projectAddress || details.projectAddress.trim().length < 2) {
+          errors.push("Լրացրեք շինհրապարակի հասցեն։");
+        }
+        if ((!details.contractValue || Number(details.contractValue) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք շինարարության պայմանագրային արժեքը։");
+        }
+        if (!details.durationMonths || Number(details.durationMonths) < 1) {
+          errors.push("Մուտքագրեք շինարարության տևողությունը (ամիսներ)։");
+        }
+        break;
+
+      case "liability":
+        if (!details.businessField || details.businessField.trim().length < 2) {
+          errors.push("Լրացրեք գործունեության ոլորտը կամ մասնագիտությունը։");
+        }
+        if ((!details.limitOfIndemnity || Number(details.limitOfIndemnity) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք պատասխանատվության սահմանաչափը (լիմիտը)։");
+        }
+        if (!details.liabilityType) {
+          errors.push("Ընտրեք պատասխանատվության ապահովագրության տեսակը։");
+        }
+        break;
+
+      case "accident":
+        if (!details.numberOfPersons || Number(details.numberOfPersons) < 1) {
+          errors.push("Մուտքագրեք ապահովագրվողների քանակը (առնվազն 1 անձ)։");
+        }
+        if ((!details.sumPerPerson || Number(details.sumPerPerson) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք 1 անձի ապահովագրական գումարը։");
+        }
+        if (!details.coverageType) {
+          errors.push("Ընտրեք ծածկույթի ռեժիմը (24/7 կամ աշխատանքային)։");
+        }
+        break;
+
+      case "agro":
+        if (!details.cropType) {
+          errors.push("Ընտրեք ապահովագրվող մշակաբույսը։");
+        }
+        if (!details.region) {
+          errors.push("Ընտրեք մարզը / ռիսկի գոտին։");
+        }
+        if (!details.hectares || Number(details.hectares) <= 0) {
+          errors.push("Մուտքագրեք մշակվող հողատարածքի մակերեսը (հա)։");
+        }
+        if (!input.insuredAmount || input.insuredAmount <= 0) {
+          errors.push("Բերքի ապահովագրական արժեքը հաշվարկված չէ։");
+        }
+        break;
+
+      case "financial":
+        if (!details.bondType) {
+          errors.push("Ընտրեք երաշխիքի / ֆինանսական ռիսկի տեսակը։");
+        }
+        if ((!details.bondAmount || Number(details.bondAmount) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք երաշխիքի գումարը։");
+        }
+        if (!details.durationMonths || Number(details.durationMonths) < 1) {
+          errors.push("Մուտքագրեք գործողության ժամկետը (ամիսներ)։");
+        }
+        break;
+
+      case "mortgage":
+        if (!details.bankName || details.bankName.trim().length < 2) {
+          errors.push("Լրացրեք գրավառու բանկի կամ վարկային կազմակերպության անվանումը։");
+        }
+        if ((!details.loanBalance || Number(details.loanBalance) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք հիփոթեքային վարկի մնացորդային գումարը։");
+        }
+        if (!details.program) {
+          errors.push("Ընտրեք հիփոթեքային ծրագիրը (ԱՀԸ, ԲԵ կամ կոմերցիոն)։");
+        }
+        break;
+
+      case "aviation":
+        if (!details.aircraftModel || details.aircraftModel.trim().length < 2) {
+          errors.push("Լրացրեք թռչող սարքի / դրոնի մոդելը։");
+        }
+        if ((!details.aircraftValue || Number(details.aircraftValue) <= 0) && (!input.insuredAmount || input.insuredAmount <= 0)) {
+          errors.push("Մուտքագրեք ավիացիոն օբյեկտի ապահովագրական արժեքը։");
+        }
+        if (!details.aviationType) {
+          errors.push("Ընտրեք ավիացիոն օբյեկտի տեսակը։");
+        }
+        break;
+
+      case "bundle":
+        if (!input.insuredAmount || input.insuredAmount <= 0) {
+          errors.push("Լրացրեք համալիր փաթեթի բաղադրիչներից առնվազն մեկի գումարը։");
+        }
+        break;
+
+      case "casco":
+        if (!input.insuredAmount || input.insuredAmount <= 0) {
+          errors.push("Մուտքագրեք ավտոմեքենայի շուկայական/ապահովագրական արժեքը։");
+        }
+        break;
+
+      case "property":
+      default:
+        if (!input.insuredAmount || input.insuredAmount <= 0) {
+          errors.push("Մուտքագրեք ապահովագրական գումարը (պետք է լինի 0-ից մեծ)։");
+        }
+        if (!input.objectDescription.trim() || input.objectDescription.trim().length < 3) {
+          errors.push("Լրացրեք ապահովագրվող գույքի հասցեն կամ նկարագրությունը։");
+        }
+        if (!input.businessActivity.trim() || input.businessActivity.trim().length < 2) {
+          errors.push("Նշեք գույքի օգտագործման կամ գործունեության տեսակը։");
+        }
+        break;
     }
-    if (!input.insuredAmount || input.insuredAmount <= 0) {
-      errors.push("Մուտքագրեք ապահովագրական գումարը (պետք է լինի 0-ից մեծ)։");
-    }
-    if (!input.objectDescription.trim() || input.objectDescription.trim().length < 3) {
-      errors.push("Լրացրեք ապահովագրվող գույքի հասցեն կամ նկարագրությունը։");
-    }
-    if (!input.businessActivity.trim() || input.businessActivity.trim().length < 2) {
-      errors.push("Նշեք գույքի օգտագործման կամ գործունեության տեսակը։");
-    }
+
     return { valid: errors.length === 0, errors };
   };
 
@@ -663,22 +814,7 @@ function GenericQuickQuoteView({
                 <p className="text-xs text-slate-500 mt-1">{rule.stage2DescriptionArm}</p>
               </div>
 
-              {input.product !== "property" ? (
-                <div className="space-y-4" data-product-stage="2" data-product={input.product} data-stage2-mode="product-specific" data-stage2-renderer="ProductSpecificStep2Form">
-                  <div className="sr-only" aria-live="polite">Փուլ 2՝ {rule.nameArm}-ի տվյալների լրացում</div>
-                  <ProductSpecificStep2Form
-                    input={input}
-                    onChange={set}
-                    updateProductDetail={updateProductDetail}
-                    attemptedNext={attemptedNext}
-                  />
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex justify-between items-center">
-                    <span>Հաճախորդ՝ <b>{input.clientName || "—"}</b> ({input.phone || "—"})</span>
-                    <span className="text-[#075bd5] font-bold">{rule.nameArm}</span>
-                  </div>
-                </div>
-              ) : (
-              <div className="space-y-4">
+              <div className="space-y-4" data-product-stage="2" data-product={input.product} data-stage2-mode="product-specific" data-stage2-renderer="ProductSpecificStep2Form">
                 {input.product === "property" && (
                   <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-3">
@@ -704,82 +840,18 @@ function GenericQuickQuoteView({
                     </button>
                   </div>
                 )}
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Ապահովագրական գումար ({input.currency}) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={input.insuredAmount || ""}
-                      onChange={(e) => set("insuredAmount", Number(e.target.value))}
-                      className={`sil-input text-base font-bold ${
-                        attemptedNext && (!input.insuredAmount || input.insuredAmount <= 0)
-                          ? "border-red-400 bg-red-50/40"
-                          : ""
-                      }`}
-                      placeholder="0"
-                    />
-                    {attemptedNext && (!input.insuredAmount || input.insuredAmount <= 0) && (
-                      <span className="text-[11px] text-red-600 mt-1 block">Գումարը պետք է լինի 0-ից մեծ</span>
-                    )}
-                    {input.insuredAmount > 0 && (
-                      <span className="text-[11px] text-slate-500 mt-1 block">
-                        {input.insuredAmount.toLocaleString("hy-AM")} {input.currency}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Գործունեության / շահագործման տեսակ <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      value={input.businessActivity}
-                      onChange={(e) => set("businessActivity", e.target.value)}
-                      className={`sil-input ${
-                        attemptedNext && (!input.businessActivity.trim() || input.businessActivity.trim().length < 2)
-                          ? "border-red-400 bg-red-50/40"
-                          : ""
-                      }`}
-                      placeholder="Օր․ արտադրություն, պահեստ, գրասենյակ, առևտուր"
-                    />
-                    {attemptedNext && (!input.businessActivity.trim() || input.businessActivity.trim().length < 2) && (
-                      <span className="text-[11px] text-red-600 mt-1 block">Նշեք գործունեության ոլորտը</span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Ապահովագրվող օբյեկտի նկարագրություն և հասցե <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={input.objectDescription}
-                    onChange={(e) => set("objectDescription", e.target.value)}
-                    rows={3}
-                    className={`sil-input w-full min-h-[90px] ${
-                      attemptedNext && (!input.objectDescription.trim() || input.objectDescription.trim().length < 3)
-                        ? "border-red-400 bg-red-50/40"
-                        : ""
-                    }`}
-                    placeholder="Օբյեկտի հասցե, շինության տեսակ, սարքավորումներ, բեռի երթուղի կամ այլ մանրամասներ..."
-                  />
-                  {attemptedNext && (!input.objectDescription.trim() || input.objectDescription.trim().length < 3) && (
-                    <span className="text-[11px] text-red-600 mt-1 block">
-                      Լրացրեք օբյեկտի հասցեն կամ նկարագրությունը (առնվազն 3 նիշ)
-                    </span>
-                  )}
-                </div>
-
+                <div className="sr-only" aria-live="polite">Փուլ 2՝ {rule.nameArm}-ի տվյալների լրացում</div>
+                <ProductSpecificStep2Form
+                  input={input}
+                  onChange={set}
+                  updateProductDetail={updateProductDetail}
+                  attemptedNext={attemptedNext}
+                />
                 <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex justify-between items-center">
                   <span>Հաճախորդ՝ <b>{input.clientName || "—"}</b> ({input.phone || "—"})</span>
                   <span className="text-[#075bd5] font-bold">{rule.nameArm}</span>
                 </div>
               </div>
-              )}
             </section>
           )}
 

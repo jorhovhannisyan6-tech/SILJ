@@ -152,7 +152,15 @@ export function ProductSpecificStep2Form({
         />
       );
     case "property":
-      return null;
+      return (
+        <PropertyStep2
+          input={input}
+          details={details}
+          onChange={onChange}
+          updateDetail={updateProductDetail}
+          attemptedNext={attemptedNext}
+        />
+      );
     case "casco":
       return null;
     default:
@@ -218,6 +226,18 @@ function TravelStep2({
     onChange("objectDescription", `Ուղղություն՝ ${destLabel}, Տևողություն՝ ${dy} օր, Ճամփորդներ՝ ${c} անձ (Տարիքային խումբ՝ ${ag})`);
     onChange("franchisePercent", 0);
   };
+
+  React.useEffect(() => {
+    if (!details.destination || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("destination", destination);
+      updateDetail("tripDays", days);
+      updateDetail("travelerCount", count);
+      updateDetail("ageGroup", ageGroup);
+      updateDetail("tripPurpose", tripPurpose);
+      updateDetail("coverageLimit", limit);
+      calculateTravel(destination, days, count, ageGroup, tripPurpose, limit);
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -423,6 +443,17 @@ function HealthStep2({
     onChange("customTariff", Math.max(0.1, tariff));
   };
 
+  React.useEffect(() => {
+    if (!details.planLevel || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("groupType", groupType);
+      updateDetail("insuredCount", insuredCount);
+      updateDetail("planLevel", planLevel);
+      updateDetail("limitPerPerson", limitPerPerson);
+      updateDetail("copay", copay);
+      calculateHealth(groupType, insuredCount, planLevel, limitPerPerson, copay);
+    }
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 flex items-center justify-between">
@@ -587,6 +618,19 @@ function CargoStep2({
     onChange("franchisePercent", fr);
     onChange("customTariff", finalTariff);
   };
+
+  React.useEffect(() => {
+    if (!details.cargoType || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("cargoType", cargoType);
+      updateDetail("cargoValue", cargoValue);
+      updateDetail("transportMode", transportMode);
+      updateDetail("origin", origin);
+      updateDetail("destination", destination);
+      updateDetail("clause", clause);
+      updateDetail("franchise", franchise);
+      calculateCargo(cargoType, cargoValue, transportMode, clause, franchise, origin, destination);
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -761,6 +805,19 @@ function ConstructionStep2({
     onChange("franchisePercent", 1.0);
     onChange("customTariff", Math.min(2.5, Math.max(0.1, finalTariff)));
   };
+
+  React.useEffect(() => {
+    if (!details.projectName || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("contractValue", contractValue);
+      updateDetail("durationMonths", durationMonths);
+      updateDetail("projectType", projectType);
+      updateDetail("projectName", projectName);
+      updateDetail("projectAddress", projectAddress);
+      updateDetail("tplIncluded", tplIncluded);
+      updateDetail("maintenanceMonths", maintenanceMonths);
+      calculateConstruction(contractValue, durationMonths, projectType, tplIncluded, maintenanceMonths, projectName, projectAddress);
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -947,6 +1004,17 @@ function LiabilityStep2({
     onChange("customTariff", finalTariff);
   };
 
+  React.useEffect(() => {
+    if (!details.liabilityType || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("liabilityType", liabilityType);
+      updateDetail("limitOfIndemnity", limit);
+      updateDetail("annualTurnover", turnover);
+      updateDetail("businessField", businessField);
+      updateDetail("legalDefense", legalDefense);
+      calculateLiability(liabilityType, limit, turnover, businessField, legalDefense);
+    }
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 flex items-center justify-between">
@@ -1077,6 +1145,16 @@ function AccidentStep2({
     onChange("franchisePercent", 0);
     onChange("customTariff", finalTariff);
   };
+
+  React.useEffect(() => {
+    if (!details.coverageType || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("coverageType", coverageType);
+      updateDetail("numberOfPersons", numberOfPersons);
+      updateDetail("sumPerPerson", sumPerPerson);
+      updateDetail("riskClass", riskClass);
+      calculateAccident(coverageType, numberOfPersons, sumPerPerson, riskClass);
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -1226,6 +1304,19 @@ function AgroStep2({
     onChange("franchisePercent", 10);
     onChange("customTariff", finalTariff);
   };
+
+  React.useEffect(() => {
+    if (!details.cropType || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("cropType", cropType);
+      updateDetail("hectares", hectares);
+      updateDetail("yieldKgPerHa", yieldKgPerHa);
+      updateDetail("pricePerKg", pricePerKg);
+      updateDetail("region", region);
+      updateDetail("antiHailNet", antiHailNet);
+      updateDetail("subsidyPercent", subsidyPercent);
+      calculateAgro(cropType, hectares, yieldKgPerHa, pricePerKg, region, antiHailNet, subsidyPercent);
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -1428,6 +1519,17 @@ function FinancialStep2({
     onChange("customTariff", Math.max(0.2, termRate));
   };
 
+  React.useEffect(() => {
+    if (!details.bondType || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("bondType", bondType);
+      updateDetail("bondAmount", bondAmount);
+      updateDetail("durationMonths", durationMonths);
+      updateDetail("collateralType", collateralType);
+      updateDetail("beneficiary", beneficiary);
+      calculateFinancial(bondType, bondAmount, durationMonths, collateralType, beneficiary);
+    }
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 flex items-center justify-between">
@@ -1574,6 +1676,16 @@ function MortgageStep2({
     onChange("customTariff", finalTariff);
   };
 
+  React.useEffect(() => {
+    if (!details.program || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("loanBalance", loanBalance);
+      updateDetail("program", program);
+      updateDetail("propertyType", propertyType);
+      updateDetail("bankName", bankName);
+      calculateMortgage(loanBalance, program, propertyType, bankName);
+    }
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 flex items-center justify-between">
@@ -1700,6 +1812,16 @@ function AviationStep2({
     onChange("franchisePercent", 1.0);
     onChange("customTariff", finalTariff);
   };
+
+  React.useEffect(() => {
+    if (!details.aviationType || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("aviationType", aviationType);
+      updateDetail("aircraftValue", aircraftValue);
+      updateDetail("aircraftModel", aircraftModel);
+      updateDetail("flightHours", flightHours);
+      calculateAviation(aviationType, aircraftValue, aircraftModel, flightHours);
+    }
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -1830,6 +1952,16 @@ function BundleStep2({
     onChange("customTariff", 0.35 * (1 - discount));
   };
 
+  React.useEffect(() => {
+    if (!details.bundlePropertyVal || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("bundlePropertyVal", propertyVal);
+      updateDetail("bundleLiabilityVal", liabilityVal);
+      updateDetail("bundleCargoVal", cargoVal);
+      updateDetail("bundleAccidentVal", accidentVal);
+      calculateBundle(propertyVal, liabilityVal, cargoVal, accidentVal);
+    }
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 flex items-center justify-between">
@@ -1925,7 +2057,544 @@ function BundleStep2({
 }
 
 // -------------------------------------------------------------
-// 12. GENERIC / PROPERTY STEP 2
+// 12. PROPERTY STEP 2 (ԳՈՒՅՔԻ ՀԱՐՑԱՇԱՐ ԵՎ ՏՎՅԱԼՆԵՐ)
+// -------------------------------------------------------------
+function PropertyStep2({
+  input,
+  details,
+  onChange,
+  updateDetail,
+  attemptedNext,
+}: any) {
+  const propertyCategory = details.propertyCategory || "commercial";
+  const propertyType = details.propertyType || "building_contents";
+  const structureType = details.structureType || "monolith";
+  const constructionYear = Number(details.constructionYear || 2018);
+  const totalArea = Number(details.totalArea || 120);
+  const floorCount = Number(details.floorCount || 2);
+  const fireSecurity = details.fireSecurity || "alarm_hydrant";
+  const burglarSecurity = details.burglarSecurity || "cctv_security";
+  const occupancyType = details.occupancyType || "office_it";
+  const hasMortgagePledge = details.hasMortgagePledge ?? false;
+  const pledgeBank = details.pledgeBank || "";
+
+  const propertyValue = Number(details.propertyValue || input.insuredAmount || 50000000);
+  const contentsValue = Number(details.contentsValue || 0);
+  const equipmentValue = Number(details.equipmentValue || 0);
+
+  const calculateProperty = (
+    pCat = propertyCategory,
+    pType = propertyType,
+    struct = structureType,
+    fire = fireSecurity,
+    burglar = burglarSecurity,
+    occ = occupancyType,
+    pVal = propertyValue,
+    cVal = contentsValue,
+    eVal = equipmentValue,
+    hasPledge = hasMortgagePledge
+  ) => {
+    let baseRate = 0.12; // 0.12%
+
+    if (pCat === "residential") {
+      baseRate = 0.09;
+    } else if (pCat === "commercial") {
+      baseRate = 0.12;
+    } else if (pCat === "industrial_warehouse") {
+      baseRate = 0.16;
+    }
+
+    // Structure factor
+    let structFactor = 1.0;
+    if (struct === "monolith") structFactor = 0.95;
+    else if (struct === "stone") structFactor = 1.0;
+    else if (struct === "panel") structFactor = 1.08;
+    else if (struct === "metal_sandwich") structFactor = 1.15;
+    else if (struct === "wood_other") structFactor = 1.35;
+
+    // Fire protection factor
+    let fireFactor = 1.0;
+    if (fire === "sprinkler_alarm") fireFactor = 0.85;
+    else if (fire === "alarm_hydrant") fireFactor = 0.92;
+    else if (fire === "extinguishers_only") fireFactor = 1.0;
+    else if (fire === "none") fireFactor = 1.15;
+
+    // Security factor
+    let secFactor = 1.0;
+    if (secFactor && burglar === "24_7_guard_cctv") secFactor = 0.88;
+    else if (burglar === "cctv_security") secFactor = 0.94;
+    else if (burglar === "alarm_only") secFactor = 0.98;
+    else if (burglar === "none") secFactor = 1.10;
+
+    // Occupancy factor
+    let occFactor = 1.0;
+    if (occ === "office_it" || occ === "residential_living") occFactor = 0.95;
+    else if (occ === "retail_shop") occFactor = 1.05;
+    else if (occ === "restaurant_cafe") occFactor = 1.25;
+    else if (occ === "warehouse_goods") occFactor = 1.15;
+    else if (occ === "manufacturing") occFactor = 1.35;
+
+    let finalTariff = +(baseRate * structFactor * fireFactor * (secFactor || 1.0) * occFactor).toFixed(3);
+    finalTariff = Math.max(0.06, Math.min(0.85, finalTariff));
+
+    const totalSum = pVal + cVal + eVal;
+    onChange("insuredAmount", totalSum > 0 ? totalSum : 50000000);
+    onChange("customTariff", finalTariff);
+
+    // Sync business activity description
+    let activityDesc = "";
+    if (occ === "residential_living") activityDesc = "Բնակելի տարածք / Բնակարան";
+    else if (occ === "office_it") activityDesc = "Գրասենյակային և ՏՏ գործունեություն";
+    else if (occ === "retail_shop") activityDesc = "Առևտրային գործունեություն / Խանութ";
+    else if (occ === "restaurant_cafe") activityDesc = "Հանրային սնունդ / Ռեստորան / Սրճարան";
+    else if (occ === "warehouse_goods") activityDesc = "Պահեստավորում և լոգիստիկա";
+    else if (occ === "manufacturing") activityDesc = "Արտադրական գործունեություն";
+    else activityDesc = "Առևտրային / Գույքային շահագործում";
+
+    onChange("businessActivity", activityDesc);
+  };
+
+  React.useEffect(() => {
+    if (!details.propertyCategory || !input.insuredAmount || input.insuredAmount <= 0) {
+      updateDetail("propertyCategory", propertyCategory);
+      updateDetail("propertyType", propertyType);
+      updateDetail("structureType", structureType);
+      updateDetail("constructionYear", constructionYear);
+      updateDetail("totalArea", totalArea);
+      updateDetail("floorCount", floorCount);
+      updateDetail("fireSecurity", fireSecurity);
+      updateDetail("burglarSecurity", burglarSecurity);
+      updateDetail("occupancyType", occupancyType);
+      updateDetail("propertyValue", propertyValue);
+      updateDetail("contentsValue", contentsValue);
+      updateDetail("equipmentValue", equipmentValue);
+      updateDetail("hasMortgagePledge", hasMortgagePledge);
+      updateDetail("pledgeBank", pledgeBank);
+      calculateProperty(
+        propertyCategory,
+        propertyType,
+        structureType,
+        fireSecurity,
+        burglarSecurity,
+        occupancyType,
+        propertyValue,
+        contentsValue,
+        equipmentValue,
+        hasMortgagePledge
+      );
+    }
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-sky-50 border border-blue-200 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#075bd5] text-white flex items-center justify-center shadow-md">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-black text-slate-900">
+              Անշարժ և Շարժական Գույքի Հարցաշար (Property Questionnaire)
+            </div>
+            <div className="text-xs text-slate-600">
+              Շինությունների, շարժական գույքի, հարդարանքի և սարքավորումների գույքագրում
+            </div>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+            Հաշվարկված սակագին
+          </span>
+          <span className="text-base font-black text-[#075bd5]">
+            {input.customTariff ? `${input.customTariff}%` : "0.12%"}
+          </span>
+        </div>
+      </div>
+
+      {/* 1. Գույքի կատեգորիա և շահագործում */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Գույքի կատեգորիա <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="sil-input font-medium"
+            value={propertyCategory}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateDetail("propertyCategory", val);
+              calculateProperty(
+                val,
+                propertyType,
+                structureType,
+                fireSecurity,
+                burglarSecurity,
+                occupancyType,
+                propertyValue,
+                contentsValue,
+                equipmentValue,
+                hasMortgagePledge
+              );
+            }}
+          >
+            <option value="commercial">Կոմերցիոն տարածք (Գրասենյակ, խանութ, բիզնես կենտրոն)</option>
+            <option value="residential">Բնակելի ֆոնդ (Բնակարան, առանձնատուն, ամառանոց)</option>
+            <option value="industrial_warehouse">Արտադրական օբյեկտ / Պահեստային համալիր</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Շահագործման / գործունեության ուղղություն <span className="text-red-500">*</span>
+          </label>
+          <select
+            className="sil-input font-medium"
+            value={occupancyType}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateDetail("occupancyType", val);
+              calculateProperty(
+                propertyCategory,
+                propertyType,
+                structureType,
+                fireSecurity,
+                burglarSecurity,
+                val,
+                propertyValue,
+                contentsValue,
+                equipmentValue,
+                hasMortgagePledge
+              );
+            }}
+          >
+            <option value="office_it">Գրասենյակ / ՏՏ ընկերություն / Ծառայություններ (Ցածր ռիսկ)</option>
+            <option value="residential_living">Բնակելի նպատակով շահագործում (Բնակարան/Տուն)</option>
+            <option value="retail_shop">Առևտուր / Սուպերմարկետ / Խանութ</option>
+            <option value="restaurant_cafe">Հանրային սնունդ / Ռեստորան / Սրճարան (Բարձր հրդեհային ռիսկ)</option>
+            <option value="warehouse_goods">Պահեստային լոգիստիկա / Պատրաստի արտադրանք</option>
+            <option value="manufacturing">Արդյունաբերական արտադրություն / Մեքենաշինություն</option>
+          </select>
+        </div>
+      </div>
+
+      {/* 2. Գույքի հասցե և նկարագրություն */}
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          Գույքի գտնվելու ճշգրիտ հասցե և նկարագրություն <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          rows={2}
+          className={`sil-input w-full ${
+            attemptedNext && (!input.objectDescription.trim() || input.objectDescription.trim().length < 3)
+              ? "border-red-400 bg-red-50/40"
+              : ""
+          }`}
+          placeholder="Օր․ ք․ Երևան, Կենտրոն, Վազգեն Սարգսյան 26/1, 3-րդ հարկ, գրասենյակային տարածք"
+          value={input.objectDescription}
+          onChange={(e) => {
+            onChange("objectDescription", e.target.value);
+            updateDetail("address", e.target.value);
+          }}
+        />
+        {attemptedNext && (!input.objectDescription.trim() || input.objectDescription.trim().length < 3) && (
+          <span className="text-[11px] text-red-600 mt-1 block">
+            Լրացրեք գույքի հասցեն կամ նկարագրությունը (առնվազն 3 նիշ)
+          </span>
+        )}
+      </div>
+
+      {/* 3. Շինության կառուցվածք, մակերես, հարկայնություն */}
+      <div className="grid sm:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Կառուցվածքի տեսակ
+          </label>
+          <select
+            className="sil-input font-medium"
+            value={structureType}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateDetail("structureType", val);
+              calculateProperty(
+                propertyCategory,
+                propertyType,
+                val,
+                fireSecurity,
+                burglarSecurity,
+                occupancyType,
+                propertyValue,
+                contentsValue,
+                equipmentValue,
+                hasMortgagePledge
+              );
+            }}
+          >
+            <option value="monolith">Մոնոլիտ (Երկաթբետոն)</option>
+            <option value="stone">Քարե (Տուֆ / Բազալտ)</option>
+            <option value="panel">Պանելային</option>
+            <option value="metal_sandwich">Մետաղական սենդվիչ-պանել</option>
+            <option value="wood_other">Այլ / Փայտե</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Ընդհանուր մակերես (քմ)
+          </label>
+          <input
+            type="number"
+            min="1"
+            className="sil-input font-medium"
+            value={totalArea}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              updateDetail("totalArea", val);
+            }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Հարկայնություն / Հարկ
+          </label>
+          <input
+            type="number"
+            min="1"
+            className="sil-input font-medium"
+            value={floorCount}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              updateDetail("floorCount", val);
+            }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Կառուցման տարեթիվ
+          </label>
+          <input
+            type="number"
+            min="1900"
+            max="2027"
+            className="sil-input font-medium"
+            value={constructionYear}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              updateDetail("constructionYear", val);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 4. Ապահովագրական արժեքների բաշխում */}
+      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+        <div className="text-xs font-black text-slate-800 flex items-center justify-between">
+          <span>Ապահովագրական արժեքի բաղադրիչներ ({input.currency})</span>
+          <span className="text-[#075bd5] font-bold">
+            Ընդհանուր՝ {((propertyValue || 0) + (contentsValue || 0) + (equipmentValue || 0)).toLocaleString("hy-AM")} {input.currency}
+          </span>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              1. Շենք-շինություն / Հարդարանք <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              className="sil-input font-bold"
+              value={propertyValue}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                updateDetail("propertyValue", val);
+                calculateProperty(
+                  propertyCategory,
+                  propertyType,
+                  structureType,
+                  fireSecurity,
+                  burglarSecurity,
+                  occupancyType,
+                  val,
+                  contentsValue,
+                  equipmentValue,
+                  hasMortgagePledge
+                );
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              2. Շարժական գույք / Ապրանքանյութական մնացորդ
+            </label>
+            <input
+              type="number"
+              min="0"
+              className="sil-input font-bold"
+              value={contentsValue}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                updateDetail("contentsValue", val);
+                calculateProperty(
+                  propertyCategory,
+                  propertyType,
+                  structureType,
+                  fireSecurity,
+                  burglarSecurity,
+                  occupancyType,
+                  propertyValue,
+                  val,
+                  equipmentValue,
+                  hasMortgagePledge
+                );
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              3. Սարքավորումներ / Մեքենա-մեխանիզմներ
+            </label>
+            <input
+              type="number"
+              min="0"
+              className="sil-input font-bold"
+              value={equipmentValue}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                updateDetail("equipmentValue", val);
+                calculateProperty(
+                  propertyCategory,
+                  propertyType,
+                  structureType,
+                  fireSecurity,
+                  burglarSecurity,
+                  occupancyType,
+                  propertyValue,
+                  contentsValue,
+                  val,
+                  hasMortgagePledge
+                );
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Անվտանգության համակարգեր և Ռիսկի նվազեցում */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Հակահրդեհային անվտանգության համակարգ
+          </label>
+          <select
+            className="sil-input font-medium"
+            value={fireSecurity}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateDetail("fireSecurity", val);
+              calculateProperty(
+                propertyCategory,
+                propertyType,
+                structureType,
+                val,
+                burglarSecurity,
+                occupancyType,
+                propertyValue,
+                contentsValue,
+                equipmentValue,
+                hasMortgagePledge
+              );
+            }}
+          >
+            <option value="sprinkler_alarm">Ավտոմատ ջրային/սպրինկլերային + Հրդեհային ազդանշանում (-15% սակագին)</option>
+            <option value="alarm_hydrant">Հրդեհային ազդանշանային համակարգ + Հիդրանտներ (-8% սակագին)</option>
+            <option value="extinguishers_only">Միայն առաջնային կրակմարիչներ (Ստանդարտ)</option>
+            <option value="none">Առանց համակարգի (+15% ռիսկ)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Պահպանության և անվտանգության համակարգ
+          </label>
+          <select
+            className="sil-input font-medium"
+            value={burglarSecurity}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateDetail("burglarSecurity", val);
+              calculateProperty(
+                propertyCategory,
+                propertyType,
+                structureType,
+                fireSecurity,
+                val,
+                occupancyType,
+                propertyValue,
+                contentsValue,
+                equipmentValue,
+                hasMortgagePledge
+              );
+            }}
+          >
+            <option value="24_7_guard_cctv">24/7 Զինված/ֆիզիկական պահպանություն + Տեսահսկում CCTV (-12% սակագին)</option>
+            <option value="cctv_security">Անվտանգության ազդանշանային վահանակ + Տեսահսկում (-6% սակագին)</option>
+            <option value="alarm_only">Տեղային ազդանշանային համակարգ (Ստանդարտ)</option>
+            <option value="none">Առանց հատուկ պահպանության (+10% ռիսկ)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* 6. Բանկային գրավի առկայություն */}
+      <div className="p-3.5 rounded-xl border border-slate-200 bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-800">
+          <input
+            type="checkbox"
+            checked={hasMortgagePledge}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              updateDetail("hasMortgagePledge", checked);
+              calculateProperty(
+                propertyCategory,
+                propertyType,
+                structureType,
+                fireSecurity,
+                burglarSecurity,
+                occupancyType,
+                propertyValue,
+                contentsValue,
+                equipmentValue,
+                checked
+              );
+            }}
+            className="w-4 h-4 text-[#075bd5] rounded-sm focus:ring-[#075bd5]"
+          />
+          Գույքը հանդիսանում է բանկային գրավառության առարկա (Բանկի պահանջով ապահովագրություն)
+        </label>
+
+        {hasMortgagePledge && (
+          <div className="w-full sm:w-64">
+            <input
+              type="text"
+              className="sil-input text-xs"
+              placeholder="Նշեք գրավառու բանկը (օր. Ամերիաբանկ, Արդշինբանկ)"
+              value={pledgeBank}
+              onChange={(e) => {
+                updateDetail("pledgeBank", e.target.value);
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 13. GENERIC / LEGACY STEP 2
 // -------------------------------------------------------------
 function LegacyPropertyOnlyStep2({
   input,

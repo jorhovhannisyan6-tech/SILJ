@@ -16,8 +16,8 @@
     "cloudrun:start": "npm start",
     "check:runtime": "node scripts/check-runtime.mjs",
     "build:production": "npm run build",
-    "qa:regression": "node scripts/regression-check.js",
-    "qa:security": "node scripts/security-check.js"
+    "qa:regression": "node scripts/regression-check.cjs",
+    "qa:security": "node scripts/security-check.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

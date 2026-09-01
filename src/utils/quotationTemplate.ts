@@ -102,10 +102,65 @@ function detailsRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"
       push(isEn ? "Travelers Count" : isRu ? "Количество путешественников" : "Ճանապարհորդների քանակ", d.travelerCount);
       break;
     case "cargo":
-      push(isEn ? "Clause Type" : isRu ? "Тиպ оговорки" : "Կլաուզա", d.clauseType);
-      push(isEn ? "Country of Origin" : isRu ? "Страна отправления" : "Ծագման երկիր", d.originCountry);
-      push(isEn ? "Destination Country" : isRu ? "Страна назначения" : "Նպատակակետ", d.destinationCountry);
+      push(isEn ? "Clause Type" : isRu ? "Тип оговорки" : "Կլաուզա", d.clauseType || d.clause);
+      push(isEn ? "Cargo Type" : isRu ? "Тип груза" : "Բեռի տեսակ", d.cargoType);
+      push(isEn ? "Country of Origin" : isRu ? "Страна отправления" : "Ծագման երկիր", d.originCountry || d.origin);
+      push(isEn ? "Destination Country" : isRu ? "Страна назначения" : "Նպատակակետ", d.destinationCountry || d.destination);
       push(isEn ? "Transport Mode" : isRu ? "Вид транспорта" : "Փոխադրման եղանակ", d.transportMode);
+      break;
+    case "construction":
+      push(isEn ? "Project Name" : isRu ? "Название проекта" : "Նախագծի անվանում", d.projectName);
+      push(isEn ? "Project Address" : isRu ? "Адрес объекта" : "Շինհրապարակի հասցե", d.projectAddress);
+      push(isEn ? "Project Type" : isRu ? "Тип строительства" : "Շինարարության տեսակ", d.projectType);
+      push(isEn ? "Contract Value" : isRu ? "Стоимость контракта" : "Պայմանագրային արժեք", d.contractValue ? formatCurrency(d.contractValue, proposal.currency) : undefined);
+      push(isEn ? "Duration" : isRu ? "Срок работ" : "Շինարարության տևողություն", d.durationMonths ? `${d.durationMonths} ${isEn ? "months" : isRu ? "мес." : "ամիս"}` : undefined);
+      push(isEn ? "Third Party Liability (TPL)" : isRu ? "Ответственность перед 3-ми лицами" : "TPL ծածկույթ", d.tplIncluded ? (isEn ? "Included" : isRu ? "Включено" : "Ներառված է") : (isEn ? "Not included" : isRu ? "Не включено" : "Չներառված"));
+      break;
+    case "liability":
+      push(isEn ? "Liability Type" : isRu ? "Тип ответственности" : "Պատասխանատվության տեսակ", d.liabilityType);
+      push(isEn ? "Business Sector" : isRu ? "Сфера деятельности" : "Գործունեության ոլորտ", d.businessField);
+      push(isEn ? "Limit of Indemnity" : isRu ? "Лимит ответственности" : "Պատասխանատվության սահմանաչափ", d.limitOfIndemnity ? formatCurrency(d.limitOfIndemnity, proposal.currency) : undefined);
+      push(isEn ? "Annual Turnover" : isRu ? "Годовой оборот" : "Տարեկան շրջանառություն", d.annualTurnover ? formatCurrency(d.annualTurnover, proposal.currency) : undefined);
+      break;
+    case "accident":
+      push(isEn ? "Coverage Period" : isRu ? "Период действия" : "Ծածկույթի ռեժիմ", d.coverageType === "24_hours" ? (isEn ? "24/7 Worldwide" : isRu ? "24/7 Круглосуточно" : "24/7 Շուրջօրյա") : (isEn ? "Working Hours" : isRu ? "Рабочее время" : "Աշխատանքային ժամեր"));
+      push(isEn ? "Number of Insured" : isRu ? "Кол-во застрахованных" : "Ապահովագրվածների քանակ", d.numberOfPersons);
+      push(isEn ? "Sum per Person" : isRu ? "Сумма на человека" : "1 անձի սահմանաչափ", d.sumPerPerson ? formatCurrency(d.sumPerPerson, proposal.currency) : undefined);
+      push(isEn ? "Risk Category" : isRu ? "Категория риска" : "Ռիսկայնության դաս", d.riskClass);
+      break;
+    case "agro":
+      push(isEn ? "Crop Type" : isRu ? "Сельхозкультура" : "Մշակաբույս", d.cropType);
+      push(isEn ? "Region" : isRu ? "Регион" : "Մարզ", d.region);
+      push(isEn ? "Area (Hectares)" : isRu ? "Площадь (Га)" : "Մակերես (Հա)", d.hectares ? `${d.hectares} ${isEn ? "ha" : isRu ? "га" : "հա"}` : undefined);
+      push(isEn ? "Yield (kg/ha)" : isRu ? "Урожайность (кг/га)" : "Բերքատվություն (կգ/հա)", d.yieldKgPerHa);
+      push(isEn ? "Anti-Hail Net" : isRu ? "Противоградовая сетка" : "Հակակարկտային ցանց", d.antiHailNet ? (isEn ? "Yes" : isRu ? "Да" : "Այո") : (isEn ? "No" : isRu ? "Нет" : "Ոչ"));
+      push(isEn ? "State Subsidy" : isRu ? "Госсубсидия" : "Պետական սուբսիդավորում", d.subsidyPercent ? `${d.subsidyPercent}%` : undefined);
+      break;
+    case "financial":
+      push(isEn ? "Guarantee / Bond Type" : isRu ? "Тип гарантии" : "Երաշխիքի տեսակ", d.bondType);
+      push(isEn ? "Beneficiary" : isRu ? "Бенефициар" : "Շահառու", d.beneficiary);
+      push(isEn ? "Duration" : isRu ? "Срок" : "Ժամկետ", d.durationMonths ? `${d.durationMonths} ${isEn ? "months" : isRu ? "мес." : "ամիս"}` : undefined);
+      push(isEn ? "Collateral Type" : isRu ? "Обеспечение" : "Ապահովման միջոց", d.collateralType);
+      break;
+    case "aviation":
+      push(isEn ? "Aviation Object" : isRu ? "Объект авиации" : "Ավիացիոն օբյեկտ", d.aviationType);
+      push(isEn ? "Model / Serial" : isRu ? "Модель / Серийный" : "Մոդել և սերիական համար", d.aircraftModel);
+      push(isEn ? "Pilot Experience" : isRu ? "Опыт пилота" : "Օդաչուի փորձ (ժամ)", d.flightHours);
+      break;
+    case "property":
+      push(isEn ? "Property Address" : isRu ? "Адрес имущества" : "Գույքի հասցե", d.address);
+      push(isEn ? "Property Category" : isRu ? "Категория имущества" : "Գույքի կատեգորիա", d.propertyCategory);
+      push(isEn ? "Occupancy / Activity" : isRu ? "Назначение / Деятельность" : "Շահագործման տեսակ", d.occupancyType);
+      push(isEn ? "Structure Type" : isRu ? "Конструкция здания" : "Շինության կառուցվածք", d.structureType || d.constructionType);
+      push(isEn ? "Total Area (sq.m)" : isRu ? "Общая площадь (кв.м)" : "Ընդհանուր մակերես", d.totalArea ? `${d.totalArea} քմ` : undefined);
+      push(isEn ? "Building & Finish Value" : isRu ? "Стоимость здания" : "Շենք-շինություն / Հարդարանք", d.propertyValue ? formatCurrency(d.propertyValue, proposal.currency) : undefined);
+      push(isEn ? "Contents & Goods Value" : isRu ? "Стоимость движимого имущества" : "Շարժական գույք / Ապրանքներ", d.contentsValue ? formatCurrency(d.contentsValue, proposal.currency) : undefined);
+      push(isEn ? "Machinery & Equipment Value" : isRu ? "Стоимость оборудования" : "Սարքավորումներ / Մեքենաներ", d.equipmentValue ? formatCurrency(d.equipmentValue, proposal.currency) : undefined);
+      push(isEn ? "Fire Protection" : isRu ? "Противопожарная система" : "Հակահրդեհային համակարգ", d.fireSecurity);
+      push(isEn ? "Security & CCTV" : isRu ? "Охрана и видеонаблюдение" : "Պահպանություն և CCTV", d.burglarSecurity || d.securityLevel);
+      if (d.hasMortgagePledge) {
+        push(isEn ? "Bank Pledge Beneficiary" : isRu ? "Залогодержатель (Банк)" : "Գրավառու բանկ", d.pledgeBank || "Առկա է գրավառություն");
+      }
       break;
     default:
       break;

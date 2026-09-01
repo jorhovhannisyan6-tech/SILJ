@@ -1,3 +1,5 @@
+process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
+process.on("unhandledRejection", (reason) => console.error("UNHANDLED REJECTION:", reason));
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -11,7 +13,7 @@ import mammoth from "mammoth";
 dotenv.config();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
 const KB = path.join(ROOT, "knowledge-base");
@@ -247,7 +249,7 @@ let KNOWLEDGE_BASE = loadKnowledgeBase();
 
 function reloadKnowledgeBase() {
   KNOWLEDGE_BASE = loadKnowledgeBase();
-  return KNOWLEDGE_BASE;
+  return KNOWLEDGE_BASE.length;
 }
 
 function selectKnowledge(query: string, context = "") {
@@ -383,7 +385,6 @@ async function callChatGPT(contents: any[], systemInstruction: string) {
     body: JSON.stringify({
       model,
       messages: formattedMessages,
-      temperature: 0.2,
     }),
   });
 
@@ -457,6 +458,9 @@ function localFallback(question: string) {
 }
 
 // -------------------- API --------------------
+app.get("/healthz", (_req, res) => res.status(200).json({ status: "ok" }));
+app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+
 app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -618,7 +622,6 @@ JSON schema:
             },
           ],
           response_format: { type: "json_object" },
-          temperature: 0.1,
         }),
       });
       if (res.ok) {
