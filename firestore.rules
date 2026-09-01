@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default catch-all deny rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Grant access to dynamic policy rules
+    match /dynamic_policy_rules/{ruleId} {
+      allow read, write: if true;
+    }
+
+    // Grant access to bot configurations
+    match /bot_configs/{configId} {
+      allow read, write: if true;
+    }
+
+    // Grant access to DOCX template mappings
+    match /docx_template_mappings/{mappingId} {
+      allow read, write: if true;
+    }
+
+    // Grant access to persistent knowledge base documents
+    match /knowledge_base_docs/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

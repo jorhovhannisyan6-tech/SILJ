@@ -18,12 +18,76 @@ const KB = path.join(ROOT, "knowledge-base");
 // Initialize Firebase for Backend Use
 const firebaseConfigPath = path.join(ROOT, "firebase-applet-config.json");
 let db: any = null;
+
+async function syncKnowledgeBaseFromFirestore() {
+  if (!db) {
+    console.log("No Firestore DB found. Skipping KB Firestore sync.");
+    return;
+  }
+  try {
+    console.log("Starting Knowledge Base Firestore sync...");
+    const querySnapshot = await getDocs(collection(db, "knowledge_base_docs"));
+    const firebaseDocs = querySnapshot.docs.map(doc => doc.data());
+    
+    if (firebaseDocs.length === 0) {
+      console.log("No dynamic KB documents found in Firestore.");
+      return;
+    }
+
+    const indexPath = path.join(KB, "index.json");
+    let indexData: any = { version: "1.0", language: "hy", products: [] };
+    if (fs.existsSync(indexPath)) {
+      try {
+        indexData = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+      } catch (e) {
+        console.error("Failed to parse local index.json, resetting.", e);
+      }
+    }
+
+    const textDir = path.join(KB, "text");
+    fs.mkdirSync(textDir, { recursive: true });
+
+    firebaseDocs.forEach((fdoc: any) => {
+      if (!fdoc.sourceFile || !fdoc.textFile) return;
+      const textFilePath = path.join(KB, fdoc.textFile);
+      fs.writeFileSync(textFilePath, fdoc.text || "", "utf8");
+      
+      const existingIdx = (indexData.products || []).findIndex(
+        (p: any) => p.sourceFile === fdoc.sourceFile || p.textFile === fdoc.textFile
+      );
+      const entry = {
+        productId: fdoc.productId,
+        sourceFile: fdoc.sourceFile,
+        textFile: fdoc.textFile,
+        characters: (fdoc.text || "").length,
+      };
+
+      if (existingIdx >= 0) {
+        indexData.products[existingIdx] = entry;
+      } else {
+        indexData.products.push(entry);
+      }
+    });
+
+    fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), "utf8");
+    reloadKnowledgeBase();
+    console.log(`Knowledge Base Firestore sync completed. Synchronized ${firebaseDocs.length} documents.`);
+  } catch (err) {
+    console.error("Failed to sync Knowledge Base from Firestore:", err);
+  }
+}
+
 if (fs.existsSync(firebaseConfigPath)) {
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
     const firebaseApp = initializeApp(firebaseConfig);
     db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
     console.log("Firebase/Firestore initialized successfully in server backend.");
+    
+    // Asynchronously synchronize KB documents from Firestore
+    setTimeout(() => {
+      syncKnowledgeBaseFromFirestore();
+    }, 1000);
   } catch (err) {
     console.error("Failed to initialize Firebase/Firestore on server backend:", err);
   }
@@ -556,7 +620,7 @@ app.get("/api/admin/kb", auth, (req, res) => {
   res.json({ status: "ok", products: kbData });
 });
 
-app.post("/api/admin/kb", auth, (req, res) => {
+app.post("/api/admin/kb", auth, async (req, res) => {
   const user = (req as any).user;
   if (!user || !["admin", "manager"].includes(user.role)) {
     return res.status(403).json({ error: "Access denied" });
@@ -596,10 +660,28 @@ app.post("/api/admin/kb", auth, (req, res) => {
   fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), "utf8");
   reloadKnowledgeBase();
 
+  // Save dynamically to Firestore for persistent storage
+  if (db) {
+    try {
+      const sanitizedDocId = safeFileName.replace(/[\/.\s]/g, "_");
+      await setDoc(doc(db, "knowledge_base_docs", sanitizedDocId), {
+        productId,
+        sourceFile,
+        textFile: textFileName,
+        text: text || "",
+        characters: (text || "").length,
+        updatedAt: new Date().toISOString()
+      });
+      console.log(`Persistent Firestore sync: saved document ${sanitizedDocId}`);
+    } catch (err) {
+      console.error("Failed to save KB document to Firestore persistent storage:", err);
+    }
+  }
+
   res.json({ status: "ok", entry: newEntry, message: "Փաստաթուղթը հաջողությամբ ավելացվել/թարմացվել է" });
 });
 
-app.put("/api/admin/kb/:index", auth, (req, res) => {
+app.put("/api/admin/kb/:index", auth, async (req, res) => {
   const user = (req as any).user;
   if (!user || !["admin", "manager"].includes(user.role)) {
     return res.status(403).json({ error: "Access denied" });
@@ -635,10 +717,28 @@ app.put("/api/admin/kb/:index", auth, (req, res) => {
   fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), "utf8");
   reloadKnowledgeBase();
 
+  // Update in Firestore for persistence
+  if (db) {
+    try {
+      const sanitizedDocId = safeFileName.replace(/[\/.\s]/g, "_");
+      await setDoc(doc(db, "knowledge_base_docs", sanitizedDocId), {
+        productId: target.productId,
+        sourceFile: target.sourceFile,
+        textFile: target.textFile,
+        text: text || "",
+        characters: target.characters,
+        updatedAt: new Date().toISOString()
+      });
+      console.log(`Persistent Firestore sync: updated document ${sanitizedDocId}`);
+    } catch (err) {
+      console.error("Failed to update KB document in Firestore persistent storage:", err);
+    }
+  }
+
   res.json({ status: "ok", entry: target, message: "Փաստաթուղթը հաջողությամբ թարմացվել է" });
 });
 
-app.delete("/api/admin/kb/:index", auth, (req, res) => {
+app.delete("/api/admin/kb/:index", auth, async (req, res) => {
   const user = (req as any).user;
   if (!user || !["admin", "manager"].includes(user.role)) {
     return res.status(403).json({ error: "Access denied" });
@@ -662,6 +762,18 @@ app.delete("/api/admin/kb/:index", auth, (req, res) => {
     const textFilePath = path.join(KB, removed.textFile);
     if (fs.existsSync(textFilePath)) {
       try { fs.unlinkSync(textFilePath); } catch (e) {}
+    }
+
+    // Delete from Firestore for persistence
+    if (db) {
+      try {
+        const baseName = path.basename(removed.textFile, ".txt");
+        const sanitizedDocId = baseName.replace(/[\/.\s]/g, "_");
+        await deleteDoc(doc(db, "knowledge_base_docs", sanitizedDocId));
+        console.log(`Persistent Firestore sync: deleted document ${sanitizedDocId}`);
+      } catch (err) {
+        console.error("Failed to delete KB document from Firestore persistent storage:", err);
+      }
     }
   }
 
