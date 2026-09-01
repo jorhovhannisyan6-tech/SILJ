@@ -2,11 +2,12 @@ import { useMemo, useState, useEffect } from 'react';
 import { 
   AlertTriangle, CheckCircle2, Copy, FileText, RefreshCw, Route, ShieldAlert, Sparkles, 
   Building2, Car, Upload, Check, ShieldCheck, HelpCircle, FileSearch, ArrowRight, Printer, 
-  AlertOctagon, Settings, Bot, Play, Save, Trash2, Cpu, FileJson, CheckSquare, Plus, FileEdit
+  AlertOctagon, Settings, Bot, Play, Save, Trash2, Cpu, FileJson, CheckSquare, Plus, FileEdit, History
 } from 'lucide-react';
 import type { QuotationProposal } from '../types';
 import { ListAmPropertyValuationCalculator } from './Property/ListAmPropertyValuationCalculator';
 import { ListAmVehicleValuationCalculator } from './Casco/ListAmVehicleValuationCalculator';
+import { ProductTemplateMapper } from './TemplateMapper/ProductTemplateMapper';
 
 type TabType = 'overview' | 'compliance' | 'vehicle-valuation' | 'property-valuation' | 'duplicates' | 'next' | 'renewals' | 'documents' | 'rules-engine' | 'bot-playground' | 'template-mapper';
 
@@ -51,8 +52,41 @@ interface TemplateMapping {
   label: string;
 }
 
-export function SmartOperations({ quotes }: { quotes: QuotationProposal[] }) {
-  const [tab, setTab] = useState<TabType>('overview');
+export const AVAILABLE_SYSTEM_FIELDS = [
+  { value: 'clientName', label: 'Ապահովադրի անուն (clientName)' },
+  { value: 'contactInfo', label: 'Կոնտակտային տվյալներ (contactInfo)' },
+  { value: 'totalSumInsured', label: 'Ապահովագրական գումար (totalSumInsured)' },
+  { value: 'currency', label: 'Արժույթ (currency)' },
+  { value: 'baseTariff', label: 'Բազային սակագին % (baseTariff)' },
+  { value: 'finalTariff', label: 'Վերջնական սակագին % (finalTariff)' },
+  { value: 'annualPremium', label: 'Տարեկան ապահովագրավճար (annualPremium)' },
+  { value: 'franchiseDescription', label: 'Ֆրանշիզայի պայմաններ (franchiseDescription)' },
+  { value: 'paymentTerms', label: 'Վճարման պայմաններ (paymentTerms)' },
+  { value: 'beneficiaryDetails', label: 'Շահառուի տվյալներ (beneficiaryDetails)' },
+  { value: 'objectDescription', label: 'Օբյեկտի նկարագրություն (objectDescription)' },
+  { value: 'coveredPerilsList', label: 'Ծածկվող ռիսկեր (coveredPerilsList)' },
+  { value: 'specialConditions', label: 'Հատուկ պայմաններ (specialConditions)' },
+  { value: 'quotationNumber', label: 'Գնառաջարկի համարը (quotationNumber)' },
+  { value: 'createdAt', label: 'Ստեղծման ամսաթիվ (createdAt)' },
+  { value: 'expiresAt', label: 'Ուժի մեջ է մինչև (expiresAt)' },
+  { value: 'productSpecificDetails.vehicleModel', label: 'Մեքենայի մոդել (vehicleModel)' },
+  { value: 'productSpecificDetails.vehicleYear', label: 'Մեքենայի տարեթիվ (vehicleYear)' },
+  { value: 'productSpecificDetails.licensePlate', label: 'Մեքենայի համարանիշ (licensePlate)' },
+  { value: 'productSpecificDetails.vin', label: 'Մեքենայի VIN կոդ (vin)' },
+  { value: 'productSpecificDetails.marketValue', label: 'Մեքենայի շուկայական արժեք (marketValue)' },
+  { value: 'productSpecificDetails.useType', label: 'Օգտագործման նպատակ (useType)' },
+  { value: 'productSpecificDetails.propertyAddress', label: 'Գույքի հասցե (propertyAddress)' },
+  { value: 'productSpecificDetails.propertyArea', label: 'Գույքի մակերես քմ (propertyArea)' },
+];
+
+export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationProposal[]; forcedTab?: TabType }) {
+  const [tab, setTab] = useState<TabType>(forcedTab || 'overview');
+
+  useEffect(() => {
+    if (forcedTab) {
+      setTab(forcedTab);
+    }
+  }, [forcedTab]);
   
   // Compliance state
   const [selectedProduct, setSelectedProduct] = useState<string>('casco');
@@ -78,12 +112,6 @@ export function SmartOperations({ quotes }: { quotes: QuotationProposal[] }) {
   const [shadowResults, setShadowResults] = useState<ShadowTestResult[]>([]);
   const [botMessage, setBotMessage] = useState<string>('');
 
-  // Template Mapper state
-  const [mappings, setMappings] = useState<TemplateMapping[]>([]);
-  const [isLoadingMappings, setIsLoadingMappings] = useState<boolean>(false);
-  const [isSavingMappings, setIsSavingMappings] = useState<boolean>(false);
-  const [mappingMessage, setMappingMessage] = useState<string>('');
-
   const token = localStorage.getItem("sil-auth-token") || localStorage.getItem("sil_token") || "";
 
   // Fetch rules and bot config when tab changes or component mounts
@@ -92,8 +120,6 @@ export function SmartOperations({ quotes }: { quotes: QuotationProposal[] }) {
       fetchRules();
     } else if (tab === 'bot-playground') {
       fetchBotConfig();
-    } else if (tab === 'template-mapper') {
-      fetchMappings();
     }
   }, [tab]);
 
@@ -269,58 +295,6 @@ export function SmartOperations({ quotes }: { quotes: QuotationProposal[] }) {
     }
   };
 
-  // Mappings fetchers
-  const fetchMappings = async () => {
-    setIsLoadingMappings(true);
-    setMappingMessage('');
-    try {
-      const res = await fetch("/api/admin/template-mappings", {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMappings(data.mappings || []);
-      }
-    } catch {
-      console.error("Failed to fetch mappings");
-    } finally {
-      setIsLoadingMappings(false);
-    }
-  };
-
-  const handleSaveMappings = async () => {
-    setIsSavingMappings(true);
-    setMappingMessage('');
-    try {
-      const res = await fetch("/api/admin/template-mappings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ mappings })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMappingMessage("✅ " + (data.message || "Քարտեզագրումները պահպանվեցին Firestore-ում։"));
-      } else {
-        setMappingMessage("❌ Չհաջողվեց պահպանել քարտեզագրումները։");
-      }
-    } catch {
-      setMappingMessage("❌ Կապի սխալ։");
-    } finally {
-      setIsSavingMappings(false);
-    }
-  };
-
-  const handleMappingChange = (index: number, value: string) => {
-    const updated = [...mappings];
-    updated[index].systemField = value;
-    setMappings(updated);
-  };
-
   const duplicates = useMemo(() => {
     const m = new Map<string, QuotationProposal[]>();
     quotes.forEach(q => {
@@ -387,40 +361,44 @@ export function SmartOperations({ quotes }: { quotes: QuotationProposal[] }) {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 space-y-5">
-      <div className="rounded-[28px] bg-gradient-to-r from-[#061A40] to-[#075bd5] text-white p-7 shadow-lg">
-        <div className="text-cyan-200 text-xs font-black tracking-[.18em]">ENTERPRISE AI PORTAL</div>
-        <h1 className="text-3xl font-black mt-2">ԱԲ Կանոնների և Գործառնությունների Կառավարման Կենտրոն</h1>
-        <p className="text-blue-100 text-sm mt-2">
-          Լիարժեք AI-ով ղեկավարվող ապահովագրական պորտալ՝ դինամիկ կանոնների թարգմանիչ, չատբոտի sandbox սիմուլյատոր և DOCX ձևանմուշների ավտոմատ քարտեզագրում։
-        </p>
-      </div>
+    <div className={forcedTab ? "space-y-5 py-2" : "max-w-[1400px] mx-auto px-4 sm:px-6 py-8 space-y-5"}>
+      {!forcedTab && (
+        <>
+          <div className="rounded-[28px] bg-gradient-to-r from-[#061A40] to-[#075bd5] text-white p-7 shadow-lg">
+            <div className="text-cyan-200 text-xs font-black tracking-[.18em]">ENTERPRISE AI PORTAL</div>
+            <h1 className="text-3xl font-black mt-2">ԱԲ Կանոնների և Գործառնությունների Կառավարման Կենտրոն</h1>
+            <p className="text-blue-100 text-sm mt-2">
+              Լիարժեք AI-ով ղեկավարվող ապահովագրական պորտալ՝ դինամիկ կանոնների թարգմանիչ, չատբոտի sandbox սիմուլյատոր և DOCX ձևանմուշների ավտոմատ քարտեզագրում։
+            </p>
+          </div>
 
-      <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1.5 rounded-2xl border">
-        {[
-          ['overview', '🏠 Գլխավոր պատուհան'],
-          ['rules-engine', '⚙️ AI Կանոնների Շարժիչ'],
-          ['bot-playground', '💬 Չատբոտի Սանդբոքս'],
-          ['template-mapper', '📝 Ձևանմուշի Քարտեզագրում'],
-          ['compliance', '🔍 ԱԲ Պայմանագրերի Աուդիտ'],
-          ['vehicle-valuation', '🚗 List.am ԿԱՍԿՈ Գնահատիչ'],
-          ['property-valuation', '🏢 List.am Գույքի Գնահատիչ'],
-          ['duplicates', '👥 Կրկնվող հայտեր'],
-          ['next', '⚡ Խելացի գործողություններ'],
-          ['renewals', '📅 Երկարաձգումներ'],
-          ['documents', '📂 Փաստաթղթերի կենտրոն']
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setTab(id as TabType)}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all ${
-              tab === id ? 'bg-[#075bd5] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+          <div className="flex flex-wrap gap-1.5 bg-slate-100 p-1.5 rounded-2xl border">
+            {[
+              ['overview', '🏠 Գլխավոր պատուհան'],
+              ['rules-engine', '⚙️ AI Կանոնների Շարժիչ'],
+              ['bot-playground', '💬 Չատբոտի Սանդբոքս'],
+              ['template-mapper', '📝 Ձևանմուշի Քարտեզագրում'],
+              ['compliance', '🔍 ԱԲ Պայմանագրերի Աուդիտ'],
+              ['vehicle-valuation', '🚗 List.am ԿԱՍԿՈ Գնահատիչ'],
+              ['property-valuation', '🏢 List.am Գույքի Գնահատիչ'],
+              ['duplicates', '👥 Կրկնվող հայտեր'],
+              ['next', '⚡ Խելացի գործողություններ'],
+              ['renewals', '📅 Երկարաձգումներ'],
+              ['documents', '📂 Փաստաթղթերի կենտրոն']
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setTab(id as TabType)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all ${
+                  tab === id ? 'bg-[#075bd5] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {tab === 'overview' && (
         <div className="space-y-6">
@@ -748,64 +726,7 @@ export function SmartOperations({ quotes }: { quotes: QuotationProposal[] }) {
 
       {/* 3. TEMPLATE MAPPER VIEW */}
       {tab === 'template-mapper' && (
-        <div className="sil-card p-6 space-y-6 animate-fade-in max-w-4xl mx-auto">
-          <div>
-            <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <FileEdit size={20} className="text-[#075bd5]" /> DOCX Ձևանմուշի Փոփոխականների Քարտեզագրում (DOCX Mapper)
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Կազմաձևեք Word փաստաթղթի (`quotation-template-source.docx`) փոփոխականների կապը համակարգային տվյալների հետ։
-            </p>
-          </div>
-
-          {isLoadingMappings ? (
-            <div className="text-center py-10 text-xs text-slate-400">Բեռնվում է քարտեզագիրը...</div>
-          ) : (
-            <div className="space-y-5">
-              <div className="border rounded-2xl overflow-hidden bg-white">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-50 font-bold text-slate-700 border-b">
-                    <tr>
-                      <th className="p-3">DOCX Փոփոխական (Placeholder)</th>
-                      <th className="p-3">Համակարգային Դաշտ (Firestore Link)</th>
-                      <th className="p-3">Նկարագրություն / Պիտակ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y text-slate-800">
-                    {mappings.map((map, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition">
-                        <td className="p-3 font-mono font-bold text-indigo-700">{`{{${map.placeholder}}}`}</td>
-                        <td className="p-3">
-                          <input
-                            type="text"
-                            value={map.systemField}
-                            onChange={e => handleMappingChange(idx, e.target.value)}
-                            className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-mono w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </td>
-                        <td className="p-3 font-bold text-slate-600">{map.label}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {mappingMessage && (
-                <div className="p-3 text-xs font-bold border rounded-xl bg-slate-50">
-                  {mappingMessage}
-                </div>
-              )}
-
-              <button
-                onClick={handleSaveMappings}
-                disabled={isSavingMappings}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                <Save size={14} /> {isSavingMappings ? "Պահպանվում է..." : "Պահպանել DOCX Քարտեզագրումները"}
-              </button>
-            </div>
-          )}
-        </div>
+        <ProductTemplateMapper token={token} />
       )}
 
       {/* 4. COMPLIANCE VIEW */}

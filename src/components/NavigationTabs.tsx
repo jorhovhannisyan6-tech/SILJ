@@ -10,7 +10,6 @@ export function NavigationTabs({activeTab,onTabChange,proposalReady}:Props){
   ['analytics','Վերլուծություն KPI',BarChart3],
   ['crm','Հաճախորդներ և Երկարաձգում',Users],
   ['history','Գնառաջարկների պատմություն',History],
-  ['smart','Խելացի գործողություններ',Sparkles],
   ['chat','ԱԲ Օգնական',Bot],
   ['legal','FAQ / Իրավական',BookOpen],
   ['admin','Կառավարում',Settings2]

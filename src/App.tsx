@@ -266,7 +266,7 @@ export default function App() {
         {activeTab === "smart" && <SmartOperations quotes={quoteHistory} />}
 
         {activeTab === "chat" && (
-          <AiAdvisorWidget />
+          <AiAdvisorWidget onLoadProposal={handleGenerateQuotation} />
         )}
 
         {activeTab === "legal" && <LegalView />}

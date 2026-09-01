@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, CheckCircle2, FileText, KeyRound, Lock, RefreshCw, Save, Shield, Users, XCircle, Settings2, BookOpen } from 'lucide-react';
+import { Activity, BarChart3, CheckCircle2, FileText, KeyRound, Lock, RefreshCw, Save, Shield, Users, XCircle, Settings2, BookOpen, Sparkles, Bot, Zap } from 'lucide-react';
 import { FIXED_QUOTATION_RULES, type FixedProductRule } from '../data/quotationRules';
 import { getDraftQuotationRules, getSiteContent, saveQuotationRules, saveSiteContent, publishQuotationRules } from '../utils/rulesStore';
 import { getAuditLog, getRulesVersion, publishRules, addAuditEvent } from '../utils/auditStore';
@@ -7,11 +7,19 @@ import { runCascoRegression } from '../utils/cascoRegression';
 import { runSystemHealthCheck, type HealthCheck } from '../utils/systemHealth';
 import { getCurrentUser } from '../utils/authStore';
 import { KnowledgeBaseAdmin } from './KnowledgeBaseAdmin';
+import { SmartOperations } from './SmartOperations';
 
-type Tab='dashboard'|'users'|'approvals'|'logs'|'kb'|'rules'|'templates'|'security'|'analytics'|'settings'|'database';
+type Tab='dashboard'|'users'|'approvals'|'logs'|'kb'|'rules'|'templates'|'security'|'analytics'|'settings'|'database'|'ai-overview'|'ai-rules'|'ai-bot'|'ai-templates';
 const roles=['agent','underwriter','manager','auditor','admin'];
 const productKeys=Object.keys(FIXED_QUOTATION_RULES) as (keyof typeof FIXED_QUOTATION_RULES)[];
 export function AdminSettings(){
+ const localQuotes = useMemo(() => {
+   try {
+     return JSON.parse(localStorage.getItem('sil-quote-history') || '[]');
+   } catch {
+     return [];
+   }
+ }, []);
  const me=getCurrentUser(); const [tab,setTab]=useState<Tab>('dashboard'); const [users,setUsers]=useState<any[]>([]); const [logs,setLogs]=useState<any[]>(getAuditLog()); const [serverLogs,setServerLogs]=useState<any[]>([]); const [rules,setRules]=useState<any>(getDraftQuotationRules()); const [product,setProduct]=useState<any>(productKeys[0]); const [content,setContent]=useState<any>(getSiteContent()); const [health,setHealth]=useState<HealthCheck[]|null>(null); const [reg,setReg]=useState<any[]|null>(null); const [q,setQ]=useState(''); const [saved,setSaved]=useState(false); const [version,setVersion]=useState(getRulesVersion());
  const token=localStorage.getItem('sil-auth-token'); const headers:any=token?{Authorization:`Bearer ${token}`}:{};
  const load=async()=>{try{if(['admin','manager'].includes(me?.role||'')){const r=await fetch('/api/admin/users',{headers});if(r.ok)setUsers((await r.json()).users||[])} if(['admin','manager','auditor'].includes(me?.role||'')){const r=await fetch('/api/admin/audit',{headers});if(r.ok)setServerLogs((await r.json()).events||[])}}catch{}};
@@ -23,19 +31,26 @@ export function AdminSettings(){
  const filteredLogs=useMemo(()=>[...serverLogs,...logs].filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q.toLowerCase())).slice(0,500),[serverLogs,logs,q]);
  const cards=[
   ['dashboard','Գլխավոր',Activity],
+  ['ai-overview','ԱԲ Գլխավոր',Sparkles],
+  ['ai-rules','AI Կանոնների Շարժիչ',Zap],
+  ['ai-bot','Չատբոտի Սանդբոքս',Bot],
+  ['ai-templates','Ձևանմուշի քարտեզագրում',FileText],
   ['users','Օգտատերեր',Users],
   ['approvals','Հաստատումներ',CheckCircle2],
   ['database','Տվյալների բազա',FileText],
   ['logs','Աուդիտի մատյան',FileText],
   ['kb','ԱԲ Գիտելիքների բազա',BookOpen],
   ['rules','Հաշվիչ / Կանոններ',Settings2],
-  ['templates','Գնառաջարկի ձևանմուշներ',FileText],
   ['security','Անվտանգության կենտրոն',Shield],
   ['analytics','Վերլուծություն',BarChart3],
   ['settings','Համակարգի կարգավորումներ',Settings2]
  ] as const;
- return <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-8 space-y-6"><div className="rounded-[28px] bg-gradient-to-br from-[#061A40] to-[#075bd5] text-white p-7 shadow-xl"><div className="flex flex-wrap justify-between gap-5"><div><div className="text-cyan-200 text-xs font-black tracking-[.18em]">SIL CONTROL CENTER</div><h1 className="text-3xl font-black mt-2">Կառավարման կենտրոն</h1><p className="text-blue-100 text-sm mt-2">Օգտատերեր, approvals, audit, AI knowledge base, հաշվիչի կանոններ, templates և security՝ մեկ վայրում։</p></div><div className="rounded-2xl bg-white/10 px-4 py-3 text-sm"><b>{me?.name}</b><div className="text-blue-100 text-xs mt-1">{me?.role}</div></div></div></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-11 gap-2">{cards.map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id as Tab)} className={`rounded-2xl border px-3 py-3 text-left transition hover:-translate-y-0.5 ${tab===id?'bg-[#075bd5] text-white border-[#075bd5] shadow-lg':'bg-white border-slate-200 hover:border-blue-300'}`}><Icon size={17}/><div className="text-xs font-black mt-2">{label}</div></button>)}</div>
+ return <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-8 space-y-6"><div className="rounded-[28px] bg-gradient-to-br from-[#061A40] to-[#075bd5] text-white p-7 shadow-xl"><div className="flex flex-wrap justify-between gap-5"><div><div className="text-cyan-200 text-xs font-black tracking-[.18em]">SIL CONTROL CENTER</div><h1 className="text-3xl font-black mt-2">Կառավարման կենտրոն</h1><p className="text-blue-100 text-sm mt-2">Օգտատերեր, approvals, audit, AI knowledge base, հաշվիչի կանոններ, templates և security՝ մեկ վայրում։</p></div><div className="rounded-2xl bg-white/10 px-4 py-3 text-sm"><b>{me?.name}</b><div className="text-blue-100 text-xs mt-1">{me?.role}</div></div></div></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 xl:grid-cols-14 gap-2">{cards.map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id as Tab)} className={`rounded-2xl border px-3 py-3 text-left transition hover:-translate-y-0.5 ${tab===id?'bg-[#075bd5] text-white border-[#075bd5] shadow-lg':'bg-white border-slate-200 hover:border-blue-300'}`}><Icon size={17}/><div className="text-xs font-black mt-2">{label}</div></button>)}</div>
  {tab==='dashboard'&&<Dashboard users={users} logs={filteredLogs} onTab={setTab} />}
+ {tab==='ai-overview'&&<SmartOperations quotes={localQuotes} forcedTab="overview" />}
+ {tab==='ai-rules'&&<SmartOperations quotes={localQuotes} forcedTab="rules-engine" />}
+ {tab==='ai-bot'&&<SmartOperations quotes={localQuotes} forcedTab="bot-playground" />}
+ {tab==='ai-templates'&&<SmartOperations quotes={localQuotes} forcedTab="template-mapper" />}
  {tab==='users'&&<UsersPanel users={users} onUpdate={updateUser}/>} 
  {tab==='approvals'&&<Approvals users={users} onApprove={approve}/>} 
  {tab==='database'&&<DatabaseConsole users={users} logs={logs} serverLogs={serverLogs} onUpdateUser={updateUser}/>}

@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "firebase/firestore";
+import mammoth from "mammoth";
 
 dotenv.config();
 
@@ -295,7 +296,33 @@ const SYSTEM_INSTRUCTION = `
 6. Յուրաքանչյուր coverage/exclusion պատասխանի վերջում նշիր աղբյուր փաստաթղթի անունը։ Եթե կարող ես, նշիր նաև բաժնի/կետի համարը՝ ինչպես այն երևում է աղբյուրում։
 7. Երբ հարցը վերաբերում է այլ պրոդուկտի, մի խառնիր մեկ պրոդուկտի պայմանները մյուսի հետ։
 8. ԿԱՍԿՈ-ի հաշվարկի դեպքում օգտագործիր միայն համակարգի կողմից փոխանցված հաշվարկային տվյալները և Excel-ի հիմքով կառուցված կանոնները. AI-ը չի որոշում սակագինը։
-9. AI-ը չի ստեղծում պաշտոնական գնառաջարկ կամ ապահովագրական որոշում։
+9. Եթե օգտատերը խնդրում է ստեղծել կամ կազմել գնառաջարկ, ԱԲ-ն կարող է կազմել գնառաջարկի նախագիծ (Draft)։ Այդ դեպքում տեքստային պատասխանի վերջում (առանձին տողից) ՊԱՐՏԱԴԻՐ ավելացրու հետևյալ ճշգրիտ JSON բլոկը, որպեսզի համակարգը կարողանա այն վերլուծել և թույլ տալ ձեռքով խմբագրել.
+\`\`\`json
+{
+  "type": "proposal_draft",
+  "proposal": {
+    "id": "ai-draft-[id]",
+    "quotationNumber": "AI-QD-[number]",
+    "type": "casco" (կամ "property", "mortgage", "liability", "accident" և այլն),
+    "productNameArm": "[Անուն]",
+    "categoryNameArm": "[Կատեգորիա]",
+    "clientName": "[Հաճախորդի անուն]",
+    "contactInfo": "[Հեռախոս կամ էլ․ փոստ]",
+    "objectDescription": "[Ապահովագրվող օբյեկտի նկարագրություն]",
+    "totalSumInsured": [թիվ],
+    "currency": "AMD" (կամ "USD", "EUR"),
+    "baseTariff": [սակագին թիվ, օրինակ՝ 2.5],
+    "discountBonus": 0,
+    "finalTariff": [սակագին թիվ, օրինակ՝ 2.5],
+    "annualPremium": [ապահովագրավճար թիվ, օրինակ՝ 250000],
+    "franchiseDescription": "[ֆրանշիզայի պայմաններ]",
+    "paymentTerms": "Միանվագ",
+    "beneficiaryDetails": "[Շահառուի տվյալներ]",
+    "coveredPerilsList": ["[ռիսկ 1]", "[ռիսկ 2]"],
+    "specialConditions": ["[պայման 1]", "[պայման 2]"]
+  }
+}
+\`\`\`
 10. Պատասխանիր պարզ, մասնագիտական հայերենով։
 `;
 
@@ -1481,58 +1508,339 @@ Return ONLY a JSON object:
   res.json({ status: "ok", results });
 });
 
-// 5. Template Mappings Configuration Endpoints
-const DEFAULT_MAPPINGS = [
-  { placeholder: "ClientName", systemField: "clientName", label: "Հաճախորդի Անուն/Ազգանուն" },
-  { placeholder: "TotalSumInsured", systemField: "totalSumInsured", label: "Ապահովագրական Գումար" },
-  { placeholder: "AnnualPremium", systemField: "annualPremium", label: "Տարեկան Ապահովագրավճար" },
-  { placeholder: "QuotationNumber", systemField: "quotationNumber", label: "Գնառաջարկի Համար" },
-  { placeholder: "VehicleModel", systemField: "productSpecificDetails.vehicleModel", label: "Մեքենայի Մոդել" },
-  { placeholder: "ManufactureYear", systemField: "productSpecificDetails.manufactureYear", label: "Արտադրության Տարեթիվ" },
-  { placeholder: "StartDate", systemField: "startDate", label: "Սկզբնաժամկետ" },
-  { placeholder: "EndDate", systemField: "endDate", label: "Վերջնաժամկետ" }
-];
+// 5. Template Mappings Configuration Endpoints (Multi-Product Supported)
+import { 
+  DEFAULT_PRODUCT_MAPPINGS, 
+  SUPPORTED_TEMPLATE_PRODUCTS, 
+  PRODUCT_SPECIFIC_FIELDS, 
+  CORE_SYSTEM_FIELDS, 
+  getProductReferenceText 
+} from "./src/data/productTemplateDefaults";
+
+app.get("/api/admin/template-list", auth, async (req: any, res: any) => {
+  const templatesDir = path.join(process.cwd(), "templates");
+  const result = [];
+
+  for (const prod of SUPPORTED_TEMPLATE_PRODUCTS) {
+    const customFilePath = path.join(templatesDir, `SIL_Quotation_Template_${prod.id}.docx`);
+    const defaultFilePath = path.join(templatesDir, "SIL_Quotation_Template_Source.docx");
+    const hasCustomDocx = fs.existsSync(customFilePath) || (prod.id === "default" && fs.existsSync(defaultFilePath));
+    
+    let mappingsCount = (DEFAULT_PRODUCT_MAPPINGS[prod.id] || DEFAULT_PRODUCT_MAPPINGS.default).length;
+    let updatedAt: string | null = null;
+    let updatedBy: string | null = null;
+    let customFileName: string | null = null;
+
+    if (db) {
+      try {
+        const docRef = doc(db, "docx_template_mappings", prod.id);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.mappings)) {
+            mappingsCount = data.mappings.length;
+          }
+          updatedAt = data.updatedAt || null;
+          updatedBy = data.updatedBy || null;
+        }
+
+        const metaRef = doc(db, "docx_templates_meta", prod.id);
+        const metaSnap = await getDoc(metaRef);
+        if (metaSnap.exists()) {
+          customFileName = metaSnap.data().fileName || null;
+          if (!updatedAt) updatedAt = metaSnap.data().uploadedAt || null;
+          if (!updatedBy) updatedBy = metaSnap.data().uploadedBy || null;
+        }
+      } catch (e) {
+        // continue
+      }
+    }
+
+    result.push({
+      id: prod.id,
+      nameArm: prod.nameArm,
+      nameEn: prod.nameEn,
+      icon: prod.icon,
+      category: prod.category,
+      description: prod.description,
+      sourceDocxName: customFileName || prod.sourceDocxName,
+      hasCustomDocx,
+      mappingsCount,
+      updatedAt,
+      updatedBy
+    });
+  }
+
+  res.json({ status: "ok", products: result });
+});
 
 app.get("/api/admin/template-mappings", auth, async (req: any, res: any) => {
+  const productId = (req.query.product as string) || "casco";
+  const defaultList = DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default;
+
   if (!db) {
-    return res.json({ status: "ok", mappings: DEFAULT_MAPPINGS });
+    return res.json({ status: "ok", productId, mappings: defaultList, isDefault: true });
   }
   try {
-    const docRef = doc(db, "docx_template_mappings", "default_map");
+    const docRef = doc(db, "docx_template_mappings", productId);
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists() && docSnap.data().mappings) {
-      res.json({ status: "ok", mappings: docSnap.data().mappings });
+    if (docSnap.exists() && docSnap.data().mappings && Array.isArray(docSnap.data().mappings)) {
+      res.json({ 
+        status: "ok", 
+        productId, 
+        mappings: docSnap.data().mappings,
+        updatedAt: docSnap.data().updatedAt,
+        updatedBy: docSnap.data().updatedBy,
+        isDefault: false
+      });
     } else {
-      res.json({ status: "ok", mappings: DEFAULT_MAPPINGS });
+      res.json({ status: "ok", productId, mappings: defaultList, isDefault: true });
     }
   } catch (err: any) {
-    console.error("Firestore get template-mappings failed:", err);
-    res.json({ status: "ok", mappings: DEFAULT_MAPPINGS });
+    console.error(`Firestore get template-mappings for ${productId} failed:`, err);
+    res.json({ status: "ok", productId, mappings: defaultList, isDefault: true });
   }
 });
 
 app.post("/api/admin/template-mappings", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
-  const { mappings } = req.body || {};
+  const { mappings, productId = "casco" } = req.body || {};
   if (!mappings || !Array.isArray(mappings)) {
     return res.status(400).json({ error: "mappings array is required" });
   }
 
-  addServerAudit("template_mappings.update", req.user.id);
+  addServerAudit("template_mappings.update", req.user.id, { productId, count: mappings.length });
 
   if (!db) {
     return res.status(503).json({ error: "Firestore connection unavailable, cannot save mappings." });
   }
 
   try {
-    await setDoc(doc(db, "docx_template_mappings", "default_map"), {
+    await setDoc(doc(db, "docx_template_mappings", productId), {
+      productId,
       mappings,
       updatedAt: new Date().toISOString(),
-      updatedBy: req.user.name
+      updatedBy: req.user.name || "Անդեռռայթեր"
     });
-    res.json({ status: "ok", message: "Ձևանմուշի քարտեզագրումները հաջողությամբ պահպանվել են" });
+    res.json({ 
+      status: "ok", 
+      message: `«${productId}» պրոդուկտի ձևանմուշի քարտեզագրումները հաջողությամբ պահպանվել են Firestore-ում:` 
+    });
   } catch (err: any) {
-    console.error("Firestore save template-mappings failed:", err);
+    console.error(`Firestore save template-mappings for ${productId} failed:`, err);
     res.status(500).json({ error: "Failed to save template mappings", details: err?.message });
+  }
+});
+
+app.post("/api/admin/template-reset", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const { productId = "casco" } = req.body || {};
+  const defaultList = DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default;
+
+  addServerAudit("template_mappings.reset", req.user.id, { productId });
+
+  if (db) {
+    try {
+      await deleteDoc(doc(db, "docx_template_mappings", productId));
+    } catch (err) {
+      console.warn("Could not delete from Firestore:", err);
+    }
+  }
+
+  res.json({
+    status: "ok",
+    message: `«${productId}» պրոդուկտի քարտեզագրումը հաջողությամբ վերականգնվեց համակարգային լռելյայն վիճակին:`,
+    mappings: defaultList
+  });
+});
+
+app.post("/api/admin/upload-docx-template", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const { fileBase64, fileName, productId = "casco" } = req.body || {};
+  if (!fileBase64) {
+    return res.status(400).json({ error: "Missing required field: fileBase64" });
+  }
+
+  try {
+    const buffer = Buffer.from(fileBase64, "base64");
+    
+    // Create templates directory if it doesn't exist
+    const templatesDir = path.join(process.cwd(), "templates");
+    if (!fs.existsSync(templatesDir)) {
+      fs.mkdirSync(templatesDir, { recursive: true });
+    }
+
+    const templatePath = path.join(templatesDir, `SIL_Quotation_Template_${productId}.docx`);
+    fs.writeFileSync(templatePath, buffer);
+
+    if (productId === "default") {
+      const defaultPath = path.join(templatesDir, "SIL_Quotation_Template_Source.docx");
+      fs.writeFileSync(defaultPath, buffer);
+    }
+
+    if (db) {
+      try {
+        await setDoc(doc(db, "docx_templates_meta", productId), {
+          productId,
+          fileName: fileName || `SIL_Quotation_Template_${productId}.docx`,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: req.user.name || "Անդեռռայթեր",
+          fileSizeBytes: buffer.length
+        });
+      } catch (err) {
+        console.warn("Failed to write template metadata to Firestore:", err);
+      }
+    }
+
+    addServerAudit("docx_template.upload", req.user.id, { fileName, productId });
+
+    res.json({
+      status: "ok",
+      message: `Word ձևանմուշը (${fileName || `SIL_Quotation_Template_${productId}.docx`}) հաջողությամբ վերբեռնվեց և ակտիվացվեց «${productId}» պրոդուկտի համար:`
+    });
+  } catch (err: any) {
+    console.error("Failed to upload docx template:", err);
+    res.status(500).json({ error: "Չհաջողվեց պահպանել Word ձևանմուշը սերվերի վրա", details: err?.message });
+  }
+});
+
+app.get("/api/admin/template-text", auth, async (req: any, res: any) => {
+  const productId = (req.query.product as string) || "casco";
+
+  try {
+    const templatesDir = path.join(process.cwd(), "templates");
+    const specificPath = path.join(templatesDir, `SIL_Quotation_Template_${productId}.docx`);
+    const fallbackPath = path.join(templatesDir, "SIL_Quotation_Template_Source.docx");
+    const kbFallbackPath = path.join(process.cwd(), "knowledge-base", "templates", "quotation-template-source.docx");
+    
+    let targetPath = "";
+    let isCustom = false;
+
+    if (fs.existsSync(specificPath)) {
+      targetPath = specificPath;
+      isCustom = true;
+    } else if (fs.existsSync(fallbackPath)) {
+      targetPath = fallbackPath;
+    } else if (fs.existsSync(kbFallbackPath)) {
+      targetPath = kbFallbackPath;
+    }
+
+    if (targetPath) {
+      const buffer = fs.readFileSync(targetPath);
+      const result = await mammoth.extractRawText({ buffer });
+      if (result.value && result.value.trim().length > 10) {
+        return res.json({ 
+          status: "ok", 
+          productId,
+          text: result.value, 
+          isCustomTemplate: isCustom,
+          fileName: path.basename(targetPath)
+        });
+      }
+    }
+
+    // Fallback to structured product reference text
+    const referenceText = getProductReferenceText(productId);
+    res.json({ 
+      status: "ok", 
+      productId,
+      text: referenceText, 
+      isCustomTemplate: false,
+      fileName: `SIL_Quotation_Template_${productId}.docx (Reference)`
+    });
+
+  } catch (err: any) {
+    console.error(`Failed to read template text for ${productId}:`, err);
+    const referenceText = getProductReferenceText(productId);
+    res.json({ 
+      status: "ok", 
+      productId,
+      text: referenceText, 
+      isCustomTemplate: false,
+      fileName: "Reference Default"
+    });
+  }
+});
+
+app.post("/api/ai/analyze-template", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const { fileBase64, fileText, fileName, productId = "casco" } = req.body || {};
+  let text = fileText || "";
+
+  try {
+    if (fileBase64 && (!text || text.trim() === "")) {
+      const buffer = Buffer.from(fileBase64, "base64");
+      if (fileName && (fileName.endsWith(".docx") || fileName.endsWith(".doc"))) {
+        const result = await mammoth.extractRawText({ buffer });
+        text = result.value;
+      } else {
+        text = buffer.toString("utf8");
+      }
+    }
+
+    if (!text || text.trim() === "") {
+      return res.status(400).json({ error: "Չհաջողվեց կարդալ ֆայլի տեքստը:" });
+    }
+
+    const prodMeta = SUPPORTED_TEMPLATE_PRODUCTS.find(p => p.id === productId) || SUPPORTED_TEMPLATE_PRODUCTS[0];
+    const specificFields = PRODUCT_SPECIFIC_FIELDS[productId] || [];
+    const fieldsListPrompt = [
+      ...CORE_SYSTEM_FIELDS.map(f => `- ${f.value} (${f.label})`),
+      ...specificFields.map(f => `- ${f.value} (${f.label})`)
+    ].join("\n");
+
+    const excerpt = text.slice(0, 30000);
+
+    const systemInstruction = `You are an expert insurance business analyst and document engineer for SIL Insurance Company.
+Your job is to analyze the text of an insurance quotation template or form for the product: "${prodMeta.nameArm}" (${prodMeta.nameEn}).
+Extract all variables, placeholders, or dynamic data fields (often enclosed in curly braces like {{ClientName}}, {{TotalSumInsured}}, {{VehicleModel}}, or blanks/underlines indicating dynamic inputs).
+Map these extracted variables to the system's available dynamic quotation fields for this product.
+Output ONLY a valid JSON array of objects, where each object represents a placeholder mapping.
+Do not wrap in markdown codeblocks if possible. Just output the clean JSON array.`;
+
+    const prompt = `Ահա «${prodMeta.nameArm}» (${prodMeta.id}) ապահովագրության գնառաջարկի ձևանմուշի տեքստը:
+Խնդրում ենք գտնել բոլոր փոփոխականները, դատարկ տեղերը կամ ձևանմուշի placeholders-ը (օրինակ՝ {{ClientName}}, {{TotalSumInsured}}, {{VehicleModel}} կամ նմանատիպ դաշտերը), որոնք պետք է լրացվեն համակարգից։
+Կատարիր ավտոմատ քարտեզագրում հետևյալ համակարգային դաշտերի հետ, եթե դրանք իմաստային համընկնում են:
+
+Համակարգում «${prodMeta.nameArm}» պրոդուկտի համար հասանելի դաշտերն են.
+${fieldsListPrompt}
+
+Վերադարձրու JSON զանգված հետևյալ ձևաչափով (ՄԻԱՅՆ JSON)՝
+[
+  {
+    "placeholder": "ExtractedPlaceholderName",
+    "systemField": "matchingSystemFieldPath",
+    "label": "Համառոտ նկարագրություն հայերենով թե ինչ է սա"
+  }
+]
+
+Տեքստը վերլուծության համար՝
+----------------------------------
+${excerpt}
+----------------------------------`;
+
+    const result = await callGemini(
+      [{ role: "user", parts: [{ text: prompt }] }],
+      systemInstruction,
+      { responseMimeType: "application/json" }
+    );
+
+    let resultText = result.text.trim();
+    if (resultText.startsWith("```json")) {
+      resultText = resultText.replace(/^```json\s*/, "").replace(/```$/, "").trim();
+    } else if (resultText.startsWith("```")) {
+      resultText = resultText.replace(/^```\s*/, "").replace(/```$/, "").trim();
+    }
+
+    const proposedMappings = JSON.parse(resultText);
+
+    res.json({
+      status: "ok",
+      productId,
+      proposedMappings,
+      extractedTextLength: text.length,
+      templateText: text
+    });
+
+  } catch (err: any) {
+    console.error("AI template analysis failed:", err);
+    res.status(500).json({ error: "ԱԲ-ով ձևանմուշի վերլուծությունը ձախողվեց:", details: err?.message });
   }
 });
 

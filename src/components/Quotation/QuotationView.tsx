@@ -85,6 +85,7 @@ function FilledQuotationView({
   });
   const [translating, setTranslating] = useState(false);
   const [translationError, setTranslationError] = useState("");
+  const [isManualEditing, setIsManualEditing] = useState(false);
 
   const currentProposal = translatedProposals[selectedLang] || proposal;
 
@@ -324,7 +325,20 @@ function FilledQuotationView({
             className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-medium px-3 py-2 rounded-xl border border-white/20 transition cursor-pointer"
           >
             <Edit3 className="w-4 h-4" />
-            {locked ? "Փակված է" : "Խմբագրել"}
+            {locked ? "Փակված է" : "Հարցաշարի Խմբագրում"}
+          </button>
+
+          <button
+            onClick={() => setIsManualEditing(!isManualEditing)}
+            disabled={locked}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+              isManualEditing
+                ? "bg-emerald-600 text-white border-emerald-600 shadow"
+                : "bg-white/10 hover:bg-white/20 text-slate-200 border-white/20"
+            }`}
+          >
+            <Edit3 className="w-4 h-4" />
+            {isManualEditing ? "Փակել Ձեռքով Խմբագրիչը" : "Ձեռքով Խմբագրել Դաշտերը"}
           </button>
 
           {!locked && (
@@ -540,19 +554,170 @@ function FilledQuotationView({
         </div>
       )}
 
-      {/* THE OFFICIAL DOCUMENT PAPER CANVAS */}
-      <div
-        id="quotation-document"
-        className="bg-white border border-slate-300 shadow-xl rounded-2xl overflow-hidden text-slate-900 print:border-none print:shadow-none print:rounded-none relative"
-      >
-        {translating && (
-          <div className="absolute inset-0 bg-white/75 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-10">
-            <RefreshCw size={36} className="text-[#075bd5] animate-spin" />
-            <b className="text-sm text-slate-800">ԱԲ-ն թարգմանում է գնառաջարկի ամբողջական տեքստը...</b>
-            <span className="text-xs text-slate-500">Սա կարող է տևել մի քանի վայրկյան</span>
+      <div className={`grid ${isManualEditing ? "lg:grid-cols-12" : "grid-cols-1"} gap-6`}>
+        {isManualEditing && (
+          <div className="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 shadow-lg space-y-4 max-h-[85vh] overflow-y-auto sticky top-4">
+            <div className="flex items-center justify-between border-b pb-3 mb-2">
+              <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-4.5 h-4.5 text-[#075bd5]" />
+                Ձեռքով խմբագրել դաշտերը
+              </h3>
+              <button
+                onClick={() => setIsManualEditing(false)}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-bold transition"
+              >
+                Պատրաստ է
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs sm:text-sm">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Ապահովադիր (Հաճախորդ)</label>
+                <input
+                  type="text"
+                  value={proposal.clientName}
+                  onChange={e => onUpdateProposal({ ...proposal, clientName: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Կոնտակտային տվյալներ</label>
+                <input
+                  type="text"
+                  value={proposal.contactInfo || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, contactInfo: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Ապահովագրական գումար</label>
+                  <input
+                    type="number"
+                    value={proposal.totalSumInsured}
+                    onChange={e => onUpdateProposal({ ...proposal, totalSumInsured: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Տարեկան պրեմիա</label>
+                  <input
+                    type="number"
+                    value={proposal.annualPremium}
+                    onChange={e => onUpdateProposal({ ...proposal, annualPremium: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Արժույթ</label>
+                  <select
+                    value={proposal.currency}
+                    onChange={e => onUpdateProposal({ ...proposal, currency: e.target.value as any })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none"
+                  >
+                    <option value="AMD">AMD</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">Սակագին (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={proposal.finalTariff || 0}
+                    onChange={e => onUpdateProposal({ ...proposal, finalTariff: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Օբյեկտի նկարագրություն</label>
+                <textarea
+                  rows={3}
+                  value={proposal.objectDescription || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, objectDescription: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Ֆրանշիզայի պայմաններ</label>
+                <input
+                  type="text"
+                  value={proposal.franchiseDescription || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, franchiseDescription: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Վճարման պայմաններ</label>
+                <input
+                  type="text"
+                  value={proposal.paymentTerms || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, paymentTerms: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Շահառուի տվյալներ</label>
+                <input
+                  type="text"
+                  value={proposal.beneficiaryDetails || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, beneficiaryDetails: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Հատուկ պայմաններ (մեկական ամեն տողում)</label>
+                <textarea
+                  rows={4}
+                  value={proposal.specialConditions?.join('\n') || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, specialConditions: e.target.value.split('\n') })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                  placeholder="Տող առ տող..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">Ծածկվող ռիսկեր (մեկական ամեն տողում)</label>
+                <textarea
+                  rows={4}
+                  value={proposal.coveredPerilsList?.join('\n') || ''}
+                  onChange={e => onUpdateProposal({ ...proposal, coveredPerilsList: e.target.value.split('\n') })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#075bd5]/20 focus:outline-none focus:border-[#075bd5]"
+                  placeholder="Տող առ տող..."
+                />
+              </div>
+            </div>
           </div>
         )}
-        <div dangerouslySetInnerHTML={{ __html: generateQuotationTemplateHtml(currentProposal, selectedLang) }} />
+
+        <div className={isManualEditing ? "lg:col-span-7" : "w-full"}>
+          {/* THE OFFICIAL DOCUMENT PAPER CANVAS */}
+          <div
+            id="quotation-document"
+            className="bg-white border border-slate-300 shadow-xl rounded-2xl overflow-hidden text-slate-900 print:border-none print:shadow-none print:rounded-none relative animate-fade-in"
+          >
+            {translating && (
+              <div className="absolute inset-0 bg-white/75 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-10">
+                <RefreshCw size={36} className="text-[#075bd5] animate-spin" />
+                <b className="text-sm text-slate-800">ԱԲ-ն թարգմանում է գնառաջարկի ամբողջական տեքստը...</b>
+                <span className="text-xs text-slate-500">Սա կարող է տևել մի քանի վայրկյան</span>
+              </div>
+            )}
+            <div dangerouslySetInnerHTML={{ __html: generateQuotationTemplateHtml(currentProposal, selectedLang) }} />
+          </div>
+        </div>
       </div>
 
       <TierComparisonModal
