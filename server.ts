@@ -162,10 +162,78 @@ const PRODUCT_KEYWORDS: Record<string, string[]> = {
   mortgage: ["հիփոթեք", "հիպոթեք", "բնակարան", "վարկառու", "բանկ"],
 };
 
+function ensureKnowledgeBaseTextFiles() {
+  const textDir = path.join(KB, "text");
+  if (!fs.existsSync(textDir)) {
+    try {
+      fs.mkdirSync(textDir, { recursive: true });
+    } catch (e) {}
+  }
+
+  // Pre-populate missing files with clean Armenian text in UTF-8
+  const fallbacks: Record<string, string> = {
+    "text/guyqi_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԳՈՒՅՔԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրվող օբյեկտներ՝ շենքեր, շինություններ, բնակարաններ, հիմնական միջոցներ, ապրանքանյութական արժեքներ, սարքավորումներ։\n2. Հիմնական ռիսկեր (ներառված)՝ Հրդեհ, կայծակ, պայթյուն, երկրաշարժ, սողանք, ջրհեղեղ, գողություն, վանդալիզմ։`,
+    "text/beri_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԲԵՌՆԵՐԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ (ICC A, B, C)\n1. Ծածկույթի տեսակներ՝ ICC (A) - Բոլոր ռիսկերով ապահովագրություն (All Risks), ICC (B) - Հիմնական ռիսկեր, ICC (C) - Սահմանափակ ռիսկեր։\n2. Ապահովագրական գումար՝ բեռի արժեք՝ գումարած փոխադրման ծախսերը։`,
+    "text/yndhanur_pataskhanatvutyan_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԸՆԴՀԱՆՈՒՐ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրական պատասխանատվություն՝ երրորդ անձանց կյանքին, առողջությանը կամ գույքին պատճառված վնասների հատուցում։\n2. Բացառություններ՝ պայմանագրային պատասխանատվություն, մասնագիտական սխալներ, տույժեր։`,
+    "text/inkasacyon_risk.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԻՆԿԱՍԱՑԻՈՆ ՌԻՍԿԵՐԻ ԵՎ ԴՐԱՄԱԿԱՆ ՄԻՋՈՑՆԵՐԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրական օբյեկտ՝ կանխիկ դրամական միջոցներ տեղափոխման ընթացքում կամ պահպանման վայրում։\n2. Հիմնական ռիսկեր՝ զինված կողոպուտ, հափշտակություն, ավազակություն։`,
+    "text/kanxavchari_apahovagrutyun_paymanner-12_09_2018.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԿԱՆԽԱՎՃԱՐԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրական գումար՝ տրամադրված կանխավճարի չափով։\n2. Հատուցման հիմքեր՝ Կապալառուի կողմից աշխատանքների չկատարում, կանխավճարի չվերադարձում։`,
+    "text/kapalaru_paymanner_shinmontaj.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԿԱՊԱԼԱՌՈՒԻ ԲՈԼՈՐ ՌԻՍԿԵՐԻ (CAR / EAR) ԵՎ ՇԻՆՄՈՆՏԱԺԱՅԻՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Օբյեկտներ՝ շինարարական աշխատանքներ, մոնտաժվող սարքավորումներ, տեխնիկա։\n2. Ռիսկեր՝ հրդեհ, հեղեղ, փլուզում, սողանք, երկրաշարժ։`,
+    "text/masnagitakan_pataskhanatvutyan_apahovagrutyun_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՄԱՍՆԱԳԻՏԱԿԱՆ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Օբյեկտ՝ բժիշկների, նոտարների, աուդիտորների մասնագիտական գործունեության ընթացքում թույլ տրված սխալներ, բացթողումներ, անփութություն։`,
+    "text/meqenaneri_khapanman_ap-n_paymanner_hayeren.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՄԵՔԵՆԱՆԵՐԻ ԵՎ ՍԱՐՔԱՎՈՐՈՒՄՆԵՐԻ ԽԱՓԱՆՄԱՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Օբյեկտներ՝ արտադրական սարքավորումներ, հաստոցներ, մեխանիզմներ։\n2. Ռիսկեր՝ մեխանիկական և էլեկտրական խափանումներ, կարճ միացում։`,
+    "text/pahesti_pataskhanatvutyun.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՊԱՀԵՍՏՆԵՐԻ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Նպատակ՝ պահեստի սեփականատիրոջ պատասխանատվությունը պահպանության հանձնված ապրանքների կորստի կամ վնասման համար։`
+  };
+
+  for (const [relPath, content] of Object.entries(fallbacks)) {
+    const full = path.join(KB, relPath);
+    if (!fs.existsSync(full)) {
+      try {
+        fs.writeFileSync(full, content, "utf8");
+      } catch (e) {}
+    }
+  }
+}
+
 function loadKnowledgeBase() {
+  ensureKnowledgeBaseTextFiles();
   const indexPath = path.join(KB, "index.json");
-  if (!fs.existsSync(indexPath)) return [] as any[];
-  const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+  const defaultProducts = [
+    { productId: "property", sourceFile: "Գույք Պայմաններ.docx", textFile: "text/guyqi_paymanner.docx.txt" },
+    { productId: "cargo", sourceFile: "Բեռի Պայմաններ.docx", textFile: "text/beri_paymanner.docx.txt" },
+    { productId: "general-liability", sourceFile: "Ընդհանուր Պատասխանատվության պայմաներ.docx", textFile: "text/yndhanur_pataskhanatvutyan_paymanner.docx.txt" },
+    { productId: "cash-in-transit", sourceFile: "Ինկասացիոն Ռիսկ.docx", textFile: "text/inkasacyon_risk.docx.txt" },
+    { productId: "advance-payment", sourceFile: "Կանխավճարի ապահովագրության պայմաններ.docx", textFile: "text/kanxavchari_apahovagrutyun_paymanner-12_09_2018.docx.txt" },
+    { productId: "construction-all-risks", sourceFile: "Կապալառու Պայմաններ(Շինմոնտաժ).docx", textFile: "text/kapalaru_paymanner_shinmontaj.docx.txt" },
+    { productId: "professional-liability", sourceFile: "Մասնագիտական պատասխանատվության ապահովագրության պայմաններ.docx", textFile: "text/masnagitakan_pataskhanatvutyan_apahovagrutyun_paymanner.docx.txt" },
+    { productId: "machinery-breakdown", sourceFile: "Մեքենաների խափանման ապ-ն Պայմաններ հայերեն.docx", textFile: "text/meqenaneri_khapanman_ap-n_paymanner_hayeren.docx.txt" },
+    { productId: "warehouse-liability", sourceFile: "Պահեստների պատասխանատվություն-հարցաթերթիկ.doc", textFile: "text/pahesti_pataskhanatvutyun.docx.txt" },
+    { productId: "casco", sourceFile: "casco calculator 2024 - առանց ՃՈՈ.xlsx", textFile: null }
+  ];
+
+  let index: any = { products: [] };
+  if (fs.existsSync(indexPath)) {
+    try {
+      index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+    } catch (e) {
+      console.warn("Failed to parse knowledge-base/index.json", e);
+    }
+  }
+
+  // If index is empty or has no products, write index.json with defaultProducts
+  if (!index.products || index.products.length === 0) {
+    index.products = defaultProducts;
+    try {
+      fs.writeFileSync(indexPath, JSON.stringify(index, null, 2), "utf8");
+    } catch (e) {}
+  } else {
+    // Merge defaultProducts that are not present in index.products
+    defaultProducts.forEach(def => {
+      const exists = index.products.some((p: any) => p.productId === def.productId);
+      if (!exists) {
+        index.products.push(def);
+      }
+    });
+  }
+
   return index.products.map((entry: any) => {
     if (!entry.textFile) return { ...entry, text: "" };
     const full = path.join(KB, entry.textFile);
