@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import fs from "node:fs";
-import path from "node:path";
-
+const fs = require("fs");
+const path = require("path");
 const forbidden = [
   "GEMINI_API_KEY=",
   "SIL_ADMIN_PASSWORD=",
@@ -27,4 +26,3 @@ if (hits.length) {
   process.exit(1);
 }
 console.log("Secret exposure scan: PASS");
-

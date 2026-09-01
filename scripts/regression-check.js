@@ -3,11 +3,10 @@
  * Lightweight production QA runner.
  * It does not modify calculator rules. It reports discovered regression fixtures.
  */
-import fs from "node:fs";
-import path from "node:path";
+const fs = require("fs");
+const path = require("path");
 
 const roots = ["tests", "test", "__tests__", "fixtures"];
-
 const found = [];
 for (const root of roots) {
   const dir = path.join(process.cwd(), root);

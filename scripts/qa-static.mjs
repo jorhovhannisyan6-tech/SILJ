@@ -10,8 +10,7 @@ if (!pkg.scripts?.build || !pkg.dependencies?.react || !pkg.dependencies?.vite) 
 const server = fs.readFileSync(path.join(root,'server.ts'),'utf8');
 if (/gemini-2\.5-flash/i.test(server)) throw new Error('Legacy Gemini 2.5 model reference found');
 if (/return KNOWLEDGE_BASE;/i.test(server)) throw new Error('Unsafe all-products knowledge fallback found');
-if (!server.includes('gemini-3.6-flash')) throw new Error('Expected Gemini 3.6 Flash model not configured');
-
+if (!server.includes('const GEMINI_MODELS = ["gemini-3.6-flash"]')) throw new Error('Expected Gemini 3.6 Flash model not configured');
 if (/temperature\s*:|top_p\s*:|top_k\s*:/i.test(server)) throw new Error('Deprecated Gemini sampling parameters found');
 const app = fs.readFileSync(path.join(root,'src/App.tsx'),'utf8');
 if (!app.includes('assertQuotationReady')) throw new Error('Quotation validation guard missing');

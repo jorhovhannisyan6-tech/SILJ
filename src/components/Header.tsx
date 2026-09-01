@@ -41,21 +41,16 @@ export function Header({ onTabChange, onStartQuotation, user, onLogout }: Header
 
   const refreshRates = async () => {
     setLoadingRates(true);
-    await fetchCBARates(true);
+    await fetchCBARates();
     setLoadingRates(false);
   };
 
   const content = getSiteContent();
   const groupedProducts = useMemo(() => {
     const groups = new Map<string, typeof SIL_PRODUCTS_CATALOG>();
-    SIL_PRODUCTS_CATALOG.forEach((p) => { 
-      if (user?.role === "casco_sales" && p.id !== "casco") return;
-      const key = p.category; 
-      if (!groups.has(key)) groups.set(key, []); 
-      groups.get(key)!.push(p); 
-    });
+    SIL_PRODUCTS_CATALOG.forEach((p) => { const key = p.category; if (!groups.has(key)) groups.set(key, []); groups.get(key)!.push(p); });
     return Array.from(groups.entries()).map(([key, products]) => ({ key, products, ...(GROUP_META[key] || { title: "Ծառայություններ", icon: ShieldCheck }) }));
-  }, [user?.role]);
+  }, []);
   const go = (tab: string) => { onTabChange?.(tab); setMobileOpen(false); setServicesOpen(false); };
   const start = (id: string) => {
     setServicesOpen(false);
@@ -113,7 +108,7 @@ export function Header({ onTabChange, onStartQuotation, user, onLogout }: Header
             )}
           </div>
           <button className="sil-nav-link" onClick={() => go("quotation")}>Գնառաջարկներ</button>
-          <button className="sil-nav-link" onClick={() => go("chat")}>AI Agent</button>
+          <button className="sil-nav-link" onClick={() => go("chat")}>ԱԲ Խորհրդատու</button>
           <button className="sil-nav-link" onClick={() => go("legal")}>Հաճախ տրվող հարցեր</button>
         </nav>
         <div className="hidden lg:flex items-center gap-3">
@@ -132,7 +127,7 @@ export function Header({ onTabChange, onStartQuotation, user, onLogout }: Header
         </div>
         <button className="lg:hidden sil-mobile-button" onClick={() => setMobileOpen(v => !v)} aria-label="Մենյու">{mobileOpen ? <X/> : <Menu/>}</button>
       </div>
-      {mobileOpen && <div className="lg:hidden border-t border-slate-100 bg-white sil-mobile-menu"><div className="sil-container py-3 flex flex-col"><div className="py-2"><div className="sil-mobile-section-title">Ծառայություններ</div><div className="grid grid-cols-1 sm:grid-cols-2 gap-1">{SIL_PRODUCTS_CATALOG.filter(p => user?.role === "casco_sales" ? p.id === "casco" : true).map(p => <button key={p.id} onClick={() => start(p.id)} className="sil-mobile-product"><span>{p.nameArm}</span><ArrowRight size={14}/></button>)}{user?.role !== "casco_sales" && <button onClick={() => start("mortgage")} className="sil-mobile-product"><span>Հիփոթեք</span><ArrowRight size={14}/></button>}</div></div><button onClick={() => go("quickQuote")} className="sil-mobile-link">Արագ գնառաջարկ</button><button onClick={() => go("quotation")} className="sil-mobile-link">Գնառաջարկներ</button><button onClick={() => go("chat")} className="sil-mobile-link">AI Agent</button><button onClick={() => go("legal")} className="sil-mobile-link">Հաճախ տրվող հարցեր</button></div></div>}
+      {mobileOpen && <div className="lg:hidden border-t border-slate-100 bg-white sil-mobile-menu"><div className="sil-container py-3 flex flex-col"><div className="py-2"><div className="sil-mobile-section-title">Ծառայություններ</div><div className="grid grid-cols-1 sm:grid-cols-2 gap-1">{SIL_PRODUCTS_CATALOG.map(p => <button key={p.id} onClick={() => start(p.id)} className="sil-mobile-product"><span>{p.nameArm}</span><ArrowRight size={14}/></button>)}<button onClick={() => start("mortgage")} className="sil-mobile-product"><span>Հիփոթեք</span><ArrowRight size={14}/></button></div></div><button onClick={() => go("quickQuote")} className="sil-mobile-link">Արագ գնառաջարկ</button><button onClick={() => go("quotation")} className="sil-mobile-link">Գնառաջարկներ</button><button onClick={() => go("chat")} className="sil-mobile-link">AI Agent</button><button onClick={() => go("legal")} className="sil-mobile-link">Հաճախ տրվող հարցեր</button></div></div>}
     </header>
   );
 }

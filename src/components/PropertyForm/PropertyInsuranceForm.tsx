@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { ListAmPropertyValuationCalculator } from "../Property/ListAmPropertyValuationCalculator";
-import { PropertyCertificateScannerModal, ScannedCertificateData } from "../Property/PropertyCertificateScannerModal";
 import {
   PropertyInsuranceFormState,
   QuotationProposal,
@@ -11,16 +10,10 @@ import {
   calculatePropertyQuotation,
   buildPropertyProposal,
 } from "../../utils/insuranceCalculator";
-import { PropertyPackageSelector } from "./PropertyPackageSelector";
-import { ShortTermRentalSection } from "./ShortTermRentalSection";
-import { PropertyPackageId } from "../../data/tunServicePackages";
 import {
   DEFAULT_PROPERTY_STATE,
   PRESET_OFFICE_IT,
   PRESET_WAREHOUSE_LOGISTICS,
-  PRESET_TUN_START,
-  PRESET_TUN_STANDARD_PLUS,
-  PRESET_TUN_PREMIUM,
   BANK_LIST,
 } from "../../data/presets";
 import {
@@ -35,7 +28,6 @@ import {
   ShieldCheck,
   History,
   ShieldAlert,
-  Shield,
   FileCheck2,
   Landmark,
   Sparkles,
@@ -59,54 +51,10 @@ export function PropertyInsuranceForm({
 }: PropertyInsuranceFormProps) {
   const [activeSection, setActiveSection] = useState<number | "all">("all");
   const [showPropertyValuationModal, setShowPropertyValuationModal] = useState(false);
-  const [showCertificateScannerModal, setShowCertificateScannerModal] = useState(false);
   const [aiParseModalOpen, setAiParseModalOpen] = useState(false);
   const [aiInputText, setAiInputText] = useState("");
   const [aiParsingLoading, setAiParsingLoading] = useState(false);
   const [aiParseError, setAiParseError] = useState("");
-
-  const handleApplyCertificate = (scanned: ScannedCertificateData) => {
-    onChange((prev) => {
-      const isAMD = prev.values.currency === "AMD";
-      const estBuildingValue = scanned.estimatedValue
-        ? (isAMD ? scanned.estimatedValue : Math.round(scanned.estimatedValue / 390))
-        : prev.values.buildingValue;
-
-      return {
-        ...prev,
-        company: {
-          ...prev.company,
-          name: scanned.ownerName || prev.company.name,
-          taxId: scanned.ownerTaxIdOrSsn || prev.company.taxId,
-          legalAddress: scanned.address || prev.company.legalAddress,
-        },
-        objectData: {
-          ...prev.objectData,
-          address: scanned.address || prev.objectData.address,
-          totalArea: scanned.totalArea ? String(scanned.totalArea) : prev.objectData.totalArea,
-          buildingMaterial: scanned.buildingMaterial || prev.objectData.buildingMaterial,
-          floors: scanned.floor || prev.objectData.floors,
-          purpose: scanned.purpose || prev.objectData.purpose,
-        },
-        insuredProperty: {
-          ...prev.insuredProperty,
-          building: true,
-          interior: true,
-        },
-        values: {
-          ...prev.values,
-          buildingValue: estBuildingValue || prev.values.buildingValue,
-        },
-        documents: {
-          ...prev.documents,
-          ownershipCertificate: true,
-          notes: prev.documents.notes
-            ? `${prev.documents.notes}; Կադաստրի վկայական՝ ${scanned.certificateNumber || scanned.cadastralCode || "Կից է"}`
-            : `Կադաստրի վկայական՝ ${scanned.certificateNumber || scanned.cadastralCode || "Կից է"}${scanned.registrationDate ? ` (տրվ․ ${scanned.registrationDate})` : ""}`,
-        },
-      };
-    });
-  };
 
   const calc = calculatePropertyQuotation(state);
 
@@ -125,93 +73,6 @@ export function PropertyInsuranceForm({
     { id: 12, title: "XII. Կից փաստաթղթեր", subtitle: "Սեփականության վկայական, գրանցում, գույքացուցակ", icon: FileCheck2 },
     { id: 13, title: "XIII. Շահառուի տվյալներ", subtitle: "Կամավոր թե գրավադրված, Բանկի տվյալներ, Շահառու", icon: Landmark },
   ];
-
-  const handleSelectPackage = (pkgId: PropertyPackageId) => {
-    if (pkgId === "custom") {
-      onChange((prev) => ({
-        ...prev,
-        propertyPackage: "custom",
-      }));
-      return;
-    }
-
-    if (pkgId === "start") {
-      onChange((prev) => ({
-        ...prev,
-        ...PRESET_TUN_START,
-        company: {
-          ...PRESET_TUN_START.company,
-          name: prev.company.name || PRESET_TUN_START.company.name,
-          contactPerson: prev.company.contactPerson || PRESET_TUN_START.company.contactPerson,
-          phone: prev.company.phone || PRESET_TUN_START.company.phone,
-          email: prev.company.email || PRESET_TUN_START.company.email,
-        },
-        objectData: {
-          ...PRESET_TUN_START.objectData,
-          address: prev.objectData.address || PRESET_TUN_START.objectData.address,
-        },
-      }));
-    } else if (pkgId === "standard") {
-      onChange((prev) => ({
-        ...prev,
-        propertyPackage: "standard",
-        insuredProperty: {
-          ...prev.insuredProperty,
-          building: true,
-          interior: true,
-          equipment: true,
-          guestDamage: false,
-          thirdPartyLiability: true,
-        },
-        values: {
-          ...prev.values,
-          buildingValue: 30000000,
-          interiorValue: 3000000,
-          equipmentValue: 3000000,
-          guestDamageValue: 0,
-          thirdPartyLiabilityValue: 2000000,
-        },
-        rentalDetails: {
-          rentalType: "owner_occupied",
-          hasGuestDamageCoverage: false,
-          platform: "—",
-        },
-        customFranchise: 0.5,
-      }));
-    } else if (pkgId === "standard_plus") {
-      onChange((prev) => ({
-        ...prev,
-        ...PRESET_TUN_STANDARD_PLUS,
-        company: {
-          ...PRESET_TUN_STANDARD_PLUS.company,
-          name: prev.company.name || PRESET_TUN_STANDARD_PLUS.company.name,
-          contactPerson: prev.company.contactPerson || PRESET_TUN_STANDARD_PLUS.company.contactPerson,
-          phone: prev.company.phone || PRESET_TUN_STANDARD_PLUS.company.phone,
-          email: prev.company.email || PRESET_TUN_STANDARD_PLUS.company.email,
-        },
-        objectData: {
-          ...PRESET_TUN_STANDARD_PLUS.objectData,
-          address: prev.objectData.address || PRESET_TUN_STANDARD_PLUS.objectData.address,
-        },
-      }));
-    } else if (pkgId === "premium") {
-      onChange((prev) => ({
-        ...prev,
-        ...PRESET_TUN_PREMIUM,
-        company: {
-          ...PRESET_TUN_PREMIUM.company,
-          name: prev.company.name || PRESET_TUN_PREMIUM.company.name,
-          contactPerson: prev.company.contactPerson || PRESET_TUN_PREMIUM.company.contactPerson,
-          phone: prev.company.phone || PRESET_TUN_PREMIUM.company.phone,
-          email: prev.company.email || PRESET_TUN_PREMIUM.company.email,
-        },
-        objectData: {
-          ...PRESET_TUN_PREMIUM.objectData,
-          address: prev.objectData.address || PRESET_TUN_PREMIUM.objectData.address,
-        },
-      }));
-    }
-  };
 
   const handleAiParse = async () => {
     if (!aiInputText.trim()) return;
@@ -278,19 +139,11 @@ export function PropertyInsuranceForm({
               Գույքի Ապահովագրության Գնառաջարկի Տվյալների Հավաքագրում
             </h1>
             <p className="text-xs sm:text-sm text-blue-100/90 max-w-3xl mt-1">
-              Ընտրեք <strong>Tun Service</strong> փաթեթներից (START, STANDARD, STANDARD PLUS, PREMIUM) կամ լրացրեք հարցաշարի բոլոր 13 բաժինները:
+              Լրացրեք հարցաշարի բոլոր 13 բաժինները կամ օգտվեք արագ ձևանմուշներից / AI ավտոմատ լրացումից՝ պաշտոնական MS Word-ին համապատասխան գնառաջարկ ձևավորելու համար:
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowCertificateScannerModal(true)}
-              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-lg shadow-emerald-950/30 transition cursor-pointer border border-emerald-400/40 active:scale-95"
-            >
-              <FileCheck2 className="w-4 h-4 text-emerald-200" />
-              Սկանավորել Վկայականը (AI OCR)
-            </button>
-
             <button
               onClick={() => setAiParseModalOpen(true)}
               className="inline-flex items-center gap-1.5 bg-[#0066FF] hover:bg-[#0052CC] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-blue-950/30 transition cursor-pointer border border-blue-400/30 active:scale-95"
@@ -299,63 +152,29 @@ export function PropertyInsuranceForm({
               AI Լրացում Տեքստից
             </button>
 
-            <div className="flex flex-wrap items-center bg-[#001D4A]/80 border border-blue-700/50 rounded-xl p-1 text-xs gap-1">
-              <span className="text-blue-200 px-2 font-medium">Փաթեթներ՝</span>
-              <button
-                onClick={() => handleSelectPackage("start")}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                  state.propertyPackage === "start"
-                    ? "bg-emerald-500 text-white shadow-xs"
-                    : "text-white hover:bg-white/10"
-                }`}
-              >
-                START (25 մլն)
-              </button>
-              <button
-                onClick={() => handleSelectPackage("standard_plus")}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                  state.propertyPackage === "standard_plus"
-                    ? "bg-amber-500 text-white shadow-xs"
-                    : "bg-amber-500/20 text-amber-200 border border-amber-400/30 hover:bg-amber-500/30"
-                }`}
-              >
-                Airbnb / Օրավարձ (40 մլն)
-              </button>
-              <button
-                onClick={() => handleSelectPackage("premium")}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                  state.propertyPackage === "premium"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "text-white hover:bg-white/10"
-                }`}
-              >
-                PREMIUM (68 մլն)
-              </button>
-              <span className="text-blue-400/50 px-1">|</span>
+            <div className="flex items-center bg-[#001D4A]/80 border border-blue-700/50 rounded-xl p-1 text-xs">
+              <span className="text-blue-200 px-2 font-medium">Ձևանմուշներ՝</span>
               <button
                 onClick={() => onChange(() => DEFAULT_PROPERTY_STATE)}
-                className="px-2 py-1 hover:bg-white/10 rounded-lg text-blue-200 text-[11px] transition cursor-pointer"
+                className="px-2.5 py-1.5 hover:bg-white/10 rounded-lg text-white font-medium transition cursor-pointer"
               >
                 Արտադրամաս
               </button>
               <button
                 onClick={() => onChange(() => PRESET_OFFICE_IT)}
-                className="px-2 py-1 hover:bg-white/10 rounded-lg text-blue-200 text-[11px] transition cursor-pointer"
+                className="px-2.5 py-1.5 hover:bg-white/10 rounded-lg text-white font-medium transition cursor-pointer"
               >
                 IT Գրասենյակ
+              </button>
+              <button
+                onClick={() => onChange(() => PRESET_WAREHOUSE_LOGISTICS)}
+                className="px-2.5 py-1.5 hover:bg-white/10 rounded-lg text-white font-medium transition cursor-pointer"
+              >
+                Պահեստ
               </button>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Tun Service Package Selector (START, STANDARD, STANDARD PLUS, PREMIUM) */}
-      <div className="mb-6">
-        <PropertyPackageSelector
-          currentPackage={(state.propertyPackage as PropertyPackageId) || "custom"}
-          onSelectPackage={handleSelectPackage}
-          currency={state.values.currency}
-        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -675,9 +494,6 @@ export function PropertyInsuranceForm({
             </div>
           )}
 
-          {/* Short-Term / Airbnb Rental Details Section */}
-          <ShortTermRentalSection state={state} onChange={onChange} />
-
           {/* Section 3: Ապահովագրվող գույք */}
           {(activeSection === "all" || activeSection === 3) && (
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm transition">
@@ -690,19 +506,17 @@ export function PropertyInsuranceForm({
                     III. Ապահովագրվող գույք (Ընտրեք կատեգորիաները)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Շինություն, հարդարում, տեխնիկա, հյուրերի պատճառած վնաս, 3-րդ անձանց պատասխանատվություն
+                    Շինություն, հարդարում, հաստոցներ, տեխնիկա, պաշարներ, ցուցանակներ, ապակիներ
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 {[
                   { key: "building", label: "🏢 Շինություն / Կառույց" },
                   { key: "interior", label: "🎨 Ներքին հարդարում" },
-                  { key: "equipment", label: "💻 Տեխնիկա & Էլեկտրոնիկա" },
-                  { key: "guestDamage", label: "🛌 Հյուրերի վնաս (Guest Damage)" },
-                  { key: "thirdPartyLiability", label: "🛡️ 3-րդ անձանց պատասխանատվություն" },
                   { key: "machinery", label: "⚙️ Հաստոցներ և սարքեր" },
+                  { key: "equipment", label: "💻 Տեխնիկա & Էլեկտրոնիկա" },
                   { key: "stock", label: "📦 Ապրանքային պաշարներ" },
                   { key: "signs", label: "🪧 Ցուցանակներ & Վահանակներ" },
                   { key: "glass", label: "🪟 Վիտրաժներ և ապակիներ" },
@@ -874,72 +688,6 @@ export function PropertyInsuranceForm({
                   </div>
                 )}
 
-                {state.insuredProperty.equipment && (
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      💻 Տեխնիկայի & Շարժական գույքի արժեք ({state.values.currency})
-                    </label>
-                    <input
-                      type="number"
-                      value={state.values.equipmentValue || ""}
-                      onChange={(e) =>
-                        onChange((prev) => ({
-                          ...prev,
-                          values: { ...prev.values, equipmentValue: Number(e.target.value) || 0 },
-                        }))
-                      }
-                      className="w-full text-xs sm:text-sm font-semibold border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-hidden"
-                    />
-                    <span className="text-[11px] text-slate-500 mt-0.5 block">
-                      {formatCurrency(state.values.equipmentValue, state.values.currency)}
-                    </span>
-                  </div>
-                )}
-
-                {(state.insuredProperty.guestDamage || state.rentalDetails?.hasGuestDamageCoverage) && (
-                  <div>
-                    <label className="block text-xs font-semibold text-amber-900 mb-1">
-                      🛌 Հյուրերի պատճառած վնասի լիմիտ ({state.values.currency})
-                    </label>
-                    <input
-                      type="number"
-                      value={state.values.guestDamageValue || ""}
-                      onChange={(e) =>
-                        onChange((prev) => ({
-                          ...prev,
-                          values: { ...prev.values, guestDamageValue: Number(e.target.value) || 0 },
-                        }))
-                      }
-                      className="w-full text-xs sm:text-sm font-semibold border border-amber-300 bg-amber-50/40 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 outline-hidden"
-                    />
-                    <span className="text-[11px] text-amber-700 mt-0.5 block">
-                      {formatCurrency(state.values.guestDamageValue || 0, state.values.currency)} (Սակագին՝ 1.00%, ֆրանշիզա՝ 30,000 ֏)
-                    </span>
-                  </div>
-                )}
-
-                {state.insuredProperty.thirdPartyLiability && (
-                  <div>
-                    <label className="block text-xs font-semibold text-indigo-900 mb-1">
-                      🛡️ 3-րդ անձանց պատասխանատվության լիմիտ ({state.values.currency})
-                    </label>
-                    <input
-                      type="number"
-                      value={state.values.thirdPartyLiabilityValue || ""}
-                      onChange={(e) =>
-                        onChange((prev) => ({
-                          ...prev,
-                          values: { ...prev.values, thirdPartyLiabilityValue: Number(e.target.value) || 0 },
-                        }))
-                      }
-                      className="w-full text-xs sm:text-sm font-semibold border border-indigo-300 bg-indigo-50/40 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-hidden"
-                    />
-                    <span className="text-[11px] text-indigo-700 mt-0.5 block">
-                      {formatCurrency(state.values.thirdPartyLiabilityValue || 0, state.values.currency)} (Սակագին՝ 0.50%, ֆրանշիզա՝ 30,000 ֏)
-                    </span>
-                  </div>
-                )}
-
                 {state.insuredProperty.machinery && (
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -958,6 +706,28 @@ export function PropertyInsuranceForm({
                     />
                     <span className="text-[11px] text-slate-500 mt-0.5 block">
                       {formatCurrency(state.values.machineryValue, state.values.currency)}
+                    </span>
+                  </div>
+                )}
+
+                {state.insuredProperty.equipment && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      💻 Տեխնիկայի & էլեկտրոնիկայի արժեք ({state.values.currency})
+                    </label>
+                    <input
+                      type="number"
+                      value={state.values.equipmentValue || ""}
+                      onChange={(e) =>
+                        onChange((prev) => ({
+                          ...prev,
+                          values: { ...prev.values, equipmentValue: Number(e.target.value) || 0 },
+                        }))
+                      }
+                      className="w-full text-xs sm:text-sm font-semibold border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-hidden"
+                    />
+                    <span className="text-[11px] text-slate-500 mt-0.5 block">
+                      {formatCurrency(state.values.equipmentValue, state.values.currency)}
                     </span>
                   </div>
                 )}
@@ -1634,80 +1404,37 @@ export function PropertyInsuranceForm({
           {/* Section 11: Ապահովագրական ծածկույթ / Ռիսկեր */}
           {(activeSection === "all" || activeSection === 11) && (
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm transition">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    XI
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                      XI. Ապահովագրական ծածկույթ / Ռիսկեր
-                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                        SIL Insurance Պայմաններ
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Համապատասխանեցված «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Գույքի Ապահովագրության Պայմաններին և Tun Service առաջարկին
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-3 mb-4">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  XI
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    XI. Ապահովագրական ծածկույթ / Ռիսկեր (FLEXA & All Risks)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Հրդեհ, պայթյուն, ջրի արտահոսք, բնական աղետներ, գողություն, վանդալիզմ, 3-րդ անձանց պատասխանատվություն
+                  </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 {[
-                  {
-                    key: "fireExplosion",
-                    label: "🔥 Հրդեհ, կայծակի ազդեցություն, պայթյուն, օդանավի անկում (FLEXA)",
-                    desc: "Կայծակի հարված, պայթյուններ, թռչող սարքերի բեկորների անկում",
-                  },
-                  {
-                    key: "waterDamage",
-                    label: "💧 Ջրի վնաս / Խողովակաշարերի և համակարգերի վթարային արտահոսք",
-                    desc: "Ջրամատակարարման, ջեռուցման, կոյուղու և հրդեհաշիջման ցանցերի վթարներ",
-                  },
-                  {
-                    key: "naturalDisasters",
-                    label: "🌋 Բնական աղետներ (երկրաշարժ, սողանք, փոթորիկ, կարկուտ, ջրհեղեղ)",
-                    desc: "Հորդառատ անձրև, ձյան վնաս, հողմ, մրրիկ, գետնի նստվածք, լեռնային փլուզում",
-                  },
-                  {
-                    key: "burglaryRobbery",
-                    label: "🦹 Հափշտակություն (Գողություն կոտրանքով, կողոպուտ, ավազակություն)",
-                    desc: "Ապահովագրված տարածք ապօրինի ներթափանցմամբ գույքի հափշտակություն",
-                  },
-                  {
-                    key: "vandalism",
-                    label: "🔨 Երրորդ անձանց հակաիրավական գործողություններ / Վանդալիզմ",
-                    desc: "Գույքի դիտավորյալ կամ անզգույշ վնասում կամ ոչնչացում",
-                  },
-                  {
-                    key: "mechanicalSmoke",
-                    label: "⚙️ Մեխանիկական և ծխի ազդեցություն",
-                    desc: "Հարվածային ազդեցություններ և հարակից հրդեհների ծխի ներթափանցում",
-                  },
-                  {
-                    key: "guestDamage",
-                    label: "🛌 Հյուրի կողմից պատճառված վնաս (Guest Damage — Պայմանների 5.19 կետ)",
-                    desc: "Airbnb / Booking օրավարձով հյուրերի պատահական կամ անզգույշ գույքային վնասներ",
-                  },
-                  {
-                    key: "thirdPartyLiability",
-                    label: "🛡️ Ընդհանուր քաղաքացիական պատասխանատվություն 3-րդ անձանց առջև",
-                    desc: "Հարևանների և հյուրերի գույքին ու առողջությանը պատճառված վնասների հատուցում",
-                  },
-                  {
-                    key: "businessInterruption",
-                    label: "⏱️ Բիզնեսի ընդհատման հետևանքով ֆինանսական կորուստներ",
-                    desc: "Առևտրային և արտադրական տարածքների պարապուրդի ռիսկի ծածկույթ",
-                  },
+                  { key: "fireExplosion", label: "🔥 Հրդեհ, պայթյուն, կայծակ, օդանավի անկում (FLEXA)" },
+                  { key: "waterDamage", label: "💧 Ջրի արտահոսք ջրամատակարարման, կոյուղու և ջեռուցման ցանցերից" },
+                  { key: "naturalDisasters", label: "🌋 Բնական աղետներ (երկրաշարժ, փոթորիկ, կարկուտ, ջրհեղեղ)" },
+                  { key: "burglaryRobbery", label: "🦹 Գողություն կոտրանքով, կողոպուտ, ավազակություն" },
+                  { key: "vandalism", label: "🔨 Երրորդ անձանց չարամիտ գործողություններ / Վանդալիզմ" },
+                  { key: "thirdPartyLiability", label: "👥 Քաղաքացիական պատասխանատվություն 3-րդ անձանց առջև" },
+                  { key: "businessInterruption", label: "⏱️ Բիզնեսի ընդհատման հետևանքով ֆինանսական կորուստներ" },
                 ].map((item) => {
                   const isChecked = Boolean(state.coverageRisks[item.key as keyof typeof state.coverageRisks]);
                   return (
                     <label
                       key={item.key}
-                      className={`flex items-start gap-2.5 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                      className={`flex items-center gap-2 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition ${
                         isChecked
-                          ? "bg-blue-50/80 border-blue-400 text-blue-950 shadow-xs"
+                          ? "bg-blue-50/80 border-blue-400 text-blue-900 shadow-xs"
                           : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                       }`}
                     >
@@ -1723,12 +1450,9 @@ export function PropertyInsuranceForm({
                             },
                           }))
                         }
-                        className="rounded text-blue-600 focus:ring-blue-600 w-4 h-4 mt-0.5 flex-shrink-0"
+                        className="rounded text-blue-600 focus:ring-blue-600 w-4 h-4"
                       />
-                      <div>
-                        <span className="font-bold block text-slate-900">{item.label}</span>
-                        <span className="text-[11px] text-slate-500 block mt-0.5">{item.desc}</span>
-                      </div>
+                      <span>{item.label}</span>
                     </label>
                   );
                 })}
@@ -1751,59 +1475,24 @@ export function PropertyInsuranceForm({
                   className="w-full text-xs sm:text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-600 outline-hidden"
                 />
               </div>
-
-              {/* Grounding Base: Գույքի Ապահովագրության Պայմանների Տեղեկանք */}
-              <div className="mt-5 pt-4 border-t border-slate-200 bg-slate-50/70 p-4 rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <Shield className="w-4 h-4 text-blue-700 flex-shrink-0" />
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                    «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» Գույքի Ապահովագրության Պաշտոնական Պայմանների Տեղեկանք
-                  </h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-600">
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <span className="font-bold text-blue-900 block mb-1">1. Ապահովագրվող օբյեկտներ</span>
-                    Շենքեր, շինություններ, բնակարաններ, հիմնական միջոցներ, ապրանքանյութական արժեքներ, ներքին հարդարում, շարժական գույք/տեխնիկա, ապակիներ:
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <span className="font-bold text-rose-900 block mb-1">2. Հիմնական Բացառություններ</span>
-                    Միջուկային վթար, ռազմական գործողություններ, անկարգություններ, դիտավորություն, բնական մաշվածություն, առանց հսկողության վերանորոգում, նախկին վնասներ:
-                  </div>
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <span className="font-bold text-emerald-900 block mb-1">3. Հատուցման կարգ & Ֆրանշիզա</span>
-                    Վնասի գնահատում անկախ փորձագետով: Հատուցումը վճարվում է պայմանագրային ժամկետում՝ հանած սահմանված չհատուցվող գումարը (ֆրանշիզան):
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
           {/* Section 12: Կից փաստաթղթեր */}
           {(activeSection === "all" || activeSection === 12) && (
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm transition">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                    XII
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                      XII. Կից փաստաթղթեր (Checklist)
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Անդեռռայթինգի և պայմանագրի կնքման համար անհրաժեշտ փաստաթղթերի ցանկ
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3 border-b border-slate-100 pb-3 mb-4">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  XII
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCertificateScannerModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold shadow-xs transition cursor-pointer"
-                >
-                  <FileCheck2 className="w-3.5 h-3.5" />
-                  <span>Սկանավորել Վկայականը</span>
-                </button>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    XII. Կից փաստաթղթեր (Checklist)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Անդեռռայթինգի և պայմանագրի կնքման համար անհրաժեշտ փաստաթղթերի ցանկ
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
@@ -2013,18 +1702,6 @@ export function PropertyInsuranceForm({
 
             {/* Sum breakdown */}
             <div className="space-y-2.5 text-xs text-slate-600 mb-4">
-              {state.propertyPackage && state.propertyPackage !== "custom" && (
-                <div className="flex justify-between py-1.5 border-b border-blue-100 bg-blue-50/50 px-2 rounded-lg items-center">
-                  <span className="text-blue-900 font-medium">Ընտրված Փաթեթ՝</span>
-                  <span className="font-extrabold text-blue-900 bg-white px-2 py-0.5 rounded text-[11px] border border-blue-200 shadow-2xs">
-                    {state.propertyPackage === "start" ? "START (2.5 մլն ֏)" :
-                     state.propertyPackage === "standard" ? "STANDARD (4.0 մլն ֏)" :
-                     state.propertyPackage === "standard_plus" ? "STANDARD PLUS (6.0 մլն ֏)" :
-                     state.propertyPackage === "premium" ? "PREMIUM (9.0 մլն ֏)" : state.propertyPackage}
-                  </span>
-                </div>
-              )}
-
               <div className="flex justify-between py-1 border-b border-slate-100">
                 <span>Ապահովադիր՝</span>
                 <span className="font-bold text-slate-900 truncate max-w-[170px]">
@@ -2257,13 +1934,6 @@ export function PropertyInsuranceForm({
             </div>
           </div>
         </div>
-      )}
-
-      {showCertificateScannerModal && (
-        <PropertyCertificateScannerModal
-          onClose={() => setShowCertificateScannerModal(false)}
-          onApplyCertificate={handleApplyCertificate}
-        />
       )}
     </div>
   );

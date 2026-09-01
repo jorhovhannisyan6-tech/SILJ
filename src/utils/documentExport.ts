@@ -5,42 +5,7 @@ import { generateQuotationTemplateHtml, quotationTemplateCss, QuotationLanguage 
 
 export function generateDocxCompatibleHtml(proposal: QuotationProposal, lang: QuotationLanguage = "hy"): string {
   const body = generateQuotationTemplateHtml(proposal, lang);
-  return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head>
-  <meta charset="utf-8">
-  <!--[if gte mso 9]>
-  <xml>
-    <w:WordDocument>
-      <w:View>Print</w:View>
-      <w:Zoom>100</w:Zoom>
-      <w:DoNotOptimizeForBrowser/>
-    </w:WordDocument>
-  </xml>
-  <![endif]-->
-  <title>SIL Insurance Quotation ${proposal.quotationNumber}</title>
-  <style>
-    @page Section1 {
-      size: 595.3pt 841.9pt;
-      margin: 36pt 36pt 36pt 36pt;
-      mso-header-margin: 35.4pt;
-      mso-footer-margin: 35.4pt;
-      mso-paper-source: 0;
-    }
-    div.Section1 { page: Section1; }
-    body { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 10.5pt; color: #111; margin: 0; padding: 0; background: #fff; }
-    table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; width: 100%; }
-    td, th { border: 1pt solid #222222; padding: 5pt 7pt; vertical-align: top; font-size: 10pt; }
-    th, .blue-cell { background-color: #b8d2e9 !important; font-weight: bold; }
-    .quote-page { page-break-after: always; mso-break-type: section-break; margin-bottom: 24pt; }
-    ${quotationTemplateCss()}
-  </style>
-</head>
-<body>
-  <div class="Section1">
-    ${body}
-  </div>
-</body>
-</html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>SIL Insurance Quotation ${proposal.quotationNumber}</title><style>${quotationTemplateCss()} body{margin:0;background:#fff}.quote-page{margin:0 auto}</style></head><body>${body}</body></html>`;
 }
 
 export async function copyProposalForWord(proposal: QuotationProposal, lang: QuotationLanguage = "hy"): Promise<boolean> {

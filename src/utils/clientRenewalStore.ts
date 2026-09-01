@@ -49,22 +49,6 @@ export const INITIAL_LEADS: ClientRenewalLead[] = [
   },
 ];
 
-export async function fetchClientRenewals(): Promise<ClientRenewalLead[]> {
-  try {
-    const res = await fetch("/api/leads");
-    if (res.ok) {
-      const data = await res.json();
-      if (data.leads && Array.isArray(data.leads)) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.leads));
-        return data.leads;
-      }
-    }
-  } catch (err) {
-    // fallback to localStorage
-  }
-  return getClientRenewals();
-}
-
 export function getClientRenewals(): ClientRenewalLead[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -78,37 +62,13 @@ export function getClientRenewals(): ClientRenewalLead[] {
   }
 }
 
-export async function addClientRenewal(lead: Omit<ClientRenewalLead, "id" | "createdAt">): Promise<ClientRenewalLead> {
-  const newLeadData = {
+export function addClientRenewal(lead: Omit<ClientRenewalLead, "id" | "createdAt">): ClientRenewalLead {
+  const current = getClientRenewals();
+  const newLead: ClientRenewalLead = {
     ...lead,
     id: `lead-${Date.now()}`,
     createdAt: new Date().toISOString(),
   };
-
-  try {
-    const res = await fetch("/api/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(lead),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.lead) {
-        const current = getClientRenewals();
-        const updated = [data.lead, ...current.filter(item => item.id !== data.lead.id)];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("sil-lead-updated"));
-        }
-        return data.lead;
-      }
-    }
-  } catch (err) {
-    // fallback local
-  }
-
-  const current = getClientRenewals();
-  const newLead: ClientRenewalLead = newLeadData;
   const updated = [newLead, ...current];
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   if (typeof window !== "undefined") {
@@ -117,17 +77,7 @@ export async function addClientRenewal(lead: Omit<ClientRenewalLead, "id" | "cre
   return newLead;
 }
 
-export async function updateClientRenewalStatus(id: string, status: ClientRenewalLead["status"]): Promise<void> {
-  try {
-    await fetch(`/api/leads/${id}/status`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-  } catch (err) {
-    // ignore
-  }
-
+export function updateClientRenewalStatus(id: string, status: ClientRenewalLead["status"]): void {
   const current = getClientRenewals();
   const updated = current.map((item) => (item.id === id ? { ...item, status } : item));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
@@ -135,77 +85,3 @@ export async function updateClientRenewalStatus(id: string, status: ClientRenewa
     window.dispatchEvent(new Event("sil-lead-updated"));
   }
 }
-
-export async function updateClientRenewal(id: string, updatedData: Partial<ClientRenewalLead>): Promise<ClientRenewalLead | null> {
-  try {
-    const res = await fetch(`/api/leads/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedData),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.lead) {
-        const current = getClientRenewals();
-        const updated = current.map((item) => (item.id === id ? data.lead : item));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event("sil-lead-updated"));
-        }
-        return data.lead;
-      }
-    }
-  } catch (err) {
-    // ignore
-  }
-
-  const current = getClientRenewals();
-  let resultLead: ClientRenewalLead | null = null;
-  const updated = current.map((item) => {
-    if (item.id === id) {
-      resultLead = { ...item, ...updatedData };
-      return resultLead;
-    }
-    return item;
-  });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("sil-lead-updated"));
-  }
-  return resultLead;
-}
-
-export async function deleteClientRenewal(id: string): Promise<void> {
-  try {
-    await fetch(`/api/leads/${id}`, {
-      method: "DELETE",
-    });
-  } catch (err) {
-    // ignore
-  }
-
-  const current = getClientRenewals();
-  const updated = current.filter((item) => item.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("sil-lead-updated"));
-  }
-}
-
-export async function deleteMultipleClientRenewals(ids: string[]): Promise<void> {
-  for (const id of ids) {
-    try {
-      await fetch(`/api/leads/${id}`, { method: "DELETE" });
-    } catch {
-      // ignore
-    }
-  }
-  const current = getClientRenewals();
-  const idSet = new Set(ids);
-  const updated = current.filter((item) => !idSet.has(item.id));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("sil-lead-updated"));
-  }
-}
-

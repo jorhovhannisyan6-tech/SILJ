@@ -16,23 +16,9 @@ export function getAuditLog(): AuditEvent[] {
   try { return JSON.parse(localStorage.getItem(AUDIT_KEY) || "[]"); } catch { return []; }
 }
 
-export function clearClientAuditLog(): void {
-  try {
-    localStorage.removeItem(AUDIT_KEY);
-  } catch {}
-}
-
-export function deleteClientAuditEvent(id: string): void {
-  try {
-    const current = getAuditLog();
-    const filtered = current.filter(e => e.id !== id);
-    localStorage.setItem(AUDIT_KEY, JSON.stringify(filtered));
-  } catch {}
-}
-
 export function addAuditEvent(event: Omit<AuditEvent, "id" | "at" | "userId" | "username">) {
   let actor:any=null; try { actor=JSON.parse(localStorage.getItem("sil-auth-user-v2")||"null"); } catch {}
-  const next = [{ ...event, userId: actor?.id, username: actor?.username, id: crypto.randomUUID?.() || `audit-${Date.now()}-${Math.random()}`, at: new Date().toISOString() }, ...getAuditLog()];
+  const next = [{ ...event, userId: actor?.id, username: actor?.username, id: crypto.randomUUID?.() || `audit-${Date.now()}-${Math.random()}`, at: new Date().toISOString() }, ...getAuditLog()].slice(0, 1000);
   localStorage.setItem(AUDIT_KEY, JSON.stringify(next));
   return next[0];
 }

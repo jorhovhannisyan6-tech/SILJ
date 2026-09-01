@@ -331,12 +331,6 @@ export function CascoCalculator({ onGenerateQuotation, onBackToGeneric }: Props)
               <div className="text-3xl font-black mt-1">{(calc.finalTariff*100).toFixed(4)}%</div>
               <div className="text-sm text-blue-100 mt-3">Տարեկան ապահովագրավճար</div>
               <div className="text-2xl font-black mt-1">{formatCurrency(calc.annualPremium,data.currency)}</div>
-              {proposal && (
-                <div className="mt-3 pt-3 border-t border-blue-900/60 text-xs text-blue-200">
-                  <div className="text-[11px] text-blue-300 font-semibold">Ֆրանշիզա գնառաջարկում՝</div>
-                  <div className="text-white font-medium mt-0.5">{proposal.franchiseDescription}</div>
-                </div>
-              )}
             </div>
 
             <div className="mt-5 space-y-2">

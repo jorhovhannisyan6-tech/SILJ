@@ -29,7 +29,6 @@ import { CascoCalculator } from "./CascoCalculator";
 import { ListAmPropertyValuationCalculator } from "../Property/ListAmPropertyValuationCalculator";
 import { ProductSpecificStep2Form } from "./ProductForms";
 import { AiDocumentScanner } from "../AiDocumentScanner";
-import { getCurrentUser } from "../../utils/authStore";
 
 interface Props {
   initialProduct?: InsuranceProductType | null;
@@ -68,24 +67,27 @@ function GenericQuickQuoteView({
   const [propertyValuationOpen, setPropertyValuationOpen] = useState(false);
   const [showOcrModal, setShowOcrModal] = useState(false);
 
-  const initialProd = initialProduct && initialProduct !== "casco" ? initialProduct : "property";
-  const initialRule = getQuotationRules()[initialProd] || getQuotationRules().property;
-  const initialRisks = initialRule.requiredRisks.length > 0
-    ? [...initialRule.requiredRisks]
-    : (initialRule.availableRisks && initialRule.availableRisks.length > 0 ? [...initialRule.availableRisks] : []);
-
   const [input, setInput] = useState<QuoteInput>({
     clientName: "",
     phone: "",
-    product: initialProd,
+    product: initialProduct && initialProduct !== "casco" ? initialProduct : "property",
     currency: "AMD",
     insuredAmount: 0,
     businessActivity: "",
     objectDescription: "",
-    selectedRisks: initialRisks,
-    franchisePercent: initialRule.defaultFranchise,
+    selectedRisks:
+      initialProduct && initialProduct !== "casco"
+        ? [...getQuotationRules()[initialProduct].requiredRisks]
+        : [...getQuotationRules().property.requiredRisks],
+    franchisePercent:
+      initialProduct && initialProduct !== "casco"
+        ? getQuotationRules()[initialProduct].defaultFranchise
+        : getQuotationRules().property.defaultFranchise,
     previousLosses: false,
-    customTariff: initialRule.defaultTariff,
+    customTariff:
+      initialProduct && initialProduct !== "casco"
+        ? getQuotationRules()[initialProduct].defaultTariff
+        : getQuotationRules().property.defaultTariff,
     productDetails: {},
   });
 
@@ -113,14 +115,9 @@ function GenericQuickQuoteView({
     }
   }, []);
 
-  const me = getCurrentUser();
   const rules = getQuotationRules();
   void rulesVersion;
-  
-  let products = Object.values(rules) as (typeof rules)[InsuranceProductType][];
-  if (me?.role === "casco_sales") {
-    products = products.filter(p => p.product === "casco");
-  }
+  const products = Object.values(rules) as (typeof rules)[InsuranceProductType][];
   const rule = rules[input.product] || rules.property;
 
   const result = useMemo(() => evaluateQuoteInput(input), [input, rulesVersion]);
@@ -606,9 +603,6 @@ function GenericQuickQuoteView({
                           return;
                         }
                         const nextRule = getQuotationRules()[product] || getQuotationRules().property;
-                        const nextRisks = nextRule.requiredRisks.length > 0
-                          ? [...nextRule.requiredRisks]
-                          : (nextRule.availableRisks && nextRule.availableRisks.length > 0 ? [...nextRule.availableRisks] : []);
                         setInput((v) => ({
                           ...v,
                           product,
@@ -618,7 +612,7 @@ function GenericQuickQuoteView({
                           objectDescription: "",
                           franchisePercent: nextRule.defaultFranchise,
                           customTariff: nextRule.defaultTariff,
-                          selectedRisks: nextRisks,
+                          selectedRisks: [...nextRule.requiredRisks],
                         }));
                         localStorage.removeItem("sil-quick-quote-draft");
                       }}

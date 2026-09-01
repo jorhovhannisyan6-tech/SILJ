@@ -40,8 +40,6 @@ export interface InsuredPropertyItems {
   stock: boolean;
   signs: boolean;
   glass: boolean;
-  guestDamage?: boolean;
-  thirdPartyLiability?: boolean;
   details: string;
 }
 
@@ -53,8 +51,6 @@ export interface PropertyValues {
   stockValue: number;
   glassValue: number;
   signsValue: number;
-  guestDamageValue?: number;
-  thirdPartyLiabilityValue?: number;
   currency: "AMD" | "USD";
   valueType: "market" | "book" | "replacement";
 }
@@ -116,8 +112,6 @@ export interface CoverageRisks {
   naturalDisasters: boolean;
   burglaryRobbery: boolean;
   vandalism: boolean;
-  mechanicalSmoke?: boolean;
-  guestDamage?: boolean;
   thirdPartyLiability: boolean;
   businessInterruption: boolean;
   otherRisks: string;
@@ -142,18 +136,7 @@ export interface BeneficiaryData {
   notes: string;
 }
 
-export interface PropertyRentalDetails {
-  rentalType: "owner_occupied" | "short_term_rental" | "long_term_rental" | "commercial";
-  platform?: string;
-  hasGuestDamageCoverage: boolean;
-  guestDamageLimit?: number;
-  securityDeposit?: number;
-  maxGuestsCount?: number;
-}
-
 export interface PropertyInsuranceFormState {
-  propertyPackage?: "custom" | "start" | "standard" | "standard_plus" | "premium";
-  rentalDetails?: PropertyRentalDetails;
   company: CompanyInfo;
   objectData: ObjectData;
   insuredProperty: InsuredPropertyItems;
@@ -351,7 +334,16 @@ export interface AgroInsuranceData {
 }
 
 // Proposal Structure
-export type QuoteStatus = "draft" | "ready" | "sent" | "accepted" | "rejected" | "locked";
+export type QuoteStatus =
+  | "draft"
+  | "ready"
+  | "pending_underwriter"
+  | "approved"
+  | "sent"
+  | "accepted"
+  | "rejected"
+  | "locked"
+  | "policy_issued";
 
 export interface QuotationProposal {
   id: string;
@@ -380,7 +372,6 @@ export interface QuotationProposal {
     value: number;
     tariff: number;
     premium: number;
-    franchise?: string;
   }>;
   mortgageBreakdown?: {
     packageType: MortgagePackageType;
@@ -401,7 +392,6 @@ export interface QuotationProposal {
     details: string;
   }>;
   specialConditions: string[];
-  customTemplateText?: string;
   aiAnalysisText?: string;
   status?: QuoteStatus;
   version?: number;
@@ -417,6 +407,10 @@ export interface QuotationProposal {
   clientType?: "individual" | "company";
   calculationBreakdown?: Array<{ label: string; value: number; unit?: string }>;
   underwriting?: { status: "approved" | "manual_review" | "rejected"; reasons: string[] };
+  policyNumber?: string;
+  underwriterNote?: string;
+  issuedAt?: string;
+  issuedBy?: string;
   sourceDocuments?: string[];
   sourceVersion?: string;
   lockedBy?: string;

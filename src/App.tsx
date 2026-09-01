@@ -138,6 +138,18 @@ export default function App() {
     handleGenerateQuotation(copy);
   };
   const deleteQuote = (id: string) => { setQuoteHistory(prev => { const next = prev.filter(p=>p.id !== id); localStorage.setItem("sil-quote-history", JSON.stringify(next)); return next; }); };
+  const updateQuoteStatus = (id: string, status: any, patch?: Partial<QuotationProposal>) => {
+    setQuoteHistory(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, status, ...patch, updatedAt: new Date().toISOString() } : p);
+      localStorage.setItem("sil-quote-history", JSON.stringify(next));
+      return next;
+    });
+    if (currentProposal && currentProposal.id === id) {
+      const updated = { ...currentProposal, status, ...patch, updatedAt: new Date().toISOString() };
+      setCurrentProposal(updated);
+      localStorage.setItem("sil-current-proposal", JSON.stringify(updated));
+    }
+  };
 
   const getFormSummaryForChat = () => {
     if (currentProposal) {
@@ -170,7 +182,6 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         proposalReady={Boolean(currentProposal)}
-        user={user}
       />
 
       {/* Dynamic View Content */}
@@ -215,57 +226,12 @@ export default function App() {
           <QuotationView
             proposal={currentProposal}
             onEdit={() => {
-              if (!currentProposal) return;
-              if (currentProposal.type === "property") {
-                setPropertyState(prev => ({
-                  ...prev,
-                  company: {
-                    ...prev.company,
-                    name: currentProposal.clientName || prev.company.name,
-                    phone: currentProposal.contactInfo || prev.company.phone,
-                  },
-                  objectData: {
-                    ...prev.objectData,
-                    address: currentProposal.objectDescription || prev.objectData.address,
-                  },
-                  values: {
-                    ...prev.values,
-                    buildingValue: currentProposal.totalSumInsured || prev.values.buildingValue,
-                    currency: (currentProposal.currency as any) || prev.values.currency,
-                  },
-                }));
+              if (currentProposal?.type === "property") {
                 setActiveTab("property");
-              } else if (currentProposal.type === "mortgage") {
-                setMortgageState(prev => ({
-                  ...prev,
-                  borrowerName: currentProposal.clientName || prev.borrowerName,
-                  borrowerPhone: currentProposal.contactInfo || prev.borrowerPhone,
-                  principalBalance: currentProposal.mortgageBreakdown?.principal || currentProposal.totalSumInsured || prev.principalBalance,
-                  currency: (currentProposal.currency as any) || prev.currency,
-                  bankName: currentProposal.mortgageBreakdown?.bankName || prev.bankName,
-                }));
+              } else if (currentProposal?.type === "mortgage") {
                 setActiveTab("mortgage");
-              } else if (currentProposal.type === "casco") {
-                if (currentProposal.productSpecificDetails) {
-                  localStorage.setItem("sil-casco-excel-draft", JSON.stringify(currentProposal.productSpecificDetails));
-                }
-                setSelectedProductForQuote("casco");
-                setActiveTab("quickQuote");
               } else {
-                const draft = {
-                  clientName: currentProposal.clientName,
-                  phone: currentProposal.contactInfo,
-                  product: currentProposal.type,
-                  currency: currentProposal.currency,
-                  insuredAmount: currentProposal.totalSumInsured,
-                  objectDescription: currentProposal.objectDescription,
-                  customTariff: currentProposal.baseTariff,
-                  franchisePercent: currentProposal.franchiseAmount,
-                  productDetails: currentProposal.productSpecificDetails || {},
-                };
-                localStorage.setItem("sil-quick-quote-draft", JSON.stringify(draft));
-                setSelectedProductForQuote(currentProposal.type);
-                setActiveTab("quickQuote");
+                setActiveTab("catalog");
               }
             }}
             onUpdateProposal={(updated) => {
@@ -296,7 +262,7 @@ export default function App() {
             }}
           />
         )}
-        {activeTab === "history" && <QuoteHistory proposals={quoteHistory} onOpen={openQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote} />}
+        {activeTab === "history" && <QuoteHistory proposals={quoteHistory} onOpen={openQuote} onDuplicate={duplicateQuote} onDelete={deleteQuote} onUpdateStatus={updateQuoteStatus} />}
         {activeTab === "smart" && <SmartOperations quotes={quoteHistory} />}
 
         {activeTab === "chat" && (

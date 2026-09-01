@@ -19,11 +19,6 @@ export interface ExtractedTechPassportData {
   address?: string;
   propertyAreaSqm?: number;
   propertyValue?: number;
-  certificateNumber?: string;
-  cadastralCode?: string;
-  buildingMaterial?: string;
-  floor?: string;
-  purpose?: string;
   confidenceScore: number;
 }
 

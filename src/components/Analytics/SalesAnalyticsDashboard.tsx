@@ -348,7 +348,7 @@ export const SalesAnalyticsDashboard: React.FC<Props> = ({ quoteHistory }) => {
             <p className="text-xs text-slate-400">Գործակալների վաճառքների ծավալները, KPI կոնվերսիան և հաստատված հայտերը</p>
           </div>
           <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full font-bold">
-            🏆 Լավագույն Գործակալներ
+            🏆 Top Performers
           </span>
         </div>
 

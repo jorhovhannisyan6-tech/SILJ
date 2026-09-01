@@ -26,10 +26,9 @@ export function subscribeCBARates(callback: (rates: Record<string, ExchangeRate>
   };
 }
 
-export async function fetchCBARates(force = false): Promise<Record<string, ExchangeRate>> {
+export async function fetchCBARates(): Promise<Record<string, ExchangeRate>> {
   try {
-    const url = force ? "/api/cba-rates?refresh=true" : "/api/cba-rates";
-    const res = await fetch(url).catch(() => null);
+    const res = await fetch("/api/cba-rates").catch(() => null);
     if (res && res.ok) {
       const json = await res.json();
       if (json && json.rates) {

@@ -1,9 +1,6 @@
 import { InsuranceProductType, QuotationProposal } from "../types";
 import { formatCurrency, formatPercent } from "./insuranceCalculator";
 import horizontalLogo from "../assets/images/sil-logo-horizontal.png";
-import { translatePhraseLocally, PRODUCT_TITLES_LOCALIZED } from "./quotationTranslation";
-import { SIL_PRODUCT_CONDITIONS, OfficialConditionInfo } from "../data/productConditionsData";
-import { transliterateLatinToArmenian } from "./transliteration";
 
 const esc = (value: unknown) => String(value ?? "—")
   .replace(/&/g, "&amp;")
@@ -26,123 +23,19 @@ const PRODUCT_LABELS: Record<InsuranceProductType, {
   franchiseLabel: string;
   riskLabel: string;
 }> = {
-  property: {
-    title: "Գույքի ապահովագրության առաջարկ",
-    objectLabel: "Ապահովագրվող գույք (Շենք, Սարքավորումներ, Ապրանքներ)",
-    amountLabel: "Գույքի արժեք / Ապահովագրական գումար",
-    tariffLabel: "Տարեկան գույքային սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Գույքային ֆրանշիզա (Չհատուցվող գումար)",
-    riskLabel: "Գույքային ապահովագրական ռիսկեր (FLEXA, Ջրի վնաս, ԵԱԱԳ, Աղետներ)",
-  },
-  mortgage: {
-    title: "Հիփոթեքային վարկառուների ապահովագրության առաջարկ",
-    objectLabel: "Գրավադրված անշարժ գույք և վարկառու",
-    amountLabel: "Վարկի մնացորդ / Ապահովագրական գումար",
-    tariffLabel: "Հիփոթեքային սակագին (ԱՀԸ / ԲԵ / Բանկ)",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Չհատուցվող գումար",
-    riskLabel: "Հիփոթեքային համալիր ծածկույթ (Գույք + Կյանք/ԴՊ)",
-  },
-  casco: {
-    title: "ԿԱՍԿՈ ավտոտրանսպորտային միջոցների ապահովագրության առաջարկ",
-    objectLabel: "Ապահովագրվող ավտոտրանսպորտային միջոց",
-    amountLabel: "Շուկայական արժեք / Ապահովագրական գումար",
-    tariffLabel: "ԿԱՍԿՈ վերջնական սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "ԿԱՍԿՈ ֆրանշիզա (Չհատուցվող գումար)",
-    riskLabel: "ԿԱՍԿՈ ապահովագրական ծածկույթներ (ՃՏՊ, Հրդեհ, ԵԱԱԳ, Գողություն)",
-  },
-  health: {
-    title: "Կամավոր բժշկական ապահովագրության առաջարկ (ԿԲԱ)",
-    objectLabel: "Ապահովագրվող անձնակազմ / Բժշկական ծրագիր",
-    amountLabel: "Տարեկան բժշկական ծածկույթի սահմանաչափ",
-    tariffLabel: "Բժշկական սակագին / Անձի վճար",
-    premiumLabel: "Ընդհանուր ապահովագրավճար",
-    franchiseLabel: "Ծառայությունների ֆրանշիզա",
-    riskLabel: "Բժշկական ծածկույթներ (Ստացիոնար, Ամբուլատոր, Դեղորայք, Ատամնաբուժություն)",
-  },
-  travel: {
-    title: "Ճանապարհորդության (Արտերկիր մեկնողների) ապահովագրության առաջարկ",
-    objectLabel: "Ճանապարհորդ(ներ) / Երթուղի և ժամանակահատված",
-    amountLabel: "Արտերկրում բժշկական ծախսերի սահմանաչափ",
-    tariffLabel: "Օրական սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Ճամփորդական ֆրանշիզա",
-    riskLabel: "Արտերկրում անհետաձգելի բժշկական ծածկույթներ և տարհանում",
-  },
-  cargo: {
-    title: "Բեռնափոխադրումների ապահովագրության առաջարկ",
-    objectLabel: "Ապահովագրվող բեռ և փոխադրամիջոց",
-    amountLabel: "Բեռի ինվոյսային արժեք / Ապահովագրական գումար",
-    tariffLabel: "Բեռնափոխադրման սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Բեռի ֆրանշիզա (Չհատուցվող գումար)",
-    riskLabel: "Բեռնափոխադրման ռիսկեր (ICC A / B / C Կլաուզաներ)",
-  },
-  liability: {
-    title: "Պատասխանատվության ապահովագրության առաջարկ",
-    objectLabel: "Ապահովագրվող գործունեություն / Պատասխանատվության ոլորտ",
-    amountLabel: "Պատասխանատվության առավելագույն սահմանաչափ (TPL / PI)",
-    tariffLabel: "Պատասխանատվության սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Ֆրանշիզա յուրաքանչյուր պահանջի համար",
-    riskLabel: "Քաղաքացիական և մասնագիտական պատասխանատվության ծածկույթներ",
-  },
-  construction: {
-    title: "Շինմոնտաժային ռիսկերի համալիր (CAR / EAR) առաջարկ",
-    objectLabel: "Շինարարական օբյեկտ և կապալառուի աշխատանքներ",
-    amountLabel: "Կապալի պայմանագրային արժեք / Ապահովագրական գումար",
-    tariffLabel: "Շինմոնտաժային սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Շինմոնտաժային ֆրանշիզա",
-    riskLabel: "Շինարարական, մոնտաժային և երրորդ անձանց (TPL) ռիսկեր",
-  },
-  accident: {
-    title: "Դժբախտ պատահարներից ապահովագրության առաջարկ (ԴՊ)",
-    objectLabel: "Ապահովագրվող աշխատակիցներ / Անձնակազմ",
-    amountLabel: "Ապահովագրական գումար 1 անձի համար",
-    tariffLabel: "ԴՊ սակագին",
-    premiumLabel: "Ընդհանուր ապահովագրավճար",
-    franchiseLabel: "Ֆրանշիզա (Չի կիրառվում)",
-    riskLabel: "Դժբախտ պատահարների ծածկույթներ (Մահ, Հաշմանդամություն, Բուժծախսեր)",
-  },
-  agro: {
-    title: "Գյուղատնտեսական (Ագրո) ապահովագրության առաջարկ",
-    objectLabel: "Ապահովագրվող մշակաբույս և այգետարածք",
-    amountLabel: "Բերքի ապահովագրական արժեք",
-    tariffLabel: "Ագրոապահովագրական սակագին",
-    premiumLabel: "Ապահովագրավճար (ներառյալ 50% սուբսիդիան)",
-    franchiseLabel: "Ոչ պայմանական ֆրանշիզա",
-    riskLabel: "Ագրոռիսկեր (Կարկուտ, Գարնանային ցրտահարություն, Հրդեհ)",
-  },
-  financial: {
-    title: "Ֆինանսական ռիսկերի և կանխավճարի երաշխիքի առաջարկ",
-    objectLabel: "Ապահովագրվող պայմանագիր / Ֆինանսական պարտավորություն",
-    amountLabel: "Երաշխիքի / Կանխավճարի գումար",
-    tariffLabel: "Երաշխիքային սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Չհատուցվող գումար (Առանց ֆրանշիզայի)",
-    riskLabel: "Ֆինանսական ռիսկեր և երաշխիքային պարտավորություններ",
-  },
-  aviation: {
-    title: "Ավիացիոն ռիսկերի և դրոնների (ԱԹՍ) ապահովագրության առաջարկ",
-    objectLabel: "Ապահովագրվող թռչող սարք (Hull) / Կոմերցիոն դրոն",
-    amountLabel: "Թռչող սարքի արժեք / TPL պատասխանատվության լիմիտ",
-    tariffLabel: "Ավիացիոն սակագին",
-    premiumLabel: "Ապահովագրավճար",
-    franchiseLabel: "Ավիացիոն ֆրանշիզա",
-    riskLabel: "Ավիացիոն ռիսկեր (Օդանավի վթար, Ավիացիոն TPL, Օդաչուների ԴՊ)",
-  },
-  bundle: {
-    title: "Կորպորատիվ համալիր (All-In-One) ապահովագրական առաջարկ",
-    objectLabel: "Համալիր կորպորատիվ փաթեթ (Գույք + TPL + ԴՊ + Բեռներ)",
-    amountLabel: "Համախառն ապահովագրական գումար",
-    tariffLabel: "Համալիր միջինացված սակագին",
-    premiumLabel: "Ընդհանուր համալիր ապահովագրավճար",
-    franchiseLabel: "Համակցված ֆրանշիզա",
-    riskLabel: "Կորպորատիվ համալիր փաթեթի ծածկույթներ",
-  },
+  property: { title: "Գույքի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող գույք", amountLabel: "Արժեք / ապահովագրական գումար", tariffLabel: "Տարեկան սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Գույքային ռիսկեր" },
+  mortgage: { title: "Հիփոթեքային վարկառուների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող օբյեկտ / վարկառու", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Հիփոթեքային ծածկույթներ" },
+  casco: { title: "ԿԱՍԿՈ ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող ավտոմեքենա", amountLabel: "Շուկայական արժեք / ապահովագրական գումար", tariffLabel: "Վերջնական սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "ԿԱՍԿՈ ծածկույթներ և ռիսկեր" },
+  health: { title: "Առողջության ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող անձինք / ծրագիր", amountLabel: "Ապահովագրական սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Բժշկական ծածկույթներ" },
+  travel: { title: "Ճանապարհորդության ապահովագրության առաջարկ", objectLabel: "Ճանապարհորդ / ուղևորություն", amountLabel: "Ծածկույթի սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "Ճանապարհորդական ծածկույթներ" },
+  cargo: { title: "Բեռների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող բեռ", amountLabel: "Բեռի արժեք / ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Բեռի ապահովագրական ռիսկեր" },
+  liability: { title: "Պատասխանատվության ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող գործունեություն / պատասխանատվություն", amountLabel: "Պատասխանատվության սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Պատասխանատվության ծածկույթներ" },
+  construction: { title: "Շինմոնտաժային ապահովագրության առաջարկ", objectLabel: "Շինարարական / շինմոնտաժային աշխատանքներ", amountLabel: "Աշխատանքների / ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Շինմոնտաժային ռիսկեր" },
+  accident: { title: "Դժբախտ պատահարների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող անձինք", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "Դժբախտ պատահարների ծածկույթներ" },
+  agro: { title: "Ագրոապահովագրության առաջարկ", objectLabel: "Ապահովագրվող մշակաբույս / հողատարածք", amountLabel: "Ապահովագրական արժեք", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Ագրոապահովագրական ռիսկեր" },
+  financial: { title: "Ֆինանսական ռիսկերի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող ֆինանսական պարտավորություն", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Ֆինանսական ռիսկեր" },
+  aviation: { title: "Ավիացիոն ռիսկերի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող օդանավ / ավիացիոն գործունեություն", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Ավիացիոն ռիսկեր" },
+  bundle: { title: "Կորպորատիվ համալիր ապահովագրական առաջարկ", objectLabel: "Ապահովագրական փաթեթ / օբյեկտներ", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Փաթեթում ներառված ծածկույթներ" },
 };
 
 function getProductLabels(type: InsuranceProductType, lang: QuotationLanguage = "hy") {
@@ -150,97 +43,26 @@ function getProductLabels(type: InsuranceProductType, lang: QuotationLanguage = 
   if (lang === "en") {
     return {
       title: `${type.toUpperCase()} Insurance Quotation Proposal`,
-      objectLabel: "Insured Object / Scope",
-      amountLabel: "Sum Insured / Limit of Indemnity",
+      objectLabel: "Insured Object / Details",
+      amountLabel: "Sum Insured / Limit",
       tariffLabel: "Annual Tariff Rate",
       premiumLabel: "Insurance Premium",
       franchiseLabel: "Deductible / Franchise",
-      riskLabel: "Insurance Coverage & Perils",
+      riskLabel: "Insurance Coverage & Risks",
     };
   }
   if (lang === "ru") {
     return {
       title: `Предложение по страхованию ${type.toUpperCase()}`,
-      objectLabel: "Объект страхования / Спецификация",
-      amountLabel: "Страховая сумма / Лимит ответственности",
+      objectLabel: "Объект страхования / Описание",
+      amountLabel: "Страховая сумма / Лимит",
       tariffLabel: "Страховой тариф",
       premiumLabel: "Страховая премия",
       franchiseLabel: "Франшиза / Невозмещаемая сумма",
-      riskLabel: "Покрываемые риски и страховое покрытие",
+      riskLabel: "Покрываемые риски и условия",
     };
   }
   return base;
-}
-export { getProductLabels };
-
-
-export function getLocalizedFranchise(proposal: QuotationProposal, lang: QuotationLanguage = "hy"): string {
-  const desc = proposal.franchiseDescription || "";
-  if (lang === "hy") {
-    if (desc) return desc;
-    if (proposal.franchiseAmount && proposal.franchiseAmount > 0) {
-      return `Ֆիքսված ֆրանշիզա՝ ${formatCurrency(proposal.franchiseAmount, proposal.currency)} (յուրաքանչյուր պատահարի համար)`;
-    }
-    return "0% (Առանց ֆրանշիզայի / Լրիվ ծածկույթ)";
-  }
-
-  // English localization
-  if (lang === "en") {
-    if (desc.includes("0%") || desc.includes("Առանց ֆրանշիզայի") || desc.includes("Անհատույց")) {
-      return "0% (Zero Deductible / Full Coverage)";
-    }
-    if (desc.includes("Ֆրանշիզայի կիսում")) {
-      return proposal.franchiseAmount && proposal.franchiseAmount > 0
-        ? `50% Reduced Deductible: ${formatCurrency(proposal.franchiseAmount, proposal.currency)}`
-        : "50% Reduced Deductible (Shared per CASCO terms)";
-    }
-    if (desc.includes("Մինիմալ ֆրանշիզա")) {
-      return proposal.franchiseAmount && proposal.franchiseAmount > 0
-        ? `Minimal Deductible: ${formatCurrency(proposal.franchiseAmount, proposal.currency)}`
-        : "Minimal Deductible (per policy conditions)";
-    }
-    if (proposal.franchiseAmount && proposal.franchiseAmount > 0) {
-      return `Fixed Deductible: ${formatCurrency(proposal.franchiseAmount, proposal.currency)} per event`;
-    }
-    if (desc.includes("Ստանդարտ") || desc.includes("անփոփոխ")) {
-      return "Standard Deductible: 0.5% (per CASCO policy conditions)";
-    }
-    if (desc.includes("ապահովագրական գումարից")) {
-      const pct = desc.match(/\d+(\.\d+)?%/)?.[0] || "";
-      return `${pct} of sum insured (per occurrence)`;
-    }
-    return desc || "Per policy terms";
-  }
-
-  // Russian localization
-  if (lang === "ru") {
-    if (desc.includes("0%") || desc.includes("Առանց ֆրանշիզայի") || desc.includes("Անհատույց")) {
-      return "0% (Без франшизы / Полное покрытие)";
-    }
-    if (desc.includes("Ֆրանշիզայի կիսում")) {
-      return proposal.franchiseAmount && proposal.franchiseAmount > 0
-        ? `Франшиза с разделением (50%): ${formatCurrency(proposal.franchiseAmount, proposal.currency)}`
-        : "Уменьшенная на 50% франшиза (согласно условиям КАСКО)";
-    }
-    if (desc.includes("Մինիմալ ֆրանշիզա")) {
-      return proposal.franchiseAmount && proposal.franchiseAmount > 0
-        ? `Минимальная франшиза: ${formatCurrency(proposal.franchiseAmount, proposal.currency)}`
-        : "Минимальная безусловная франшиза";
-    }
-    if (proposal.franchiseAmount && proposal.franchiseAmount > 0) {
-      return `Фиксированная франшиза: ${formatCurrency(proposal.franchiseAmount, proposal.currency)} за каждый случай`;
-    }
-    if (desc.includes("Ստանդարտ") || desc.includes("անփոփոխ")) {
-      return "Стандартная франшиза: 0.5% (согласно условиям КАСКО)";
-    }
-    if (desc.includes("ապահովագրական գումարից")) {
-      const pct = desc.match(/\d+(\.\d+)?%/)?.[0] || "";
-      return `${pct} от страховой суммы (за каждый случай)`;
-    }
-    return desc || "Согласно условиям договора";
-  }
-
-  return desc || "—";
 }
 
 function detailsRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"): string {
@@ -280,21 +102,10 @@ function detailsRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"
       push(isEn ? "Travelers Count" : isRu ? "Количество путешественников" : "Ճանապարհորդների քանակ", d.travelerCount);
       break;
     case "cargo":
-      push(isEn ? "Clause Type" : isRu ? "Тип оговорки" : "Կլաուզա", d.clauseType);
+      push(isEn ? "Clause Type" : isRu ? "Тиպ оговорки" : "Կլաուզա", d.clauseType);
       push(isEn ? "Country of Origin" : isRu ? "Страна отправления" : "Ծագման երկիր", d.originCountry);
       push(isEn ? "Destination Country" : isRu ? "Страна назначения" : "Նպատակակետ", d.destinationCountry);
       push(isEn ? "Transport Mode" : isRu ? "Вид транспорта" : "Փոխադրման եղանակ", d.transportMode);
-      break;
-    case "property":
-      push(isEn ? "Insurance Package" : isRu ? "Страховой пакет" : "Ապահովագրական փաթեթ", d.packageName || d.packageId);
-      push(isEn ? "Usage / Rental Mode" : isRu ? "Режим использования" : "Շահագործման / Վարձակալության ձև", d.rentalType === "short_term_rental" ? (isEn ? "Short-term / Airbnb" : isRu ? "Посуточная аренда / Airbnb" : "Օրավարձով / Կարճաժամկետ (Airbnb/Booking)") : d.rentalType === "long_term_rental" ? (isEn ? "Long-term rental" : isRu ? "Долгосрочная аренда" : "Երկարաժամկետ վարձակալություն") : (isEn ? "Owner occupied / Standard" : isRu ? "Собственное проживание" : "Սեփականատիրոջ բնակություն / Ստանդարտ"));
-      push(isEn ? "Booking Platform" : isRu ? "Платформа бронирования" : "Վարձակալական հարթակ", d.platform !== "—" ? d.platform : undefined);
-      if (d.hasGuestDamage && d.guestDamageSumInsured > 0) {
-        push(isEn ? "Guest Damage Limit" : isRu ? "Лимит ущерба от гостей" : "Հյուրերի պատճառած վնասի լիմիտ", formatCurrency(d.guestDamageSumInsured, proposal.currency));
-      }
-      if (d.liabilitySumInsured > 0) {
-        push(isEn ? "Third Party Liability" : isRu ? "Ответственность перед 3-ми лицами" : "3-րդ անձանց պատասխանատվություն", formatCurrency(d.liabilitySumInsured, proposal.currency));
-      }
       break;
     default:
       break;
@@ -303,26 +114,22 @@ function detailsRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"
 }
 
 function breakdownRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"): string {
-  const franchiseText = getLocalizedFranchise(proposal, lang);
   if (proposal.bundleBreakdown?.length) {
     return proposal.bundleBreakdown.map((r) => `<tr><td class="blue-cell">${esc(r.productName)}</td><td class="num">${esc(formatCurrency(r.sumInsured, proposal.currency))}</td><td class="center">${esc(formatPercent(r.tariff))}</td><td class="num">${esc(formatCurrency(r.premium, proposal.currency))}</td><td>${esc(r.details)}</td></tr>`).join("");
   }
   if (proposal.propertyBreakdown?.length) {
-    return proposal.propertyBreakdown.map((r) => `<tr><td class="blue-cell">${esc(r.item)}</td><td class="num">${esc(formatCurrency(r.value, proposal.currency))}</td><td class="center">${esc(formatPercent(r.tariff))}</td><td class="num">${esc(formatCurrency(r.premium, proposal.currency))}</td><td>${esc(r.franchise || franchiseText)}</td></tr>`).join("");
+    return proposal.propertyBreakdown.map((r) => `<tr><td class="blue-cell">${esc(r.item)}</td><td class="num">${esc(formatCurrency(r.value, proposal.currency))}</td><td class="center">${esc(formatPercent(r.tariff))}</td><td class="num">${esc(formatCurrency(r.premium, proposal.currency))}</td><td>${esc(proposal.franchiseDescription || "—")}</td></tr>`).join("");
   }
-  return `<tr><td class="blue-cell">${esc(proposal.objectDescription || proposal.productNameArm)}</td><td class="num">${esc(formatCurrency(proposal.totalSumInsured, proposal.currency))}</td><td class="center">${esc(formatPercent(proposal.finalTariff))}</td><td class="num">${esc(formatCurrency(proposal.annualPremium, proposal.currency))}</td><td>${esc(franchiseText)}</td></tr>`;
+  return `<tr><td class="blue-cell">${esc(proposal.objectDescription || proposal.productNameArm)}</td><td class="num">${esc(formatCurrency(proposal.totalSumInsured, proposal.currency))}</td><td class="center">${esc(formatPercent(proposal.finalTariff))}</td><td class="num">${esc(formatCurrency(proposal.annualPremium, proposal.currency))}</td><td>${esc(proposal.franchiseDescription || "—")}</td></tr>`;
 }
 
 const financialTable = (proposal: QuotationProposal, title: string, lang: QuotationLanguage = "hy") => {
-  const defaultLabels = getProductLabels(proposal.type);
-  const labels = lang === "hy" ? defaultLabels : getProductLabels(proposal.type, lang);
+  const labels = getProductLabels(proposal.type, lang);
   const totalText = lang === "en" ? "Total" : lang === "ru" ? "Итого" : "Ընդամենը";
-  const franchiseText = getLocalizedFranchise(proposal, lang);
-
   return `<h2 class="center-title financial-title">${esc(title)}</h2>
   <table class="offer-table"><thead><tr>
     <th>${esc(labels.objectLabel)}</th><th>${esc(labels.amountLabel)}</th><th>${esc(labels.tariffLabel)}</th><th>${esc(labels.premiumLabel)}</th><th>${esc(labels.franchiseLabel)}</th>
-  </tr></thead><tbody>${breakdownRows(proposal, lang)}<tr class="total-row"><td class="blue-cell">${totalText}</td><td class="num">${esc(formatCurrency(proposal.totalSumInsured, proposal.currency))}</td><td></td><td class="num">${esc(formatCurrency(proposal.annualPremium, proposal.currency))}</td><td>${esc(franchiseText)}</td></tr></tbody></table>`;
+  </tr></thead><tbody>${breakdownRows(proposal, lang)}<tr class="total-row"><td class="blue-cell">${totalText}</td><td class="num">${esc(formatCurrency(proposal.totalSumInsured, proposal.currency))}</td><td></td><td class="num">${esc(formatCurrency(proposal.annualPremium, proposal.currency))}</td><td>${esc(proposal.franchiseDescription || "—")}</td></tr></tbody></table>`;
 };
 
 export function quotationTemplateCss() { return `
@@ -412,93 +219,26 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
   };
 
   const labels = getProductLabels(proposal.type, lang);
-  const localizedTitles = PRODUCT_TITLES_LOCALIZED[proposal.type];
-  const officialCond = SIL_PRODUCT_CONDITIONS[proposal.type] || SIL_PRODUCT_CONDITIONS.property;
-  const rawTitle = proposal.productNameArm || officialCond?.titleArm;
+  const rawTitle = proposal.productNameArm || labels.title;
   const product = isEn
-    ? (localizedTitles?.en || `${proposal.type.toUpperCase()} Insurance Quotation`)
+    ? proposal.type.toUpperCase() + " Insurance Proposal"
     : isRu
-    ? (localizedTitles?.ru || `Коммерческое предложение по страхованию ${proposal.type.toUpperCase()}`)
-    : (rawTitle || localizedTitles?.hy || "Գնառաջարկ");
+    ? "Предложение по страхованию " + proposal.type.toUpperCase()
+    : rawTitle;
 
-  const defaultPerilsSource = officialCond?.coveredPerils?.length
-    ? officialCond.coveredPerils.map((p) => `${p.name}: ${p.desc}`)
-    : [isEn ? "Standard perils per SIL Insurance policy conditions." : isRu ? "Стандартные риски согласно условиям страхования." : "Ռիսկերի և ծածկույթների վերջնական ցանկը սահմանվում է ընտրված պրոդուկտի գործող պայմաններով։"];
-
-  const rawPerils = proposal.coveredPerilsList?.length
+  const perils = proposal.coveredPerilsList?.length
     ? proposal.coveredPerilsList
-    : defaultPerilsSource;
-
-  const perils = isEn || isRu
-    ? rawPerils.map((p) => translatePhraseLocally(p, lang))
-    : rawPerils;
-
-  const officialTermsHtml = `
-    <section class="quote-page">
-      <h2 class="section-heading">${isEn ? "OFFICIAL PRODUCT TERMS & CONDITIONS" : isRu ? "ОФИЦИАЛЬНЫЕ УСЛОВИЯ И ПРАВИЛА ПРОДУКТА" : "ՊՐՈԴՈՒԿՏԻ ՊԱՇՏՈՆԱԿԱՆ ՊԱՅՄԱՆՆԵՐ ԵՎ ԿԱՆՈՆՆԵՐ"}</h2>
-      <div style="font-size: 11px; color: #00235B; margin-bottom: 10px; font-weight: 800; text-transform: uppercase; text-align: center;">
-        ${esc(officialCond.sourceDocName)}
-      </div>
-      <div class="body-text" style="font-size: 11px; line-height: 1.4; margin-bottom: 12px; background: #f8fafc; padding: 10px 14px; border-left: 3px solid #00235B; border-radius: 4px;">
-        ${esc(officialCond.summary)}
-      </div>
-
-      <h3 style="font-size: 12px; font-weight: 800; margin: 10px 0 4px; text-transform: uppercase; color: #00235B;">
-        ${isEn ? "1. Covered Perils & Risks" : isRu ? "1. Покрываемые риски" : "1. Ապահովագրական ռիսկեր և ծածկույթներ (կոնկրետ պրոդուկտի բառապաշարով)"}
-      </h3>
-      <ul class="template-list" style="margin: 0 0 8px 16px; font-size: 11px; line-height: 1.35;">
-        ${officialCond.coveredPerils.map((p) => `<li><strong>${esc(p.name)}:</strong> ${esc(p.desc)}</li>`).join("")}
-      </ul>
-
-      <h3 style="font-size: 12px; font-weight: 800; margin: 10px 0 4px; text-transform: uppercase; color: #00235B;">
-        ${isEn ? "2. General Exclusions" : isRu ? "2. Исключения из страхования" : "2. Հիմնական բացառություններ ըստ պրոդուկտի կանոնների"}
-      </h3>
-      <ul class="template-list" style="margin: 0 0 8px 16px; font-size: 11px; line-height: 1.35;">
-        ${officialCond.exclusions.map((e) => `<li><strong>${esc(e.name)}:</strong> ${esc(e.reason)}</li>`).join("")}
-      </ul>
-
-      <h3 style="font-size: 12px; font-weight: 800; margin: 10px 0 4px; text-transform: uppercase; color: #00235B;">
-        ${isEn ? "3. Settlement Basis & Franchise" : isRu ? "3. Урегулирование и франшиза" : "3. Հատուցման հիմքեր, ֆրանշիզա և պահանջվող փաստաթղթեր"}
-      </h3>
-      <table class="general-table" style="font-size: 11px;"><tbody>
-        <tr><td>${isEn ? "Franchise Terms" : isRu ? "Условия франшизы" : "Ֆրանշիզայի պայմաններ"}</td><td>${esc(officialCond.settlementAndFranchise.typicalFranchise)}</td></tr>
-        <tr><td>${isEn ? "Settlement Basis" : isRu ? "Порядок урегулирования" : "Հատուցման հիմքեր"}</td><td>${esc(officialCond.settlementAndFranchise.settlementBasis)}</td></tr>
-        <tr><td>${isEn ? "Notice Period" : isRu ? "Срок уведомления" : "Ծանուցման ժամկետ"}</td><td>${esc(officialCond.settlementAndFranchise.noticePeriodHours)} ${isEn ? "hours" : isRu ? "часов" : "ժամ"}</td></tr>
-        <tr><td>${isEn ? "Required Claim Docs" : isRu ? "Необходимые документы" : "Պահանջվող փաստաթղթեր"}</td><td>${officialCond.settlementAndFranchise.claimDocsRequired.join("; ")}</td></tr>
-      </tbody></table>
-    </section>
-  `;
-
-  const rawConditions = proposal.specialConditions?.length
+    : [isEn ? "Standard perils per SIL Insurance policy conditions." : isRu ? "Стандартные риски согласно условиям страхования." : "Ռիսկերի և ծածկույթների վերջնական ցանկը սահմանվում է ընտրված պրոդուկտի գործող պայմաններով։"];
+  const conditions = proposal.specialConditions?.length
     ? proposal.specialConditions
     : [isEn ? "Quotation is valid for 30 days based on supplied data." : isRu ? "Предложение действительно в течение 30 дней." : "Գնառաջարկը ներկայացվում է մուտքագրված տվյալների և ընտրված պրոդուկտի գործող պայմանների հիման վրա։"];
-  const conditions = isEn || isRu
-    ? rawConditions.map((c) => translatePhraseLocally(c, lang))
-    : rawConditions;
-
-  const rawObject = proposal.objectDescription || "—";
-  const object = isEn || isRu ? translatePhraseLocally(rawObject, lang) : rawObject;
-
-  const rawClient = proposal.clientName || "—";
-  const client = isEn || isRu 
-    ? translatePhraseLocally(rawClient, lang) 
-    : transliterateLatinToArmenian(rawClient);
-
-  const rawPayment = proposal.paymentTerms || "—";
-  const payment = isEn || isRu ? translatePhraseLocally(rawPayment, lang) : rawPayment;
-
-  const franchise = getLocalizedFranchise(proposal, lang);
-  const rawBeneficiary = proposal.beneficiaryDetails || (isEn ? "N/A" : isRu ? "Не применяется" : "Չի կիրառվում");
-  const beneficiary = isEn || isRu ? translatePhraseLocally(rawBeneficiary, lang) : rawBeneficiary;
-
-  const rawTerritory = proposal.productSpecificDetails?.territory || (isEn ? "Republic of Armenia" : isRu ? "Республика Армения" : "Ըստ ընտրված պրոդուկտի և պայմանագրի");
-  const territory = isEn || isRu ? translatePhraseLocally(rawTerritory, lang) : rawTerritory;
-
-  const rawPeriod = proposal.productSpecificDetails?.period || (isEn ? "1 Year (12 Months)" : isRu ? "1 Год (12 Месяцев)" : "Ըստ պայմանագրի");
-  const period = isEn || isRu ? translatePhraseLocally(rawPeriod, lang) : rawPeriod;
-
-  const agentTitle = isEn || isRu ? translatePhraseLocally(proposal.agentTitle, lang) : proposal.agentTitle;
-  const agentName = isEn || isRu ? translatePhraseLocally(proposal.agentName, lang) : proposal.agentName;
+  const object = proposal.objectDescription || "—";
+  const client = proposal.clientName || "—";
+  const payment = proposal.paymentTerms || "—";
+  const franchise = proposal.franchiseDescription || "—";
+  const beneficiary = proposal.beneficiaryDetails || (isEn ? "N/A" : isRu ? "Не применяется" : "Չի կիրառվում");
+  const territory = proposal.productSpecificDetails?.territory || (isEn ? "Republic of Armenia" : isRu ? "Республика Армения" : "Ըստ ընտրված պրոդուկտի և պայմանագրի");
+  const period = proposal.productSpecificDetails?.period || (isEn ? "1 Year (12 Months)" : isRu ? "1 Год (12 Месяцев)" : "Ըստ պայմանագրի");
 
   const row = (label: string, value: unknown) => `<tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>`;
 
@@ -517,81 +257,6 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
   ].join("");
 
   const detailRows = detailsRows(proposal, lang);
-
-  let customTemplateHtml = "";
-  const rawCustom =
-    proposal.customTemplateText ||
-    (typeof window !== "undefined" ? localStorage.getItem(`sil-custom-template-${proposal.type}`) : "");
-
-  if (rawCustom && rawCustom.trim()) {
-    let textToProcess = rawCustom;
-    if (lang !== "hy" && !proposal.customTemplateText) {
-      textToProcess = textToProcess
-        .split("\n")
-        .map((l) => translatePhraseLocally(l, lang))
-        .join("\n");
-    }
-
-    const processed = textToProcess
-      .replace(/\[Client Name\]/gi, client)
-      .replace(/\[Sum Insured\]/gi, formatCurrency(proposal.totalSumInsured, proposal.currency))
-      .replace(/\[Premium\]/gi, formatCurrency(proposal.annualPremium, proposal.currency))
-      .replace(/\[Annual Premium\]/gi, formatCurrency(proposal.annualPremium, proposal.currency))
-      .replace(/\[Tariff Rate\]/gi, formatPercent(proposal.finalTariff))
-      .replace(/\[Tariff\]/gi, formatPercent(proposal.finalTariff))
-      .replace(/\[Franchise Description\]/gi, franchise)
-      .replace(/\[Quotation Number\]/gi, proposal.quotationNumber || "—");
-
-    const lines = processed.split("\n");
-    let formattedBody = "";
-    let inList = false;
-
-    for (const line of lines) {
-      let trimmed = line.trim();
-      if (!trimmed) {
-        if (inList) {
-          formattedBody += `</ul>`;
-          inList = false;
-        }
-        continue;
-      }
-
-      if (lang !== "hy") {
-        trimmed = translatePhraseLocally(trimmed, lang);
-      }
-
-      if (/^\d+\.\s+/.test(trimmed) || (trimmed.toUpperCase() === trimmed && trimmed.length > 4 && !trimmed.startsWith("-"))) {
-        if (inList) {
-          formattedBody += `</ul>`;
-          inList = false;
-        }
-        formattedBody += `<h3 style="font-size: 13px; font-weight: 800; margin: 14px 0 6px; text-transform: uppercase; color: #00235B;">${esc(trimmed)}</h3>`;
-      } else if (trimmed.startsWith("-") || trimmed.startsWith("•")) {
-        if (!inList) {
-          formattedBody += `<ul class="template-list" style="margin: 4px 0 8px 16px;">`;
-          inList = true;
-        }
-        formattedBody += `<li>${esc(trimmed.replace(/^[-•]\s*/, ""))}</li>`;
-      } else {
-        if (inList) {
-          formattedBody += `</ul>`;
-          inList = false;
-        }
-        formattedBody += `<p style="margin: 0 0 6px; font-size: 12px; line-height: 1.45; text-align: justify;">${esc(trimmed)}</p>`;
-      }
-    }
-    if (inList) {
-      formattedBody += `</ul>`;
-    }
-
-    customTemplateHtml = `
-    <section class="quote-page">
-      <h2 class="section-heading">${isEn ? "Special Template Conditions & Policy Clauses" : isRu ? "Индивидуальные шаблонные условия и оговорки" : "Անհատական Ձևանմուշային Պայմաններ"}</h2>
-      <div class="body-text" style="padding-top: 6px;">
-        ${formattedBody}
-      </div>
-    </section>`;
-  }
 
   return `
   <style>${quotationTemplateCss()}</style>
@@ -627,32 +292,7 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
       </tbody></table>
     </section>
 
-    ${customTemplateHtml}
-
-    ${officialTermsHtml}
-
-    ${proposal.aiAnalysisText ? `
     <section class="quote-page">
-      <h2 class="section-heading">${isEn ? "UNDERWRITING & RISK ASSESSMENT OPINION" : isRu ? "АНДЕРРАЙТИНГОВОЕ И ЭКСПЕРТНОЕ ЗАКЛЮЧЕНИЕ" : "ԱՆԴԵՌՌԱՅԹԻՆԳԱՅԻՆ ԵՎ ՌԻՍԿԵՐԻ ԳՆԱՀԱՏՄԱՆ ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ"}</h2>
-      <div class="body-text" style="font-size: 11.5px; line-height: 1.5; color: #222; margin-bottom: 16px; white-space: pre-line; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px;">
-        ${esc(proposal.aiAnalysisText)}
-      </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        ${isEn ? "* Expert underwriting analysis generated based on SIL Insurance CJSC underwriting guidelines and risk underwriting matrix." : isRu ? "* Экспертное андеррайтинговое заключение сформировано на основе правил и матрицы рисков СПАО «СИЛ ИНШУРАНС»." : "* Փորձագիտական եզրակացությունը կազմված է «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի անդեռռայթինգային կանոնների և ռիսկերի գնահատման չափանիշների հիման վրա։"}
-      </div>
-    </section>` : ""}
-
-    <section class="quote-page">
-      <h2 class="section-heading">${isEn ? "BRIEF SERVICE INFORMATION" : isRu ? "КРАТКАЯ ИНФОРМАЦИЯ ОБ УСЛУГЕ" : "ՀԱԿԻՐՃ ՏԵՂԵԿՈՒԹՅՈՒՆՆԵՐ ԾԱՌԱՅՈՒԹՅԱՆ ՄԱՍԻՆ"}</h2>
-      <div class="body-text" style="font-size: 11.5px; line-height: 1.5; color: #333; margin-bottom: 16px;">
-        <p>${isEn ? "SIL Insurance CJSC provides comprehensive risk protection with dedicated 24/7 client support and rapid claims resolution throughout the Republic of Armenia and internationally according to policy terms." : isRu ? "ЗАО СПАО «СИЛ ИНШУРАНС» обеспечивает надежную страховую защиту с круглосуточной поддержкой клиентов и оперативным урегулированием страховых случаев." : "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ն ապահովում է հուսալի և բազմակողմանի ապահովագրական պաշտպանություն, շուրջօրյա 24/7 աջակցություն և վնասների արագ կարգավորում ՀՀ ողջ տարածքում և միջազգային համաձայնագրերով սահմանված կարգով։"}</p>
-      </div>
-
-      <h2 class="section-heading">${isEn ? "INSURANCE CLAIM INDEMNIFICATION" : isRu ? "ВЫПЛАТА СТРАХОВОГО ВОЗМЕЩЕНИЯ" : "Ապահովագրական հատուցման վճարումը"}</h2>
-      <div class="body-text" style="font-size: 11.5px; line-height: 1.5; color: #333; margin-bottom: 16px;">
-        <p>${isEn ? "Insurance compensation is processed and paid within standard business days following receipt and verification of all required documentation and expert assessment." : isRu ? "Выплата страхового возмещения производится в установленные договором сроки после предоставления всех необходимых документов и составления акта о страховом случае." : "Ապահովագրական հատուցման վճարումն իրականացվում է ապահովագրական պատահարի վերաբերյալ բոլոր անհրաժեշտ փաստաթղթերի ներկայացումից և փորձագիտական ակտի կազմումից հետո՝ սահմանված ժամկետներում և կարգով։"}</p>
-      </div>
-
       <h2 class="section-heading">${t.specialConditions}</h2>
       ${list(conditions, true)}
       <h2 class="section-heading">${t.importantNote}</h2>
@@ -660,8 +300,7 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
         <p>${isEn ? "This document is a formal insurance quotation issued by SIL Insurance CJSC." : isRu ? "Настоящий документ является официальным коммерческим предложением ЗАО СПАО «СИЛ ИНШУРАНС»." : "Սույն գնառաջարկը տեղեկատվական և նախնական առաջարկ է և ինքնին չի հանդիսանում ապահովագրական պայմանագիր։"}</p>
       </div>
       <div class="signature">
-
-        <div><strong>${t.silRepresentative}</strong><br/>${esc(agentName)}<br/><span class="muted">${esc(agentTitle)}</span><div class="line">${isEn ? "Signature / Stamp" : isRu ? "Подпись / Печать" : "Ստորագրություն / Կնիք (Կ․Տ․)"}</div></div>
+        <div><strong>${t.silRepresentative}</strong><br/>${esc(proposal.agentName)}<br/><span class="muted">${esc(proposal.agentTitle)}</span><div class="line">${isEn ? "Signature / Stamp" : isRu ? "Подпись / Печать" : "Ստորագրություն / Կնիք (Կ․Տ․)"}</div></div>
         <div><strong>${t.clientSignature}</strong><br/>${esc(client)}<br/><span class="muted">${isEn ? "Read and accepted" : isRu ? "Ознакомлен" : "Ծանոթացել եմ գնառաջարկի պայմաններին"}</span><div class="line">${isEn ? "Signature" : isRu ? "Подпись" : "Ստորագրություն"}</div></div>
       </div>
       <div class="footer">SIL Insurance CJSC • Yerevan, Arami 3,5 • Tel: (+374 60) 54-00-00 • info@silinsurance.am • www.silinsurance.am</div>

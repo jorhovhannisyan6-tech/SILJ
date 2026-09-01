@@ -26,48 +26,13 @@ import {
   Home,
   HeartPulse,
   Plane,
-  Download,
-  LayoutGrid,
-  List,
-  Edit2,
-  Trash2,
-  Filter,
-  CheckSquare,
-  Square,
-  MessageCircle,
 } from "lucide-react";
 import { QuotationProposal } from "../../types";
 import {
   getClientRenewals,
-  fetchClientRenewals,
   updateClientRenewalStatus,
-  updateClientRenewal,
-  deleteClientRenewal,
-  deleteMultipleClientRenewals,
-  addClientRenewal,
   ClientRenewalLead,
 } from "../../utils/clientRenewalStore";
-import { LeadEditModal } from "./LeadEditModal";
-import { LeadKanbanBoard } from "./LeadKanbanBoard";
-
-const exportCSV = (filename: string, data: any[]) => {
-  if (!data || !data.length) return;
-  const keys = Object.keys(data[0]);
-  const csv = [
-    keys.join(","),
-    ...data.map((row) =>
-      keys
-        .map((k) => `"${String(row[k] ?? "").replace(/"/g, '""')}"`)
-        .join(",")
-    ),
-  ].join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-};
 
 export interface PolicyRenewalItem {
   id: string;
@@ -164,21 +129,15 @@ const DEFAULT_RENEWAL_ITEMS: PolicyRenewalItem[] = [
 
 export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) => {
   const [activeTabSection, setActiveTabSection] = useState<"leads" | "renewals">("leads");
-  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [clientLeads, setClientLeads] = useState<ClientRenewalLead[]>([]);
   const [items, setItems] = useState<PolicyRenewalItem[]>(DEFAULT_RENEWAL_ITEMS);
   const [activeFilter, setActiveFilter] = useState<string>("all");
-  const [productFilter, setProductFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItemForSms, setSelectedItemForSms] = useState<{ name: string; phone: string; text: string } | null>(null);
   const [copiedSms, setCopiedSms] = useState(false);
 
-  // Edit / Add Modal State
-  const [editingLead, setEditingLead] = useState<ClientRenewalLead | null | undefined>(undefined); // undefined: modal closed, null: add new, object: edit existing
-  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
-
-  const loadLeadsFromStore = async () => {
-    const leads = await fetchClientRenewals();
+  const loadLeadsFromStore = () => {
+    const leads = getClientRenewals();
     setClientLeads(leads);
   };
 
@@ -189,16 +148,11 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
       loadLeadsFromStore();
     };
 
-    const interval = setInterval(() => {
-      loadLeadsFromStore();
-    }, 4000);
-
     if (typeof window !== "undefined") {
       window.addEventListener("sil-lead-updated", handleUpdate);
       window.addEventListener("storage", handleUpdate);
     }
     return () => {
-      clearInterval(interval);
       if (typeof window !== "undefined") {
         window.removeEventListener("sil-lead-updated", handleUpdate);
         window.removeEventListener("storage", handleUpdate);
@@ -207,86 +161,28 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
   }, []);
 
   const pendingLeadsCount = clientLeads.filter((l) => l.status === "pending").length;
-  const totalPipelineValue = clientLeads.reduce((sum, l) => sum + (l.estimatedPremium || 0), 0);
-  const wonDealsCount = clientLeads.filter((l) => l.status === "closed").length;
 
   const filteredLeads = clientLeads.filter((lead) => {
-    const matchesStatus = activeFilter === "all" || lead.status === activeFilter;
-    const matchesProduct = productFilter === "all" || lead.productType === productFilter;
-    const query = searchQuery.toLowerCase();
+    const matchesFilter = activeFilter === "all" || lead.status === activeFilter;
     const matchesSearch =
-      lead.clientName.toLowerCase().includes(query) ||
-      lead.phone.includes(query) ||
-      (lead.policyNumber && lead.policyNumber.toLowerCase().includes(query)) ||
-      (lead.notes && lead.notes.toLowerCase().includes(query)) ||
-      (lead.vehicleOrPropertyDetails && lead.vehicleOrPropertyDetails.toLowerCase().includes(query));
-    return matchesStatus && matchesProduct && matchesSearch;
+      lead.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lead.phone.includes(searchQuery) ||
+      (lead.notes && lead.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesFilter && matchesSearch;
   });
 
   const filteredItems = items.filter((item) => {
     const matchesFilter = activeFilter === "all" || item.status === activeFilter;
-    const query = searchQuery.toLowerCase();
     const matchesSearch =
-      item.clientName.toLowerCase().includes(query) ||
-      item.policyNumber.toLowerCase().includes(query) ||
-      item.phone.includes(query);
+      item.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.policyNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.phone.includes(searchQuery);
     return matchesFilter && matchesSearch;
   });
 
-  const handleLeadStatusChange = async (id: string, newStatus: ClientRenewalLead["status"]) => {
-    await updateClientRenewalStatus(id, newStatus);
+  const handleLeadStatusChange = (id: string, newStatus: ClientRenewalLead["status"]) => {
+    updateClientRenewalStatus(id, newStatus);
     loadLeadsFromStore();
-  };
-
-  const handleSaveLead = async (leadData: Partial<ClientRenewalLead>) => {
-    if (editingLead && editingLead.id) {
-      // Update existing lead
-      await updateClientRenewal(editingLead.id, leadData);
-    } else {
-      // Add new lead
-      await addClientRenewal(leadData as any);
-    }
-    await loadLeadsFromStore();
-    setEditingLead(undefined);
-  };
-
-  const handleDeleteLead = async (id: string) => {
-    if (window.confirm("Վստա՞հ եք, որ ցանկանում եք ջնջել այս հայտը։ Գործողությունն անդառնալի է։")) {
-      await deleteClientRenewal(id);
-      setSelectedLeadIds((prev) => prev.filter((i) => i !== id));
-      await loadLeadsFromStore();
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!selectedLeadIds.length) return;
-    if (window.confirm(`Վստա՞հ եք, որ ցանկանում եք ջնջել նշված ${selectedLeadIds.length} հայտերը։`)) {
-      await deleteMultipleClientRenewals(selectedLeadIds);
-      setSelectedLeadIds([]);
-      await loadLeadsFromStore();
-    }
-  };
-
-  const handleToggleSelectLead = (id: string) => {
-    setSelectedLeadIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllLeads = () => {
-    if (selectedLeadIds.length === filteredLeads.length) {
-      setSelectedLeadIds([]);
-    } else {
-      setSelectedLeadIds(filteredLeads.map((l) => l.id));
-    }
-  };
-
-  const handleWhatsAppLead = (lead: ClientRenewalLead) => {
-    const text = encodeURIComponent(
-      `Բարև Ձեզ, հարգելի ${lead.clientName}։ Շնորհակալություն «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» դիմելու համար։ Ձեր ${lead.productType.toUpperCase()} ապահովագրության հայտը մշակվել է։ Ցանկանո՞ւմ եք ստանալ գնառաջարկը։`
-    );
-    const cleanPhone = lead.phone.replace(/[^0-9]/g, "");
-    window.open(`https://wa.me/${cleanPhone}?text=${text}`, "_blank");
   };
 
   const generateProposalFromLead = (lead: ClientRenewalLead) => {
@@ -400,7 +296,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Top Banner Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-[#061A40] to-slate-900 border border-slate-800 rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-slate-900 via-[#061A40] to-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1">
@@ -417,11 +313,11 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             Հաճախորդների CRM և Հայտերի Կառավարման Համակարգ
           </h2>
           <p className="text-xs text-slate-300 mt-1">
-            Օնլայն արագ հայտեր, Kanban Pipeline, խմբագրում, ջնջում և 1-Click գնառաջարկների գեներացում
+            Օնլայն արագ հայտեր, պայմանագրերի երկարաձգումներ և 1-Click գնառաջարկների գեներացում
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
@@ -429,62 +325,22 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
               placeholder="Որոնել հաճախորդ, հեռախոս, հայտ․․․"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2 w-56 sm:w-64 focus:outline-none focus:border-cyan-500"
+              className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2 w-64 focus:outline-none focus:border-cyan-500"
             />
           </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              exportCSV(
-                activeTabSection === "leads" ? "sil_client_leads.csv" : "sil_client_renewals.csv",
-                activeTabSection === "leads" ? filteredLeads : filteredItems
-              )
-            }
-            className="p-2 rounded-xl bg-emerald-900/40 hover:bg-emerald-800 text-emerald-400 border border-emerald-700 transition cursor-pointer flex items-center gap-1.5 font-bold text-xs"
-            title="Ներբեռնել Excel / CSV"
-          >
-            <Download size={15} /> <span className="hidden sm:inline">Excel</span>
-          </button>
-
           <button
             type="button"
             onClick={loadLeadsFromStore}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
             title="Թարմացնել ցանկը"
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={16} />
           </button>
         </div>
       </div>
 
-      {/* KPI Metrics Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Ընդհանուր Հայտեր</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{clientLeads.length}</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Նոր / Չմշակված</div>
-          <div className="text-2xl font-black text-amber-600 mt-1">{pendingLeadsCount}</div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Pipeline Ծավալ</div>
-          <div className="text-2xl font-black text-blue-900 mt-1">
-            {(totalPipelineValue / 1000000).toFixed(1)}M ֏
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Կնքված Գործարքներ</div>
-          <div className="text-2xl font-black text-emerald-600 mt-1">{wonDealsCount}</div>
-        </div>
-      </div>
-
       {/* Main Mode Tabs: Express Client Leads vs Policy Renewals */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -499,7 +355,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             }`}
           >
             <Zap className="w-4 h-4 text-amber-400" />
-            <span>⚡ Հաճախորդների Հայտեր (CRM Pipeline)</span>
+            <span>⚡ Հաճախորդների Արագ Հայտեր (Express Leads)</span>
             <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-xs font-black">
               {clientLeads.length}
             </span>
@@ -524,325 +380,177 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             </span>
           </button>
         </div>
-
-        {activeTabSection === "leads" && (
-          <div className="flex items-center gap-2">
-            {/* View Switcher: Kanban vs Table */}
-            <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setViewMode("kanban")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  viewMode === "kanban" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <LayoutGrid size={14} />
-                <span>Kanban</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("table")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  viewMode === "table" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <List size={14} />
-                <span>Աղյուսակ</span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setEditingLead(null)}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
-            >
-              <Plus size={16} /> Ավելացնել Հայտ
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* VIEW SECTION 1: CRM LEADS */}
+      {/* VIEW SECTION 1: EXPRESS LEADS */}
       {activeTabSection === "leads" && (
         <div className="space-y-4">
-          {/* Sub-Filters and Bulk Action Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Product Filter */}
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 mr-2">
-                <Filter size={14} className="text-slate-400" />
-                <select
-                  value={productFilter}
-                  onChange={(e) => setProductFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 cursor-pointer focus:outline-none"
-                >
-                  <option value="all">Բոլոր Պրոդուկտները</option>
-                  <option value="casco">ԿԱՍԿՈ</option>
-                  <option value="property">Գույք</option>
-                  <option value="mortgage">Հիփոթեք</option>
-                  <option value="health">Առողջություն</option>
-                  <option value="travel">Ճամփորդություն</option>
-                </select>
-              </div>
-
-              {/* Status Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter("all")}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                    activeFilter === "all"
-                      ? "bg-slate-900 text-white border-slate-800 shadow-xs"
-                      : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                  }`}
-                >
-                  Բոլորը ({clientLeads.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter("pending")}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
-                    activeFilter === "pending"
-                      ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-                      : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
-                  }`}
-                >
-                  🟡 Նոր ({clientLeads.filter((l) => l.status === "pending").length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter("contacted")}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                    activeFilter === "contacted"
-                      ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                      : "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100"
-                  }`}
-                >
-                  🔵 Կապ ({clientLeads.filter((l) => l.status === "contacted").length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter("quote_sent")}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                    activeFilter === "quote_sent"
-                      ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                      : "bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100"
-                  }`}
-                >
-                  🟣 Գնառաջարկ ({clientLeads.filter((l) => l.status === "quote_sent").length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveFilter("closed")}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                    activeFilter === "closed"
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                      : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                  }`}
-                >
-                  🟢 Կնքված ({clientLeads.filter((l) => l.status === "closed").length})
-                </button>
-              </div>
-            </div>
-
-            {/* Bulk Action Controls */}
-            {selectedLeadIds.length > 0 && (
-              <div className="flex items-center gap-2 animate-fadeIn">
-                <span className="text-xs font-bold text-slate-700">
-                  Նշված է՝ <strong>{selectedLeadIds.length}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleBulkDelete}
-                  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer"
-                >
-                  <Trash2 size={13} />
-                  <span>Ջնջել նշվածները</span>
-                </button>
-              </div>
-            )}
+          {/* Status Sub-Filters */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            <button
+              onClick={() => setActiveFilter("all")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                activeFilter === "all"
+                  ? "bg-slate-900 text-white border-slate-800 shadow-xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              Բոլոր Հայտերը ({clientLeads.length})
+            </button>
+            <button
+              onClick={() => setActiveFilter("pending")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
+                activeFilter === "pending"
+                  ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                  : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              <span>🆕 Նոր Հայտեր ({clientLeads.filter((l) => l.status === "pending").length})</span>
+            </button>
+            <button
+              onClick={() => setActiveFilter("contacted")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                activeFilter === "contacted"
+                  ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                  : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+              }`}
+            >
+              📞 Կապ Հաստատված ({clientLeads.filter((l) => l.status === "contacted").length})
+            </button>
+            <button
+              onClick={() => setActiveFilter("quote_sent")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                activeFilter === "quote_sent"
+                  ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                  : "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100"
+              }`}
+            >
+              📄 Գնառաջարկ Ուղարկված ({clientLeads.filter((l) => l.status === "quote_sent").length})
+            </button>
+            <button
+              onClick={() => setActiveFilter("closed")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
+                activeFilter === "closed"
+                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                  : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+              }`}
+            >
+              ✅ Ավարտված ({clientLeads.filter((l) => l.status === "closed").length})
+            </button>
           </div>
 
           {filteredLeads.length === 0 ? (
-            <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3 shadow-xs">
+            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
               <Zap className="w-12 h-12 text-slate-300 mx-auto" />
               <h3 className="text-base font-black text-slate-800">Հայտեր չեն գտնվել</h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Ուղարկեք «Արագ Հայտի Հղում»-ը Ձեր հաճախորդին կամ ավելացրեք հայտ ձեռքով «Ավելացնել Հայտ» կոճակով։
+                Հաճախորդներին ուղարկեք «Արագ Հայտի Հղում»-ը (Header-ից)։ Հաճախորդների լրացրած տվյալներն ակնթարթորեն կհայտնվեն այստեղ։
               </p>
-              <button
-                type="button"
-                onClick={() => setEditingLead(null)}
-                className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <Plus size={15} /> Ստեղծել Առաջին Հայտը
-              </button>
             </div>
-          ) : viewMode === "kanban" ? (
-            <LeadKanbanBoard
-              leads={filteredLeads}
-              onStatusChange={handleLeadStatusChange}
-              onEdit={(l) => setEditingLead(l)}
-              onDelete={handleDeleteLead}
-              onGenerateQuote={generateProposalFromLead}
-              onWhatsApp={handleWhatsAppLead}
-            />
           ) : (
-            /* Table View */
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-fadeIn">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[11px]">
-                      <th className="p-3.5 pl-4 w-8">
-                        <button
-                          type="button"
-                          onClick={handleSelectAllLeads}
-                          className="text-slate-400 hover:text-slate-700 cursor-pointer"
-                        >
-                          {selectedLeadIds.length === filteredLeads.length && filteredLeads.length > 0 ? (
-                            <CheckSquare size={16} className="text-blue-600" />
-                          ) : (
-                            <Square size={16} />
-                          )}
-                        </button>
-                      </th>
-                      <th className="p-3.5">Կոդ / Պրոդուկտ</th>
-                      <th className="p-3.5">Հաճախորդ</th>
-                      <th className="p-3.5">Կոնտակտ</th>
-                      <th className="p-3.5">Օբյեկտ / Տեղեկություն</th>
-                      <th className="p-3.5 text-right">Կանխատեսվող Վճար</th>
-                      <th className="p-3.5 text-center">Կարգավիճակ</th>
-                      <th className="p-3.5 text-right pr-4">Գործողություններ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredLeads.map((lead) => {
-                      const isSelected = selectedLeadIds.includes(lead.id);
-                      return (
-                        <tr
-                          key={lead.id}
-                          className={`hover:bg-slate-50/80 transition-colors ${
-                            isSelected ? "bg-blue-50/40" : ""
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredLeads.map((lead) => {
+                const isPending = lead.status === "pending";
+                return (
+                  <div
+                    key={lead.id}
+                    className={`rounded-2xl p-5 border transition-all flex flex-col justify-between shadow-xs ${
+                      isPending
+                        ? "bg-gradient-to-br from-rose-50/70 via-white to-amber-50/50 border-rose-300 ring-2 ring-rose-500/20"
+                        : "bg-white border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <div>
+                      {/* Top Header Row */}
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
+                            {lead.policyNumber || "EXP-LEAD"}
+                          </span>
+                          <span className="text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                            {lead.productType}
+                          </span>
+                        </div>
+
+                        {/* Status Select Dropdown */}
+                        <select
+                          value={lead.status}
+                          onChange={(e) =>
+                            handleLeadStatusChange(lead.id, e.target.value as ClientRenewalLead["status"])
+                          }
+                          className={`text-xs font-bold px-2.5 py-1 rounded-xl border transition cursor-pointer ${
+                            lead.status === "pending"
+                              ? "bg-rose-500 text-white border-rose-600 font-black"
+                              : lead.status === "contacted"
+                              ? "bg-amber-100 text-amber-900 border-amber-300"
+                              : lead.status === "quote_sent"
+                              ? "bg-blue-100 text-blue-900 border-blue-300"
+                              : "bg-emerald-100 text-emerald-900 border-emerald-300"
                           }`}
                         >
-                          <td className="p-3.5 pl-4">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleSelectLead(lead.id)}
-                              className="text-slate-400 hover:text-blue-600 cursor-pointer"
-                            >
-                              {isSelected ? (
-                                <CheckSquare size={16} className="text-blue-600" />
-                              ) : (
-                                <Square size={16} />
-                              )}
-                            </button>
-                          </td>
+                          <option value="pending">🆕 Նոր Հայտ</option>
+                          <option value="contacted">📞 Կապ Հաստատված</option>
+                          <option value="quote_sent">📄 Գնառաջարկ Ուղարկված</option>
+                          <option value="closed">✅ Ավարտված / Կնքված</option>
+                        </select>
+                      </div>
 
-                          <td className="p-3.5 font-medium">
-                            <div className="font-mono font-bold text-slate-800">
-                              {lead.policyNumber || lead.id}
-                            </div>
-                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-extrabold uppercase">
-                              {lead.productType}
+                      {/* Client Info */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <strong className="text-base font-black text-slate-900">{lead.clientName}</strong>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {new Date(lead.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                          <a
+                            href={`tel:${lead.phone}`}
+                            className="font-bold text-blue-700 hover:underline flex items-center gap-1"
+                          >
+                            <Phone size={13} /> {lead.phone}
+                          </a>
+                          {lead.email && (
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <Mail size={13} /> {lead.email}
                             </span>
-                          </td>
+                          )}
+                        </div>
 
-                          <td className="p-3.5 font-bold text-slate-900">
-                            {lead.clientName}
-                          </td>
+                        {lead.notes && (
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 mt-2 leading-relaxed">
+                            {lead.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                          <td className="p-3.5">
-                            <a
-                              href={`tel:${lead.phone}`}
-                              className="text-blue-700 font-bold hover:underline block"
-                            >
-                              {lead.phone}
-                            </a>
-                            {lead.email && (
-                              <span className="text-[11px] text-slate-500 block truncate max-w-[140px]">
-                                {lead.email}
-                              </span>
-                            )}
-                          </td>
+                    {/* Actions */}
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <a
+                        href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center gap-1 transition"
+                      >
+                        <MessageSquare size={14} className="text-emerald-600" />
+                        <span>WhatsApp</span>
+                      </a>
 
-                          <td className="p-3.5 text-slate-600 max-w-xs truncate">
-                            {lead.vehicleOrPropertyDetails || lead.notes || "—"}
-                          </td>
-
-                          <td className="p-3.5 text-right font-black text-slate-900">
-                            {lead.estimatedPremium ? `${lead.estimatedPremium.toLocaleString()} ֏` : "—"}
-                          </td>
-
-                          <td className="p-3.5 text-center">
-                            <select
-                              value={lead.status}
-                              onChange={(e) =>
-                                handleLeadStatusChange(lead.id, e.target.value as any)
-                              }
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-xl border transition cursor-pointer ${
-                                lead.status === "pending"
-                                  ? "bg-amber-100 text-amber-900 border-amber-300"
-                                  : lead.status === "contacted"
-                                  ? "bg-blue-100 text-blue-900 border-blue-300"
-                                  : lead.status === "quote_sent"
-                                  ? "bg-purple-100 text-purple-900 border-purple-300"
-                                  : "bg-emerald-100 text-emerald-900 border-emerald-300"
-                              }`}
-                            >
-                              <option value="pending">🟡 Նոր Հայտ</option>
-                              <option value="contacted">🔵 Կապ Հաստատված</option>
-                              <option value="quote_sent">🟣 Գնառաջարկ Ուղարկված</option>
-                              <option value="closed">🟢 Կնքված</option>
-                            </select>
-                          </td>
-
-                          <td className="p-3.5 text-right pr-4">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleWhatsAppLead(lead)}
-                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer"
-                                title="WhatsApp"
-                              >
-                                <MessageCircle size={14} />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => generateProposalFromLead(lead)}
-                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] transition cursor-pointer shadow-xs"
-                                title="Գեներացնել Գնառաջարկ"
-                              >
-                                Գնառաջարկ
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => setEditingLead(lead)}
-                                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition cursor-pointer"
-                                title="Խմբագրել Հայտը"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteLead(lead.id)}
-                                className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition cursor-pointer"
-                                title="Ջնջել Հայտը"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      <button
+                        type="button"
+                        onClick={() => generateProposalFromLead(lead)}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+                      >
+                        <FileCheck size={15} />
+                        <span>1-Click Պատրաստել Գնառաջարկ</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1026,17 +734,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
         </div>
       )}
 
-      {/* Edit / Add Lead Modal */}
-      {editingLead !== undefined && (
-        <LeadEditModal
-          lead={editingLead}
-          isOpen={true}
-          onClose={() => setEditingLead(undefined)}
-          onSave={handleSaveLead}
-        />
-      )}
-
-      {/* SMS / Viber Modal */}
+      {/* SMS Modal */}
       {selectedItemForSms && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 text-white max-w-lg w-full space-y-4 shadow-2xl">

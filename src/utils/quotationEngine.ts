@@ -150,7 +150,7 @@ export function evaluateQuoteInput(input: QuoteInput): QuoteEngineResult {
       `Գնառաջարկը ստեղծվել է ֆիքսված անդերրայթինգային կանոնների ավտոմատ համեմատության հիման վրա։ Սակագին՝ ${requestedTariff}%, ռիսկերի ճշգրտում՝ ${riskAdjustment.toFixed(2)} տոկոսային կետ։`,
       "Վերջնական պայմանագիրը ենթակա է փաստաթղթերի ստուգման և հաստատման։",
     ],
-    aiAnalysisText: undefined,
+    aiAnalysisText: `Համապատասխանության ստուգում՝ ${checks.filter((c) => c.passed).length}/${checks.length} պայման անցած։`,
     agentName: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ",
     agentTitle: "Ավտոմատ գնառաջարկի համակարգ",
     agentPhone: "+374 (10) 58-00-00 / 81-00",

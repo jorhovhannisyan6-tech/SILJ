@@ -9,7 +9,6 @@ import {
   CargoInsuranceData,
 } from "../types";
 import { SIL_PRODUCTS_CATALOG } from "../data/productsCatalog";
-import { TUN_SERVICE_PACKAGES, PropertyPackageId } from "../data/tunServicePackages";
 import {
   CASCO_BASE_GROSS_MAX, CASCO_BONUS_MALUS_ADJUSTMENTS, CASCO_FRANCHISE_ADJUSTMENTS,
   CASCO_PAYMENT_FACTORS, CASCO_TRAFFIC_RULE_FACTOR, CASCO_THEFT_EXCLUDE_MAX,
@@ -59,77 +58,10 @@ export function generateQuotationNumber(type: InsuranceProductType): string {
 }
 
 export function calculatePropertyQuotation(state: PropertyInsuranceFormState) {
-  const { values, insuredProperty, fireProtection, security, lossHistory, coverageRisks, operations, propertyPackage } = state;
+  const { values, insuredProperty, fireProtection, security, lossHistory, coverageRisks, operations } = state;
   let totalSum = 0;
   const breakdown: Array<{ item: string; value: number; tariff: number; premium: number }> = [];
 
-  // 1. If a specific Tun Service Offer package is selected (start, standard, standard_plus, premium)
-  if (propertyPackage && propertyPackage !== "custom" && TUN_SERVICE_PACKAGES[propertyPackage as PropertyPackageId]) {
-    const pkg = TUN_SERVICE_PACKAGES[propertyPackage as PropertyPackageId];
-
-    // Building
-    const buildingVal = values.buildingValue > 0 ? values.buildingValue : pkg.buildingSumInsuredAMD;
-    if (buildingVal > 0) {
-      const tariff = pkg.buildingTariffPercent;
-      const premium = (buildingVal * tariff) / 100;
-      totalSum += buildingVal;
-      breakdown.push({ item: "Շինություն / Կառույց (Building)", value: buildingVal, tariff, premium });
-    }
-
-    // Contents / Movables
-    const contentsVal = (values.interiorValue > 0 ? values.interiorValue : 0) || (values.equipmentValue > 0 ? values.equipmentValue : 0) || pkg.contentsSumInsuredAMD;
-    if (contentsVal > 0) {
-      const tariff = pkg.contentsTariffPercent;
-      const premium = (contentsVal * tariff) / 100;
-      totalSum += contentsVal;
-      breakdown.push({ item: "Շարժական գույք / Կահույք, տեխնիկա (Contents)", value: contentsVal, tariff, premium });
-    }
-
-    // Guest Damage (for Standard Plus and Premium packages or if selected)
-    const guestDamageVal = values.guestDamageValue !== undefined && values.guestDamageValue > 0 
-      ? values.guestDamageValue 
-      : (insuredProperty.guestDamage || pkg.guestDamageSumInsuredAMD > 0 ? pkg.guestDamageSumInsuredAMD : 0);
-    if (guestDamageVal > 0) {
-      const tariff = pkg.guestDamageTariffPercent || 0.35;
-      const premium = (guestDamageVal * tariff) / 100;
-      totalSum += guestDamageVal;
-      breakdown.push({ item: "Հյուրերի կողմից պատճառված վնաս (Guest Damage)", value: guestDamageVal, tariff, premium });
-    }
-
-    // Third Party Liability (Քաղաքացիական Պատասխանատվություն)
-    const liabilityVal = values.thirdPartyLiabilityValue !== undefined && values.thirdPartyLiabilityValue > 0
-      ? values.thirdPartyLiabilityValue
-      : (coverageRisks.thirdPartyLiability || pkg.liabilitySumInsuredAMD > 0 ? pkg.liabilitySumInsuredAMD : 0);
-    if (liabilityVal > 0) {
-      const tariff = pkg.liabilityTariffPercent || 0.25;
-      const premium = (liabilityVal * tariff) / 100;
-      totalSum += liabilityVal;
-      breakdown.push({ item: "Քաղ․ պատասխանատվություն 3-րդ անձանց առջև (Third Party Liability)", value: liabilityVal, tariff, premium });
-    }
-
-    const calculatedTotalPremium = breakdown.reduce((acc, curr) => acc + curr.premium, 0);
-    const weightedAverageTariff = totalSum > 0 ? (calculatedTotalPremium / totalSum) * 100 : pkg.averageTariffPercent;
-    const finalTariff = state.customTariff !== undefined && state.customTariff > 0 ? state.customTariff : weightedAverageTariff;
-    const annualPremium = state.customTariff !== undefined && state.customTariff > 0 ? (totalSum * state.customTariff) / 100 : calculatedTotalPremium;
-    const franchisePercent = state.customFranchise !== undefined ? state.customFranchise : 0.5;
-    const franchiseAmount = (totalSum * franchisePercent) / 100;
-
-    return {
-      totalSum,
-      totalSumInsured: totalSum,
-      baseTariff: weightedAverageTariff,
-      discountBonus: 0,
-      finalTariff,
-      annualPremium,
-      franchisePercent,
-      franchiseAmount,
-      franchiseSummaryText: pkg.fullFranchiseSummary,
-      breakdown,
-      packageInfo: pkg,
-    };
-  }
-
-  // 2. Custom 13-Section Comprehensive Underwriting Logic
   const baseRates = {
     building: 0.12,
     interior: 0.16,
@@ -138,8 +70,6 @@ export function calculatePropertyQuotation(state: PropertyInsuranceFormState) {
     stock: 0.24,
     glass: 0.35,
     signs: 0.30,
-    guestDamage: 0.35,
-    thirdPartyLiability: 0.25,
   };
 
   let discount = 0;
@@ -206,22 +136,6 @@ export function calculatePropertyQuotation(state: PropertyInsuranceFormState) {
     breakdown.push({ item: "Գովազդային վահանակներ և ցուցանակներ", value: values.signsValue, tariff, premium });
   }
 
-  if ((insuredProperty.guestDamage || (values.guestDamageValue && values.guestDamageValue > 0)) && (values.guestDamageValue || 0) > 0) {
-    const val = values.guestDamageValue || 2000000;
-    const tariff = Math.max(0.25, baseRates.guestDamage + netModifier);
-    const premium = (val * tariff) / 100;
-    totalSum += val;
-    breakdown.push({ item: "Հյուրերի կողմից պատճառված վնաս", value: val, tariff, premium });
-  }
-
-  if (values.thirdPartyLiabilityValue && values.thirdPartyLiabilityValue > 0) {
-    const val = values.thirdPartyLiabilityValue;
-    const tariff = Math.max(0.20, baseRates.thirdPartyLiability + netModifier);
-    const premium = (val * tariff) / 100;
-    totalSum += val;
-    breakdown.push({ item: "Քաղաքացիական պատասխանատվություն 3-րդ անձանց առջև", value: val, tariff, premium });
-  }
-
   const calculatedTotalPremium = breakdown.reduce((acc, curr) => acc + curr.premium, 0);
   const weightedAverageTariff = totalSum > 0 ? (calculatedTotalPremium / totalSum) * 100 : 0.18;
   const finalTariff = state.customTariff !== undefined && state.customTariff > 0 ? state.customTariff : weightedAverageTariff;
@@ -238,7 +152,6 @@ export function calculatePropertyQuotation(state: PropertyInsuranceFormState) {
     annualPremium,
     franchisePercent,
     franchiseAmount,
-    franchiseSummaryText: `${franchisePercent}% ապահովագրական գումարից (յուրաքանչյուր պատահարի համար)`,
     breakdown,
   };
 }
@@ -269,96 +182,51 @@ export function calculateMortgageQuotation(data: MortgageInsuranceData) {
 // 1. Property Proposal Builder
 export function buildPropertyProposal(state: PropertyInsuranceFormState): QuotationProposal {
   const calc = calculatePropertyQuotation(state);
-  const { coverageRisks, propertyPackage, rentalDetails } = state;
-  const isPackage = propertyPackage && propertyPackage !== "custom" && TUN_SERVICE_PACKAGES[propertyPackage as PropertyPackageId];
-  const pkg = isPackage ? TUN_SERVICE_PACKAGES[propertyPackage as PropertyPackageId] : null;
+  const { coverageRisks } = state;
 
   const perils: string[] = [];
-  if (coverageRisks.fireExplosion || pkg) perils.push("Հրդեհ, պայթյուն, կայծակի հարված, օդանավի անկում (FLEXA)");
-  if (coverageRisks.waterDamage || pkg) perils.push("Ջրամատակարարման, ջեռուցման, կոյուղու և հակահրդեհային համակարգերի վթարներ / ջրալցում");
-  if (coverageRisks.naturalDisasters || pkg) perils.push("Բնական աղետներ (երկրաշարժ, փոթորիկ, կարկուտ, ջրհեղեղ, սողանք)");
-  if (coverageRisks.burglaryRobbery || pkg) perils.push("Հափշտակություն (գողություն կոտրանքով / ներթափանցմամբ, կողոպուտ, ավազակություն)");
-  if (coverageRisks.vandalism || pkg) perils.push("Երրորդ անձանց հակաիրավական գործողություններ / դիտավորյալ վնասում / վանդալիզմ");
-  if (coverageRisks.mechanicalSmoke) perils.push("Մեխանիկական և ծխի ազդեցություն");
-  
-  if (coverageRisks.guestDamage || pkg?.guestDamageSumInsuredAMD || state.insuredProperty.guestDamage || rentalDetails?.hasGuestDamageCoverage) {
-    perils.push("Հյուրերի / վարձակալների կողմից շարժական կամ անշարժ գույքին պատճառված վնասների հատուցում (ըստ Գույքի Պայմանների 5.19 կետի)");
-  }
-  
-  if (coverageRisks.thirdPartyLiability || pkg?.liabilitySumInsuredAMD) {
-    perils.push("Քաղաքացիական պատասխանատվություն 3-րդ անձանց (հարևաններին) պատճառված գույքային և առողջական վնասների գծով");
-  }
-  
+  if (coverageRisks.fireExplosion) perils.push("Հրդեհ, պայթյուն, կայծակի հարված, օդանավի անկում (FLEXA)");
+  if (coverageRisks.waterDamage) perils.push("Ջրամատակարարման, ջեռուցման, կոյուղու և հակահրդեհային համակարգերի վթարներ");
+  if (coverageRisks.naturalDisasters) perils.push("Բնական աղետներ (երկրաշարժ, փոթորիկ, կարկուտ, ջրհեղեղ, սողանք)");
+  if (coverageRisks.burglaryRobbery) perils.push("Գողություն կողոպուտով / ներթափանցմամբ, ավազակություն");
+  if (coverageRisks.vandalism) perils.push("Երրորդ անձանց չարամիտ գործողություններ / վանդալիզմ");
+  if (coverageRisks.thirdPartyLiability) perils.push("Քաղաքացիական պատասխանատվություն 3-րդ անձանց առջև");
   if (coverageRisks.businessInterruption) perils.push("Բիզնեսի ընդհատման հետևանքով կորուստների հատուցում");
 
   const today = new Date();
   const validUntilDate = new Date();
   validUntilDate.setDate(today.getDate() + 30);
 
-  const productName = pkg 
-    ? `Գույքի Ապահովագրություն — Փաթեթ «${pkg.name}»` 
-    : "Գույքի Համապարփակ Ապահովագրություն";
-
-  const specialConditions: string[] = [
-    "Վերջնական ծածկույթը, բացառությունները, սահմանաչափերը և հատուկ պայմանները սահմանվում են գործող ապահովագրական պայմաններով և սույն գնառաջարկում ընտրված ռիսկերով։",
-  ];
-
-  if (pkg) {
-    specialConditions.push(`Ընտրված փաթեթ՝ «${pkg.name}» (${pkg.tagline})։`);
-    specialConditions.push(`Ֆրանշիզայի պայմաններ՝ ${pkg.fullFranchiseSummary}։`);
-    if (pkg.isRentalOptimized) {
-      specialConditions.push("Փաթեթը ներառում է օրավարձով / կարճաժամկետ հյուրերի ընդունման ռիսկերը, ներառյալ հյուրերի կողմից գույքին հասցված պատահական վնասները:");
-    }
-  } else {
-    specialConditions.push("Գույքի վերաբերյալ վերջնական սակագինը և պայմանները կարող են կախված լինել ներկայացված տվյալներից, վնասների պատմությունից և անհրաժեշտ զննությունից։");
-  }
-
-  const clientName = state.company.name || "«Ապահովադիր / Գույքի Սեփականատեր»";
-  const purpose = rentalDetails?.rentalType === "short_term_rental"
-    ? "Օրավարձով / Կարճաժամկետ վարձակալություն (Airbnb / Booking)"
-    : rentalDetails?.rentalType === "long_term_rental"
-    ? "Երկարաժամկետ վարձակալություն"
-    : state.objectData.purpose || "Բնակելի / Կոմերցիոն տարածք";
-
   return {
     id: `prop-${Date.now()}`,
     quotationNumber: generateQuotationNumber("property"),
     type: "property",
-    productNameArm: productName,
+    productNameArm: "Գույքի Համապարփակ Ապահովագրություն",
     categoryNameArm: "Գույք և Անշարժ Գույք",
     date: today.toLocaleDateString("hy-AM"),
     validUntil: validUntilDate.toLocaleDateString("hy-AM"),
-    clientName,
+    clientName: state.company.name || "«Ապահովադիր Ընկերություն»",
     contactInfo: `${state.company.contactPerson || ""} | Հեռ․՝ ${state.company.phone || ""} | Էլ․ հասցե՝ ${state.company.email || ""}`,
-    objectDescription: `Գտնվելու վայրը՝ ${state.objectData.address || "ք․ Երևան"}: Տարածք՝ ${state.objectData.totalArea || "0"} քմ: Շահագործման ձև՝ ${purpose}:`,
-    totalSumInsured: calc.totalSum || (pkg ? pkg.totalSumInsuredAMD : 25000000),
+    objectDescription: `Գտնվելու վայրը՝ ${state.objectData.address || "ք․ Երևան"}: Տարածք՝ ${state.objectData.totalArea || "0"} քմ: Նպատակային նշանակություն՝ ${state.objectData.purpose || "Կոմերցիոն տարածք"}:`,
+    totalSumInsured: calc.totalSum || 50000000,
     currency: state.values.currency,
     baseTariff: calc.baseTariff,
     discountBonus: calc.discountBonus,
     finalTariff: calc.finalTariff,
     annualPremium: calc.annualPremium,
-    franchiseDescription: pkg ? pkg.fullFranchiseSummary : `${calc.franchisePercent}% ապահովագրական գումարից (յուրաքանչյուր պատահարի համար)`,
+    franchiseDescription: `${calc.franchisePercent}% ապահովագրական գումարից (յուրաքանչյուր պատահարի համար)`,
     franchiseAmount: calc.franchiseAmount,
     paymentTerms: state.paymentSchedule === "quarterly" ? "Եռամսյակային հավասար մասերով (4 փուլ)" : state.paymentSchedule === "biannual" ? "Կիսամյակային (2 փուլ)" : "Միանվագ 100% տարեկան վճարում",
     beneficiaryDetails: state.beneficiary.isPledged ? `Շահառու՝ ${state.beneficiary.bankName} (Վարկային պայմանագիր՝ ${state.beneficiary.loanAgreementNumber || "Առկա է"})` : "Շահառու՝ Ապահովադիր",
     coveredPerilsList: perils,
     propertyBreakdown: calc.breakdown,
-    specialConditions,
-    productSpecificDetails: {
-      packageId: propertyPackage || "custom",
-      packageName: pkg ? pkg.name : "Անհատական",
-      rentalType: rentalDetails?.rentalType || "owner_occupied",
-      platform: rentalDetails?.platform || "—",
-      hasGuestDamage: Boolean(pkg?.guestDamageSumInsuredAMD || state.insuredProperty.guestDamage || rentalDetails?.hasGuestDamageCoverage),
-      guestDamageSumInsured: (pkg?.guestDamageSumInsuredAMD || state.values.guestDamageValue || 0),
-      liabilitySumInsured: (pkg?.liabilitySumInsuredAMD || state.values.thirdPartyLiabilityValue || 0),
-    },
-    sourceDocuments: [
-      pkg ? "«Tun Servic Offer PR+LB.docx» Պաշտոնական Փաթեթներ և Սակագներ" : "Տրամադրված գույքի ապահովագրության պայմաններ / SIL Insurance պաշտոնական գույքի էջ"
+    specialConditions: [
+      "Վերջնական ծածկույթը, բացառությունները, սահմանաչափերը և հատուկ պայմանները սահմանվում են գործող ապահովագրական պայմաններով և սույն գնառաջարկում ընտրված ռիսկերով։",
+      "Գույքի վերաբերյալ վերջնական սակագինը և պայմանները կարող են կախված լինել ներկայացված տվյալներից, վնասների պատմությունից և անհրաժեշտ զննությունից։",
     ],
-    sourceVersion: pkg ? "Tun Servic Offer PR+LB 2024/2025" : "SIL Property Underwriting 2024",
+    sourceDocuments: ["Տրամադրված գույքի ապահովագրության պայմաններ / SIL Insurance պաշտոնական գույքի էջ"],
     agentName: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Անդեռռայթինգի Բաժին",
-    agentTitle: "Գլխավոր Անդեռռայթեր / Գույքային Ապահովագրության Փորձագետ",
+    agentTitle: "Գլխավոր Անդեռռայթեր / Կորպորատիվ Վաճառքների Ղեկավար",
     agentPhone: "+374 (10) 58-00-00 / 81-00",
     agentEmail: "info@silinsurance.am",
   };
@@ -545,64 +413,6 @@ export function calculateCascoFromExcel(data: CascoInsuranceData): CascoExcelCal
   };
 }
 
-// Helper to resolve CASCO franchise description and amount
-export function getCascoFranchiseInfo(data: CascoInsuranceData): { description: string; amount: number } {
-  const opt = data.franchiseOption ?? "Ֆրանշիզան անփոփոխ";
-  const currency = data.currency || "AMD";
-  const marketVal = Number(data.marketValue) || 0;
-
-  // 1. Explicit fixed amount specified (> 0)
-  if (data.franchiseAmount && data.franchiseAmount > 0) {
-    if (opt === "Ֆրանշիզայի կիսում") {
-      return {
-        description: `Ֆրանշիզայի կիսում՝ ֆիքսված ${formatCurrency(data.franchiseAmount, currency)} (յուրաքանչյուր պատահարի համար)`,
-        amount: data.franchiseAmount,
-      };
-    }
-    if (opt === "Մինիմալ ֆրանշիզա") {
-      return {
-        description: `Մինիմալ ֆրանշիզա՝ ֆիքսված ${formatCurrency(data.franchiseAmount, currency)} (յուրաքանչյուր պատահարի համար)`,
-        amount: data.franchiseAmount,
-      };
-    }
-    return {
-      description: `Ֆիքսված ֆրանշիզա՝ ${formatCurrency(data.franchiseAmount, currency)} (յուրաքանչյուր պատահարի համար)`,
-      amount: data.franchiseAmount,
-    };
-  }
-
-  // 2. Explicit zero franchise / VIP package
-  if (data.franchiseType === "zero" || (data as any).isZeroFranchise) {
-    return {
-      description: "0% (Առանց ֆրանշիզայի / Լրիվ ծածկույթ)",
-      amount: 0,
-    };
-  }
-
-  // 3. Based on Excel franchiseOption
-  if (opt === "Ֆրանշիզայի կիսում") {
-    const calcHalf = marketVal > 0 ? Math.round(marketVal * 0.0025) : 0;
-    return {
-      description: "Ֆրանշիզայի կիսում՝ 50% կրճատված չհատուցվող գումար (ըստ ԿԱՍԿՈ պայմանների)",
-      amount: calcHalf,
-    };
-  }
-
-  if (opt === "Մինիմալ ֆրանշիզա") {
-    return {
-      description: "Մինիմալ ֆրանշիզա (նվազագույն սահմանված չհատուցվող գումար)",
-      amount: 0,
-    };
-  }
-
-  // 4. Default / "Ֆրանշիզան անփոփոխ"
-  const defaultStandardAmt = marketVal > 0 ? Math.round(marketVal * 0.005) : 0;
-  return {
-    description: "Ստանդարտ ֆրանշիզա՝ 0.5% (անփոփոխ՝ համաձայն ԿԱՍԿՈ պայմանների)",
-    amount: defaultStandardAmt,
-  };
-}
-
 // 3. CASCO Proposal Builder
 export function buildCascoProposal(data: CascoInsuranceData): QuotationProposal {
   const calc = calculateCascoFromExcel(data);
@@ -611,7 +421,6 @@ export function buildCascoProposal(data: CascoInsuranceData): QuotationProposal 
   const today = new Date();
   const validUntilDate = new Date();
   validUntilDate.setDate(today.getDate() + 30);
-  const franchiseInfo = getCascoFranchiseInfo(data);
 
   return {
     id: `casco-${Date.now()}`,
@@ -630,8 +439,8 @@ export function buildCascoProposal(data: CascoInsuranceData): QuotationProposal 
     discountBonus: 0,
     finalTariff: tariff,
     annualPremium: annualPremium,
-    franchiseDescription: franchiseInfo.description,
-    franchiseAmount: franchiseInfo.amount,
+    franchiseDescription: data.franchiseAmount === 0 ? "0% (Առանց ֆրանշիզայի / Լրիվ ծածկույթ)" : `Ֆիքսված ֆրանշիզա՝ ${formatCurrency(data.franchiseAmount, data.currency)} յուրաքանչյուր պատահարի համար`,
+    franchiseAmount: data.franchiseAmount,
     paymentTerms: "Տարեկան միանվագ կամ 2-4 փուլով տարաժամկետ վճարում",
     beneficiaryDetails: data.isPledged && data.bankName ? `Շահառու՝ ${data.bankName} (Գրավի իրավունքով)` : "Շահառու՝ Ապահովադիր",
     coveredPerilsList: [

@@ -9,14 +9,21 @@ import {
   Wheat,
   Landmark,
   Home,
+  Building2,
+  PackageCheck,
+  Shield,
   Layers,
   Sparkles,
-  ShieldCheck,
-  CheckCircle2,
-  FileText,
+  Info,
+  Calendar,
+  Users,
+  MapPin,
+  FileSpreadsheet,
+  AlertCircle,
+  HelpCircle,
 } from "lucide-react";
 import { QuoteInput } from "../../data/quotationRules";
-import { ProductOfficialConditionsBlock } from "./ProductOfficialConditionsBlock";
+import { InsuranceProductType } from "../../types";
 
 interface ProductFormProps {
   input: QuoteInput;
@@ -151,7 +158,7 @@ export function ProductSpecificStep2Form({
     default:
       return (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Այս ապահովագրական արտադրանքի համար 2-րդ փուլի հատուկ ձևը հասանելի չէ։
+          Այս ապահովագրական արտադրանքի համար 2-րդ փուլի հատուկ ձևը հասանելի չէ։ Ընդհանուր ձևը չի օգտագործվում։
         </div>
       );
   }
@@ -192,7 +199,9 @@ function TravelStep2({
     else if (tp === "manual_work") sportFactor = 1.8;
 
     const limitFactor = lim > 30000 ? (lim === 50000 ? 1.25 : 1.5) : 1.0;
+
     const totalEur = Math.round(baseDailyEur * dy * c * ageFactor * sportFactor * limitFactor);
+    const totalAmd = totalEur * 430; // standard approx rate
 
     const destLabel =
       d === "schengen"
@@ -208,41 +217,10 @@ function TravelStep2({
     onChange("businessActivity", `Ճանապարհորդություն (${tripPurpose === "tourism" ? "Հանգիստ/տուրիզմ" : tripPurpose === "sports" ? "Սպորտ/լեռնադահուկ" : "Գործուղում"})`);
     onChange("objectDescription", `Ուղղություն՝ ${destLabel}, Տևողություն՝ ${dy} օր, Ճամփորդներ՝ ${c} անձ (Տարիքային խումբ՝ ${ag})`);
     onChange("franchisePercent", 0);
-    const tariff = Number(((totalEur / (lim * c)) * 100).toFixed(3));
-    onChange("customTariff", Math.min(3.0, Math.max(0.01, tariff)));
   };
-
-  const handleAiParsedData = (data: any) => {
-    if (data.travelerName) onChange("customerName", data.travelerName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.destination) updateDetail("destination", data.destination);
-    if (data.tripDurationDays) updateDetail("tripDays", Number(data.tripDurationDays));
-    if (data.travelerCount) updateDetail("travelerCount", Number(data.travelerCount));
-    if (data.coverageLimit) updateDetail("coverageLimit", Number(data.coverageLimit));
-    if (data.purpose) updateDetail("tripPurpose", data.purpose);
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateTravel(
-      data.destination || destination,
-      data.tripDurationDays ? Number(data.tripDurationDays) : days,
-      data.travelerCount ? Number(data.travelerCount) : count,
-      ageGroup,
-      data.purpose || tripPurpose,
-      data.coverageLimit ? Number(data.coverageLimit) : limit
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateTravel();
-    }
-  }, []);
 
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="travel" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -390,7 +368,7 @@ function TravelStep2({
               onChange("franchisePercent", e.target.value === "0_eur" ? 0 : 1);
             }}
           >
-            <option value="0_eur">0 EUR (Առանց ֆրանշիզայի - 100% հատուցում)</option>
+            <option value="0_eur">0 EUR (Առանց ֆրանշիզայի - Ամբողջական հատուցում)</option>
             <option value="50_eur">50 EUR (Ֆիքսված ֆրանշիզա)</option>
           </select>
         </div>
@@ -417,9 +395,9 @@ function HealthStep2({
 
   const calculateHealth = (gt = groupType, count = insuredCount, plan = planLevel, lim = limitPerPerson, cp = copay) => {
     let basePricePerPerson = 120000;
-    if (plan === "standard" || plan === "economy") basePricePerPerson = 65000;
-    else if (plan === "classic" || plan === "business") basePricePerPerson = 115000;
-    else if (plan === "silver" || plan === "luxury") basePricePerPerson = 180000;
+    if (plan === "standard") basePricePerPerson = 65000;
+    else if (plan === "classic") basePricePerPerson = 115000;
+    else if (plan === "silver") basePricePerPerson = 180000;
     else if (plan === "gold") basePricePerPerson = 280000;
     else if (plan === "platinum") basePricePerPerson = 420000;
 
@@ -445,34 +423,8 @@ function HealthStep2({
     onChange("customTariff", Math.max(0.1, tariff));
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.companyName) onChange("customerName", data.companyName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.insuredCount) updateDetail("insuredCount", Number(data.insuredCount));
-    if (data.planLevel) updateDetail("planLevel", data.planLevel);
-    if (data.limitPerPerson) updateDetail("limitPerPerson", Number(data.limitPerPerson));
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateHealth(
-      groupType,
-      data.insuredCount ? Number(data.insuredCount) : insuredCount,
-      data.planLevel || planLevel,
-      data.limitPerPerson ? Number(data.limitPerPerson) : limitPerPerson,
-      copay
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateHealth();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="health" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -538,10 +490,10 @@ function HealthStep2({
               calculateHealth(groupType, insuredCount, e.target.value, limitPerPerson, copay);
             }}
           >
-            <option value="standard">Standard / Էկոնոմ (Հիվանդանոցային + Շտապ)</option>
-            <option value="classic">Classic / Բիզնես (Հիվանդանոցային + Պոլիկլինիկա)</option>
-            <option value="silver">Silver / Լյուքս (+ Դեղորայք + Ատամնաբուժություն)</option>
-            <option value="gold">Gold (Ընդլայնված լրիվ ծածկույթ + Checkup)</option>
+            <option value="standard">Standard (Հիվանդանոցային + Շտապ)</option>
+            <option value="classic">Classic (Հիվանդանոցային + Պոլիկլինիկա)</option>
+            <option value="silver">Silver (+ Դեղորայք + Ատամնաբուժություն)</option>
+            <option value="gold">Gold (Ընդլայնված լրիվ ծածկույթ)</option>
             <option value="platinum">Platinum VIP (Անսահմանափակ VIP սպասարկում)</option>
           </select>
         </div>
@@ -636,40 +588,8 @@ function CargoStep2({
     onChange("customTariff", finalTariff);
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.clientName) onChange("customerName", data.clientName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.cargoValue) updateDetail("cargoValue", Number(data.cargoValue));
-    if (data.currency) onChange("currency", data.currency);
-    if (data.originCountry) updateDetail("origin", data.originCountry);
-    if (data.destinationCountry) updateDetail("destination", data.destinationCountry);
-    if (data.transportMode) updateDetail("transportMode", data.transportMode);
-    if (data.clauseType) updateDetail("clause", data.clauseType);
-    if (data.isFragile) updateDetail("cargoType", "fragile");
-    else if (data.isTemperatureControlled) updateDetail("cargoType", "refrigerated");
-
-    calculateCargo(
-      data.isFragile ? "fragile" : data.isTemperatureControlled ? "refrigerated" : cargoType,
-      data.cargoValue ? Number(data.cargoValue) : cargoValue,
-      data.transportMode || transportMode,
-      data.clauseType || clause,
-      franchise,
-      data.originCountry || origin,
-      data.destinationCountry || destination
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateCargo();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="cargo" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -774,7 +694,7 @@ function CargoStep2({
           <input
             className="sil-input font-bold"
             value={origin}
-            placeholder="Օր․ Ֆրանկֆուրտ, Գերմանիա"
+            placeholder="Օր․ Շանհայ, Չինաստան"
             onChange={(e) => {
               updateDetail("origin", e.target.value);
               calculateCargo(cargoType, cargoValue, transportMode, clause, franchise, e.target.value, destination);
@@ -821,9 +741,9 @@ function ConstructionStep2({
 
   const calculateConstruction = (cv = contractValue, dm = durationMonths, pt = projectType, tpl = tplIncluded, mm = maintenanceMonths, pn = projectName, pa = projectAddress) => {
     let baseTariff = 0.25;
-    if (pt === "residential" || pt === "building_construction") baseTariff = 0.22;
-    else if (pt === "infrastructure" || pt === "road_construction") baseTariff = 0.38;
-    else if (pt === "industrial" || pt === "erection_installation") baseTariff = 0.45;
+    if (pt === "residential") baseTariff = 0.22;
+    else if (pt === "infrastructure") baseTariff = 0.38;
+    else if (pt === "industrial") baseTariff = 0.45;
     else if (pt === "complex_hydro") baseTariff = 0.75;
 
     const durationFactor = dm > 12 ? 1 + (dm - 12) * 0.03 : 1.0;
@@ -842,38 +762,8 @@ function ConstructionStep2({
     onChange("customTariff", Math.min(2.5, Math.max(0.1, finalTariff)));
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.contractorName) onChange("customerName", data.contractorName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.projectName) updateDetail("projectName", data.projectName);
-    if (data.contractValue) updateDetail("contractValue", Number(data.contractValue));
-    if (data.durationMonths) updateDetail("durationMonths", Number(data.durationMonths));
-    if (data.workType) updateDetail("projectType", data.workType);
-    if (data.thirdPartyLimit) updateDetail("tplIncluded", true);
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateConstruction(
-      data.contractValue ? Number(data.contractValue) : contractValue,
-      data.durationMonths ? Number(data.durationMonths) : durationMonths,
-      data.workType || projectType,
-      tplIncluded,
-      maintenanceMonths,
-      data.projectName || projectName,
-      projectAddress
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateConstruction();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="construction" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-cyan-700 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -1041,10 +931,8 @@ function LiabilityStep2({
     let baseTariff = 0.35;
     if (lt === "general_tpl") baseTariff = 0.30;
     else if (lt === "employers_el") baseTariff = 0.45;
-    else if (lt === "professional_pi" || lt === "professional") baseTariff = 0.70;
-    else if (lt === "product_pl" || lt === "product_liability") baseTariff = 0.50;
-    else if (lt === "carrier_cmr") baseTariff = 0.60;
-    else if (lt === "warehouse_liability") baseTariff = 0.40;
+    else if (lt === "professional_pi") baseTariff = 0.70;
+    else if (lt === "product_pl") baseTariff = 0.50;
     else if (lt === "tenants_tpl") baseTariff = 0.25;
 
     const finalTariff = Number((baseTariff + (ld ? 0.05 : 0)).toFixed(2));
@@ -1059,35 +947,8 @@ function LiabilityStep2({
     onChange("customTariff", finalTariff);
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.insuredName) onChange("customerName", data.insuredName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.liabilitySubtype) updateDetail("liabilityType", data.liabilitySubtype);
-    if (data.profession) updateDetail("businessField", data.profession);
-    if (data.limitOfIndemnity) updateDetail("limitOfIndemnity", Number(data.limitOfIndemnity));
-    if (data.annualTurnover) updateDetail("annualTurnover", Number(data.annualTurnover));
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateLiability(
-      data.liabilitySubtype || liabilityType,
-      data.limitOfIndemnity ? Number(data.limitOfIndemnity) : limit,
-      data.annualTurnover ? Number(data.annualTurnover) : turnover,
-      data.profession || businessField,
-      legalDefense
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateLiability();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="liability" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -1096,7 +957,7 @@ function LiabilityStep2({
           <div>
             <div className="text-xs font-black text-purple-950">Քաղաքացիական և Մասնագիտական Պատասխանատվություն</div>
             <div className="text-[11px] text-purple-800">
-              TPL, Գործատուի EL, Մասնագիտական PI, Պահեստների և Բեռնափոխադրողի ծածկույթներ
+              TPL, Գործատուի EL, Մասնագիտական PI և Ապրանքի PL ծածկույթներ
             </div>
           </div>
         </div>
@@ -1120,9 +981,7 @@ function LiabilityStep2({
           >
             <option value="general_tpl">Ընդհանուր քաղաքացիական պատասխանատվություն (TPL)</option>
             <option value="employers_el">Գործատուի պատասխանատվություն աշխատակիցների հանդեպ (EL)</option>
-            <option value="professional_pi">Մասնագիտական պատասխանատվություն (PI — Բժիշկ, Նոտար, Աուդիտոր)</option>
-            <option value="carrier_cmr">Բեռնափոխադրողի պատասխանատվություն (Carrier CMR Liability)</option>
-            <option value="warehouse_liability">Պահեստների և լոգիստիկ կենտրոնների պատասխանատվություն</option>
+            <option value="professional_pi">Մասնագիտական պատասխանատվություն (PI — Բժիշկ, Հաշվապահ, ՏՏ)</option>
             <option value="product_pl">Արտադրանքի որակի պատասխանատվություն (Product Liability)</option>
             <option value="tenants_tpl">Վարձակալի պատասխանատվություն գույքատիրոջ հանդեպ</option>
           </select>
@@ -1200,10 +1059,10 @@ function AccidentStep2({
 
   const calculateAccident = (cov = coverageType, num = numberOfPersons, sumP = sumPerPerson, rc = riskClass) => {
     let baseTariff = 0.35;
-    if (rc === "class_1" || rc === "office") baseTariff = 0.30;
+    if (rc === "class_1") baseTariff = 0.30;
     else if (rc === "class_2") baseTariff = 0.50;
-    else if (rc === "class_3" || rc === "production") baseTariff = 0.85;
-    else if (rc === "class_4" || rc === "construction" || rc === "extreme_sports") baseTariff = 1.50;
+    else if (rc === "class_3") baseTariff = 0.85;
+    else if (rc === "class_4") baseTariff = 1.50;
 
     const timeMultiplier = cov === "workplace" ? 0.75 : 1.0;
     const finalTariff = Number((baseTariff * timeMultiplier).toFixed(2));
@@ -1219,33 +1078,8 @@ function AccidentStep2({
     onChange("customTariff", finalTariff);
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.clientName) onChange("customerName", data.clientName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.insuredCount) updateDetail("numberOfPersons", Number(data.insuredCount));
-    if (data.sumPerPerson) updateDetail("sumPerPerson", Number(data.sumPerPerson));
-    if (data.professionRisk) updateDetail("riskClass", data.professionRisk);
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateAccident(
-      coverageType,
-      data.insuredCount ? Number(data.insuredCount) : numberOfPersons,
-      data.sumPerPerson ? Number(data.sumPerPerson) : sumPerPerson,
-      data.professionRisk || riskClass
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateAccident();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="accident" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-50 to-pink-50 border border-rose-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -1374,9 +1208,9 @@ function AgroStep2({
 
     let baseTariff = 5.5;
     if (ct === "grape") baseTariff = 6.0;
-    else if (ct === "apricot" || ct === "peach" || ct === "ծիրան" || ct === "դեղձ") baseTariff = 8.5;
-    else if (ct === "grain" || ct === "հացահատիկ") baseTariff = 3.5;
-    else if (ct === "potato" || ct === "կարտոֆիլ") baseTariff = 4.2;
+    else if (ct === "apricot" || ct === "peach") baseTariff = 8.5;
+    else if (ct === "grain") baseTariff = 3.5;
+    else if (ct === "potato") baseTariff = 4.2;
 
     if (net) baseTariff *= 0.80; // 20% discount for anti-hail net
 
@@ -1393,39 +1227,8 @@ function AgroStep2({
     onChange("customTariff", finalTariff);
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.farmerName) onChange("customerName", data.farmerName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.region) updateDetail("region", data.region);
-    if (data.cropType) updateDetail("cropType", data.cropType);
-    if (data.hectares) updateDetail("hectares", Number(data.hectares));
-    if (data.yieldKgPerHa) updateDetail("yieldKgPerHa", Number(data.yieldKgPerHa));
-    if (data.pricePerKg) updateDetail("pricePerKg", Number(data.pricePerKg));
-    if (data.antiHailNet !== undefined) updateDetail("antiHailNet", !!data.antiHailNet);
-    if (data.subsidyPercent) updateDetail("subsidyPercent", Number(data.subsidyPercent));
-
-    calculateAgro(
-      data.cropType || cropType,
-      data.hectares ? Number(data.hectares) : hectares,
-      data.yieldKgPerHa ? Number(data.yieldKgPerHa) : yieldKgPerHa,
-      data.pricePerKg ? Number(data.pricePerKg) : pricePerKg,
-      data.region || region,
-      data.antiHailNet !== undefined ? !!data.antiHailNet : antiHailNet,
-      data.subsidyPercent ? Number(data.subsidyPercent) : subsidyPercent
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateAgro();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="agro" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-lime-50 to-emerald-50 border border-lime-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-lime-700 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -1608,7 +1411,6 @@ function FinancialStep2({
     if (bt === "bid_bond") annualRate = 1.0;
     else if (bt === "performance_bond") annualRate = 1.8;
     else if (bt === "advance_payment") annualRate = 2.2;
-    else if (bt === "cash_in_transit") annualRate = 0.8;
     else if (bt === "maintenance_bond") annualRate = 1.4;
 
     if (col === "cash_deposit") annualRate *= 0.60;
@@ -1617,7 +1419,7 @@ function FinancialStep2({
     const termRate = Number((annualRate * (dm / 12)).toFixed(2));
 
     onChange("insuredAmount", amt);
-    onChange("businessActivity", `Ֆինանսական երաշխիք (${bt === "bid_bond" ? "Տենդերային" : bt === "performance_bond" ? "Կատարման երաշխիք" : bt === "advance_payment" ? "Կանխավճարի" : "Ինկասացիա"})`);
+    onChange("businessActivity", `Ֆինանսական երաշխիք (${bt === "bid_bond" ? "Տենդերային" : bt === "performance_bond" ? "Կատարման երաշխիք" : "Կանխավճարի"})`);
     onChange(
       "objectDescription",
       `Երաշխիքի տեսակ՝ ${bt}, Գումար՝ ${amt.toLocaleString()} ֏, Ժամկետ՝ ${dm} ամիս, Շահառու՝ ${ben}, Ապահովում՝ ${col}`
@@ -1626,36 +1428,8 @@ function FinancialStep2({
     onChange("customTariff", Math.max(0.2, termRate));
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.clientName) onChange("customerName", data.clientName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.bondType) updateDetail("bondType", data.bondType);
-    if (data.bondAmount) updateDetail("bondAmount", Number(data.bondAmount));
-    if (data.durationMonths) updateDetail("durationMonths", Number(data.durationMonths));
-    if (data.beneficiary) updateDetail("beneficiary", data.beneficiary);
-    if (data.collateralType) updateDetail("collateralType", data.collateralType);
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateFinancial(
-      data.bondType || bondType,
-      data.bondAmount ? Number(data.bondAmount) : bondAmount,
-      data.durationMonths ? Number(data.durationMonths) : durationMonths,
-      data.collateralType || collateralType,
-      data.beneficiary || beneficiary
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateFinancial();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="financial" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-sky-700 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -1688,8 +1462,7 @@ function FinancialStep2({
           >
             <option value="bid_bond">Տենդերային մասնակցության երաշխիք (Bid Bond)</option>
             <option value="performance_bond">Պայմանագրի պատշաճ կատարման երաշխիք (Performance Bond)</option>
-            <option value="advance_payment">Կանխավճարի վերադարձի ապահովագրություն (Advance Payment 2018)</option>
-            <option value="cash_in_transit">Ինկասացիոն ռիսկեր և դրամական միջոցների տեղափոխում</option>
+            <option value="advance_payment">Կանխավճարի վերադարձի երաշխիք (Advance Payment Bond)</option>
             <option value="maintenance_bond">Որակի / Երաշխիքային ժամկետի երաշխիք (Maintenance Bond)</option>
           </select>
         </div>
@@ -1801,33 +1574,8 @@ function MortgageStep2({
     onChange("customTariff", finalTariff);
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.borrowerName) onChange("customerName", data.borrowerName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.bankName) updateDetail("bankName", data.bankName);
-    if (data.loanBalance) updateDetail("loanBalance", Number(data.loanBalance));
-    if (data.program) updateDetail("program", data.program);
-    if (data.propertyType) updateDetail("propertyType", data.propertyType);
-
-    calculateMortgage(
-      data.loanBalance ? Number(data.loanBalance) : loanBalance,
-      data.program || program,
-      data.propertyType || propertyType,
-      data.bankName || bankName
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateMortgage();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="mortgage" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-700 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -1953,34 +1701,8 @@ function AviationStep2({
     onChange("customTariff", finalTariff);
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.ownerName) onChange("customerName", data.ownerName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.aviationType) updateDetail("aviationType", data.aviationType);
-    if (data.aircraftModel) updateDetail("aircraftModel", data.aircraftModel);
-    if (data.aircraftValue) updateDetail("aircraftValue", Number(data.aircraftValue));
-    if (data.flightHours) updateDetail("flightHours", Number(data.flightHours));
-    if (data.currency) onChange("currency", data.currency);
-
-    calculateAviation(
-      data.aviationType || aviationType,
-      data.aircraftValue ? Number(data.aircraftValue) : aircraftValue,
-      data.aircraftModel || aircraftModel,
-      data.flightHours ? Number(data.flightHours) : flightHours
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateAviation();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="aviation" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 to-sky-50 border border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-slate-800 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -2108,33 +1830,8 @@ function BundleStep2({
     onChange("customTariff", 0.35 * (1 - discount));
   };
 
-  const handleAiParsedData = (data: any) => {
-    if (data.companyName) onChange("customerName", data.companyName);
-    if (data.phone) onChange("customerPhone", data.phone);
-    if (data.propertyValue) updateDetail("bundlePropertyVal", Number(data.propertyValue));
-    if (data.liabilityLimit) updateDetail("bundleLiabilityVal", Number(data.liabilityLimit));
-    if (data.accidentSum) updateDetail("bundleAccidentVal", Number(data.accidentSum));
-    if (data.cargoValue) updateDetail("bundleCargoVal", Number(data.cargoValue));
-
-    calculateBundle(
-      data.propertyValue ? Number(data.propertyValue) : propertyVal,
-      data.liabilityLimit ? Number(data.liabilityLimit) : liabilityVal,
-      data.cargoValue ? Number(data.cargoValue) : cargoVal,
-      data.accidentSum ? Number(data.accidentSum) : accidentVal
-    );
-  };
-
-  React.useEffect(() => {
-    if (!input.insuredAmount || input.insuredAmount === 0 || !input.objectDescription) {
-      calculateBundle();
-    }
-  }, []);
-
   return (
     <div className="space-y-5">
-      {/* Official SIL Conditions & AI Extraction */}
-      <ProductOfficialConditionsBlock productId="bundle" onAiParsedData={handleAiParsedData} />
-
       <div className="p-4 rounded-2xl bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-md">
@@ -2222,6 +1919,90 @@ function BundleStep2({
             }}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 12. GENERIC / PROPERTY STEP 2
+// -------------------------------------------------------------
+function LegacyPropertyOnlyStep2({
+  input,
+  details,
+  onChange,
+  updateDetail,
+  attemptedNext,
+}: any) {
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Ապահովագրական գումար ({input.currency}) <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={input.insuredAmount || ""}
+            onChange={(e) => onChange("insuredAmount", Number(e.target.value))}
+            className={`sil-input text-base font-bold ${
+              attemptedNext && (!input.insuredAmount || input.insuredAmount <= 0)
+                ? "border-red-400 bg-red-50/40"
+                : ""
+            }`}
+            placeholder="0"
+          />
+          {attemptedNext && (!input.insuredAmount || input.insuredAmount <= 0) && (
+            <span className="text-[11px] text-red-600 mt-1 block">Գումարը պետք է լինի 0-ից մեծ</span>
+          )}
+          {input.insuredAmount > 0 && (
+            <span className="text-[11px] text-slate-500 mt-1 block">
+              {input.insuredAmount.toLocaleString("hy-AM")} {input.currency}
+            </span>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Գործունեության / շահագործման տեսակ <span className="text-red-500">*</span>
+          </label>
+          <input
+            value={input.businessActivity}
+            onChange={(e) => onChange("businessActivity", e.target.value)}
+            className={`sil-input ${
+              attemptedNext && (!input.businessActivity.trim() || input.businessActivity.trim().length < 2)
+                ? "border-red-400 bg-red-50/40"
+                : ""
+            }`}
+            placeholder="Օր․ արտադրություն, պահեստ, գրասենյակ, առևտուր"
+          />
+          {attemptedNext && (!input.businessActivity.trim() || input.businessActivity.trim().length < 2) && (
+            <span className="text-[11px] text-red-600 mt-1 block">Նշեք գործունեության ոլորտը</span>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          Ապահովագրվող օբյեկտի նկարագրություն և հասցե <span className="text-red-500">*</span>
+        </label>
+        <textarea
+          value={input.objectDescription}
+          onChange={(e) => onChange("objectDescription", e.target.value)}
+          rows={3}
+          className={`sil-input w-full min-h-[90px] ${
+            attemptedNext && (!input.objectDescription.trim() || input.objectDescription.trim().length < 3)
+              ? "border-red-400 bg-red-50/40"
+              : ""
+          }`}
+          placeholder="Օբյեկտի հասցե, շինության տեսակ, սարքավորումներ, բեռի երթուղի կամ այլ մանրամասներ..."
+        />
+        {attemptedNext && (!input.objectDescription.trim() || input.objectDescription.trim().length < 3) && (
+          <span className="text-[11px] text-red-600 mt-1 block">
+            Լրացրեք օբյեկտի հասցեն կամ նկարագրությունը (առնվազն 3 նիշ)
+          </span>
+        )}
       </div>
     </div>
   );

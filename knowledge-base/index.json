@@ -78,6 +78,30 @@
     },
     {
       "productId": "casco",
+      "sourceFile": "ԿԱՍԿՈ Պայմաններ.docx",
+      "textFile": "text/ԿԱՍԿՈ_Պայմաններ.txt",
+      "characters": 3200
+    },
+    {
+      "productId": "health",
+      "sourceFile": "Առողջության Ապահովագրություն Պայմաններ.docx",
+      "textFile": "text/Առողջության_Ապահովագրություն_Պայմաններ.txt",
+      "characters": 2800
+    },
+    {
+      "productId": "travel",
+      "sourceFile": "Ճամփորդական Ապահովագրություն Պայմաններ.docx",
+      "textFile": "text/Ճամփորդական_Ապահովագրություն_Պայմաններ.txt",
+      "characters": 2500
+    },
+    {
+      "productId": "mortgage",
+      "sourceFile": "Հիփոթեքային Ապահովագրություն Պայմաններ.docx",
+      "textFile": "text/Հիփոթեքային_Ապահովագրություն_Պայմաններ.txt",
+      "characters": 2600
+    },
+    {
+      "productId": "casco",
       "sourceFile": "casco calculator 2024 - առանց ՃՈՈ.xlsx",
       "textFile": null,
       "note": "Original Excel calculator retained as authoritative calculation source for the CASCO calculator."

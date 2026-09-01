@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { QuotationProposal } from "../../types";
 import { formatCurrency, formatPercent, calculateCascoFromExcel } from "../../utils/insuranceCalculator";
 import {
@@ -8,10 +8,6 @@ import {
 } from "../../utils/documentExport";
 import { SilLogo } from "../SilLogo";
 import { generateQuotationTemplateHtml, QuotationLanguage } from "../../utils/quotationTemplate";
-import {
-  translateQuotationProposalLocally,
-  translateQuotationProposalWithAI,
-} from "../../utils/quotationTranslation";
 import { saveScenario, getScenarios, QuoteScenario } from "../../utils/scenarioStore";
 import { validateQuotationProposal } from "../../utils/quoteValidation";
 import { TierComparisonModal } from "./TierComparisonModal";
@@ -39,7 +35,6 @@ import {
   Layers,
   ArrowLeft,
   Globe,
-  Languages,
 } from "lucide-react";
 
 interface QuotationViewProps {
@@ -79,83 +74,63 @@ function FilledQuotationView({
   const [pdfError, setPdfError] = useState("");
   const [tierModalOpen, setTierModalOpen] = useState(false);
   const [scenarios, setScenarios] = useState<QuoteScenario[]>(() => getScenarios().filter(s => s.proposalId === proposal.id));
-  
-  // Translation state for EN and RU
-  const [translatedProposals, setTranslatedProposals] = useState<Partial<Record<QuotationLanguage, QuotationProposal>>>({});
-  const [translatingLang, setTranslatingLang] = useState<QuotationLanguage | null>(null);
-  const [translationStatus, setTranslationStatus] = useState<string>("");
-
   const locked = proposal.status === "locked";
   const validationIssues = validateQuotationProposal(proposal);
   const validationErrors = validationIssues.filter(i => i.severity === "error");
 
-  // Effect to automatically translate when language changes to 'en' or 'ru'
-  useEffect(() => {
-    if (selectedLang === "hy") return;
-    if (translatedProposals[selectedLang]) return;
+  const [translatedProposals, setTranslatedProposals] = useState<Record<QuotationLanguage, QuotationProposal | null>>({
+    hy: proposal,
+    en: null,
+    ru: null,
+  });
+  const [translating, setTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState("");
 
-    let isMounted = true;
-    setTranslatingLang(selectedLang);
-    setTranslationStatus("Թարգմանվում է AI-ով...");
+  const currentProposal = translatedProposals[selectedLang] || proposal;
 
-    const proposalToSend: QuotationProposal = {
-      ...proposal,
-      customTemplateText:
-        proposal.customTemplateText ||
-        (typeof window !== "undefined"
-          ? localStorage.getItem(`sil-custom-template-${proposal.type}`) || ""
-          : ""),
-    };
+  const handleLanguageChange = async (lang: QuotationLanguage) => {
+    if (lang === "hy") {
+      setSelectedLang("hy");
+      return;
+    }
+    if (translatedProposals[lang]) {
+      setSelectedLang(lang);
+      return;
+    }
 
-    translateQuotationProposalWithAI(proposalToSend, selectedLang)
-      .then(({ proposal: translated, isAi }) => {
-        if (!isMounted) return;
-        setTranslatedProposals(prev => ({ ...prev, [selectedLang]: translated }));
-        setTranslationStatus(isAi ? "Ամբողջական AI թարգմանություն" : "Բառարանային թարգմանություն");
-      })
-      .catch((err) => {
-        console.error("Translation error:", err);
-      })
-      .finally(() => {
-        if (isMounted) setTranslatingLang(null);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedLang, proposal]);
-
-  const handleForceRetranslate = async () => {
-    if (selectedLang === "hy") return;
-    setTranslatingLang(selectedLang);
-    setTranslationStatus("Վերաթարգմանվում է AI-ով...");
+    setTranslating(true);
+    setTranslationError("");
     try {
-      const proposalToSend: QuotationProposal = {
-        ...proposal,
-        customTemplateText:
-          proposal.customTemplateText ||
-          (typeof window !== "undefined"
-            ? localStorage.getItem(`sil-custom-template-${proposal.type}`) || ""
-            : ""),
-      };
-      const { proposal: translated } = await translateQuotationProposalWithAI(proposalToSend, selectedLang);
-      setTranslatedProposals(prev => ({ ...prev, [selectedLang]: translated }));
-      setTranslationStatus("Ամբողջական AI թարգմանություն");
+      const res = await fetch("/api/ai/translate-proposal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(localStorage.getItem("sil-auth-token") ? { Authorization: `Bearer ${localStorage.getItem("sil-auth-token")}` } : {}),
+        },
+        body: JSON.stringify({
+          proposal,
+          targetLang: lang,
+        }),
+      });
+      if (!res.ok) throw new Error("Թարգմանությունը ձախողվեց");
+      const data = await res.json();
+      if (data.proposal) {
+        setTranslatedProposals(prev => ({ ...prev, [lang]: data.proposal }));
+        setSelectedLang(lang);
+      } else {
+        throw new Error(data.error || "Անհայտ սխալ");
+      }
     } catch (err: any) {
-      console.error("Retranslation error:", err);
+      console.error("Translation error:", err);
+      setTranslationError("Չհաջողվեց կատարել ավտոմատ թարգմանություն։ Ցուցադրվում է բազային տարբերակը։");
+      setSelectedLang(lang);
     } finally {
-      setTranslatingLang(null);
+      setTranslating(false);
     }
   };
 
-  // Determine active proposal for display and download
-  const activeProposal: QuotationProposal =
-    selectedLang === "hy"
-      ? proposal
-      : translatedProposals[selectedLang] || translateQuotationProposalLocally(proposal, selectedLang);
-
   const handleCopyWord = async () => {
-    const success = await copyProposalForWord(activeProposal, selectedLang);
+    const success = await copyProposalForWord(currentProposal, selectedLang);
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
@@ -163,14 +138,14 @@ function FilledQuotationView({
   };
 
   const handleDownloadDoc = () => {
-    downloadProposalAsWordDoc(activeProposal, selectedLang);
+    downloadProposalAsWordDoc(currentProposal, selectedLang);
   };
 
   const handlePrint = async () => {
     setGeneratingPdf(true);
     setPdfError("");
     try {
-      await downloadProposalAsPdf(activeProposal);
+      await downloadProposalAsPdf(currentProposal);
     } catch (err: any) {
       console.error("PDF generation failed:", err);
       setPdfError(err?.message || "Չհաջողվեց ստեղծել PDF ֆայլը։");
@@ -182,7 +157,7 @@ function FilledQuotationView({
   const handleSaveScenario = () => {
     const name = window.prompt("Տարբերակի անվանումը", `Տարբերակ ${scenarios.length + 1}`);
     if (name === null) return;
-    const saved = saveScenario(proposal, name, { product: proposal.productNameArm, sourceVersion: proposal.sourceVersion || proposal.rulesVersion || "" });
+    const saved = saveScenario(currentProposal, name, { product: currentProposal.productNameArm, sourceVersion: currentProposal.sourceVersion || currentProposal.rulesVersion || "" });
     setScenarios(prev => [saved, ...prev]);
   };
 
@@ -238,6 +213,36 @@ function FilledQuotationView({
       default:
         return Building;
     }
+  };
+
+  const shareSummary = `«SIL Insurance» Պաշտոնական Գնառաջարկ N ${proposal.quotationNumber}\n` +
+    `Հաճախորդ՝ ${proposal.clientName}\n` +
+    `Պրոդուկտ՝ ${proposal.productNameArm}\n` +
+    `Ապահովագրական գումար՝ ${proposal.totalSumInsured.toLocaleString()} ${proposal.currency}\n` +
+    `Վճարման ենթակա պրեմիա՝ ${proposal.annualPremium.toLocaleString()} ${proposal.currency}\n` +
+    `Ֆրանշիզա՝ ${proposal.franchiseDescription}\n` +
+    `Ակտիվ է մինչև՝ ${proposal.validUntil}`;
+
+  const handleShareWhatsApp = () => {
+    const url = `https://wa.me/?text=${encodeURIComponent(shareSummary)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleShareTelegram = () => {
+    const url = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(shareSummary)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleShareEmail = () => {
+    const url = `mailto:${proposal.contactInfo || ''}?subject=${encodeURIComponent(`SIL Insurance Գնառաջարկ N ${proposal.quotationNumber}`)}&body=${encodeURIComponent(shareSummary)}`;
+    window.location.href = url;
+  };
+
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const handleCopySummary = () => {
+    navigator.clipboard.writeText(shareSummary);
+    setCopiedSummary(true);
+    setTimeout(() => setCopiedSummary(false), 2500);
   };
 
   const ProductIcon = getProductIcon(proposal.type);
@@ -343,6 +348,42 @@ function FilledQuotationView({
         </div>
       </div>
 
+      {/* Quick Share to Client Bar */}
+      <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-3.5 mb-6 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center gap-2">
+          <Globe className="text-emerald-400" size={18} />
+          <span className="text-xs font-bold text-slate-200">
+            Ուղարկել Հաճախորդին (Quick Client Sharing):
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleShareWhatsApp}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
+          >
+            💬 WhatsApp
+          </button>
+          <button
+            onClick={handleShareTelegram}
+            className="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-1.5 shadow transition cursor-pointer"
+          >
+            ✈️ Telegram
+          </button>
+          <button
+            onClick={handleShareEmail}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+          >
+            ✉️ Email
+          </button>
+          <button
+            onClick={handleCopySummary}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+          >
+            {copiedSummary ? "✓ Պատճենված է" : "📋 Պատճենել SMS / Text"}
+          </button>
+        </div>
+      </div>
+
       <div className="mb-6 print:hidden">
         <RiskScoringPanel productType={proposal.type} quotationData={proposal} annualPremium={proposal.annualPremium} />
       </div>
@@ -384,8 +425,8 @@ function FilledQuotationView({
       )}
 
       {/* AI Underwriting Analysis Request Banner */}
-      {!proposal.aiAnalysisText ? (
-        <div className="bg-gradient-to-r from-blue-900/10 via-indigo-900/10 to-slate-100 border border-blue-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 print:hidden shadow-sm">
+      {!proposal.aiAnalysisText && (
+        <div className="bg-gradient-to-r from-blue-900/10 via-indigo-900/10 to-slate-100 border border-blue-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 print:hidden">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-blue-100 text-[#003399] flex items-center justify-center flex-shrink-0">
               <Sparkles className="w-5 h-5 text-[#0066FF]" />
@@ -401,7 +442,6 @@ function FilledQuotationView({
           </div>
 
           <button
-            type="button"
             onClick={handleGenerateAiAnalysis}
             disabled={analyzing}
             className="inline-flex items-center gap-1.5 bg-[#003399] hover:bg-[#002D72] text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-sm cursor-pointer disabled:opacity-50 flex-shrink-0"
@@ -418,40 +458,6 @@ function FilledQuotationView({
               </>
             )}
           </button>
-        </div>
-      ) : (
-        <div className="bg-slate-50 border border-blue-200 rounded-2xl p-4 mb-6 print:hidden shadow-sm">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-blue-100 text-[#003399] flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-[#0066FF]" />
-              </div>
-              <h4 className="text-xs sm:text-sm font-bold text-slate-900">
-                AI Անդեռռայթինգային Եզրակացություն (Ներառված է գնառաջարկում)
-              </h4>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleGenerateAiAnalysis}
-                disabled={analyzing}
-                className="text-[11px] bg-white hover:bg-slate-100 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3 h-3 ${analyzing ? "animate-spin" : ""}`} />
-                Վերագեներացնել
-              </button>
-              <button
-                type="button"
-                onClick={() => onUpdateProposal({ ...proposal, aiAnalysisText: undefined })}
-                className="text-[11px] bg-white hover:bg-red-50 text-red-600 border border-red-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
-              >
-                Հեռացնել
-              </button>
-            </div>
-          </div>
-          <div className="text-xs text-slate-700 whitespace-pre-line bg-white p-3 rounded-xl border border-slate-200 line-clamp-4 hover:line-clamp-none transition-all">
-            {proposal.aiAnalysisText}
-          </div>
         </div>
       )}
 
@@ -475,89 +481,78 @@ function FilledQuotationView({
       )}
 
       {/* Language Switcher Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 mb-4 text-white flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden shadow-lg">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 mb-4 text-white flex flex-wrap items-center justify-between gap-3 print:hidden shadow-lg">
         <div className="flex items-center gap-2">
           <Globe className="text-blue-400" size={18} />
-          <div>
-            <span className="text-xs font-bold text-slate-200">
-              Փաստաթղթի Լեզուն (Multi-Language Quotation):
+          <span className="text-xs font-bold text-slate-200">
+            Փաստաթղթի Լեզուն (Multi-Language Quotation):
+          </span>
+          {translating && (
+            <span className="text-[11px] font-semibold text-cyan-300 animate-pulse flex items-center gap-1.5 ml-2">
+              <RefreshCw size={12} className="animate-spin" />
+              Կատարվում է ԱԲ պրոֆեսիոնալ թարգմանություն...
             </span>
-            {selectedLang !== "hy" && (
-              <div className="flex items-center gap-2 mt-0.5">
-                {translatingLang === selectedLang ? (
-                  <span className="text-[11px] text-cyan-300 flex items-center gap-1 font-medium animate-pulse">
-                    <RefreshCw className="w-3 h-3 animate-spin" />
-                    AI-ը թարգմանում է օբյեկտի նկարագրությունը, ռիսկերը և հատուկ պայմանները...
-                  </span>
-                ) : (
-                  <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    Ամբողջ տեքստը թարգմանված է ({selectedLang === "en" ? "English" : "Русский"})
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {selectedLang !== "hy" && (
-            <button
-              type="button"
-              onClick={handleForceRetranslate}
-              disabled={translatingLang === selectedLang}
-              className="text-[11px] bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-700 px-2.5 py-1 rounded-lg transition flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-              title="Վերաթարգմանել Gemini AI-ով"
-            >
-              <RefreshCw className={`w-3 h-3 ${translatingLang === selectedLang ? "animate-spin" : ""}`} />
-              Վերաթարգմանել AI-ով
-            </button>
           )}
-
-          <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
-            <button
-              type="button"
-              onClick={() => setSelectedLang("hy")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                selectedLang === "hy"
-                  ? "bg-blue-600 text-white shadow"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              🇦🇲 Հայերեն
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedLang("en")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                selectedLang === "en"
-                  ? "bg-blue-600 text-white shadow"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              🇬🇧 English
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedLang("ru")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                selectedLang === "ru"
-                  ? "bg-blue-600 text-white shadow"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              🇷🇺 Русский
-            </button>
-          </div>
+        </div>
+        <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
+          <button
+            type="button"
+            onClick={() => handleLanguageChange("hy")}
+            disabled={translating}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              selectedLang === "hy"
+                ? "bg-blue-600 text-white shadow"
+                : "text-slate-400 hover:text-white disabled:opacity-50"
+            }`}
+          >
+            🇦🇲 Հայերեն
+          </button>
+          <button
+            type="button"
+            onClick={() => handleLanguageChange("en")}
+            disabled={translating}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              selectedLang === "en"
+                ? "bg-blue-600 text-white shadow"
+                : "text-slate-400 hover:text-white disabled:opacity-50"
+            }`}
+          >
+            🇬🇧 English
+          </button>
+          <button
+            type="button"
+            onClick={() => handleLanguageChange("ru")}
+            disabled={translating}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              selectedLang === "ru"
+                ? "bg-blue-600 text-white shadow"
+                : "text-slate-400 hover:text-white disabled:opacity-50"
+            }`}
+          >
+            🇷🇺 Русский
+          </button>
         </div>
       </div>
+
+      {translationError && (
+        <div className="p-3 bg-red-50 text-red-700 text-xs font-bold rounded-xl mb-4 border border-red-200">
+          ⚠️ {translationError}
+        </div>
+      )}
 
       {/* THE OFFICIAL DOCUMENT PAPER CANVAS */}
       <div
         id="quotation-document"
-        className="bg-white border border-slate-300 shadow-xl rounded-2xl overflow-hidden text-slate-900 print:border-none print:shadow-none print:rounded-none"
+        className="bg-white border border-slate-300 shadow-xl rounded-2xl overflow-hidden text-slate-900 print:border-none print:shadow-none print:rounded-none relative"
       >
-        <div dangerouslySetInnerHTML={{ __html: generateQuotationTemplateHtml(activeProposal, selectedLang) }} />
+        {translating && (
+          <div className="absolute inset-0 bg-white/75 backdrop-blur-xs flex flex-col items-center justify-center gap-2 z-10">
+            <RefreshCw size={36} className="text-[#075bd5] animate-spin" />
+            <b className="text-sm text-slate-800">ԱԲ-ն թարգմանում է գնառաջարկի ամբողջական տեքստը...</b>
+            <span className="text-xs text-slate-500">Սա կարող է տևել մի քանի վայրկյան</span>
+          </div>
+        )}
+        <div dangerouslySetInnerHTML={{ __html: generateQuotationTemplateHtml(currentProposal, selectedLang) }} />
       </div>
 
       <TierComparisonModal

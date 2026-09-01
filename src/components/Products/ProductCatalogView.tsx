@@ -59,15 +59,12 @@ const CATEGORY_TABS = [
   { id: "special", label: "Գյուղատնտեսություն & Այլ", icon: Sprout },
 ];
 
-import { getCurrentUser } from "../../utils/authStore";
-
 export function ProductCatalogView({
   onSelectProductForQuotation,
   onStartQuotation,
   onNavigateToProperty,
   onNavigateToMortgage,
 }: ProductCatalogViewProps) {
-  const me = getCurrentUser();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeModalProduct, setActiveModalProduct] = useState<CatalogProduct | null>(null);
@@ -86,7 +83,6 @@ export function ProductCatalogView({
   const [cargoConfig, setCargoConfig] = useState({ origin: "Գերմանիա", dest: "Հայաստան", mode: "road" as "road" | "air" | "sea", clause: "ICC_A" as "ICC_A" | "ICC_B" | "ICC_C" });
 
   const filteredProducts = SIL_PRODUCTS_CATALOG.filter((product) => {
-    if (me?.role === "casco_sales" && product.id !== "casco") return false;
     const matchesCat = selectedCategory === "all" || product.category === selectedCategory;
     const matchesSearch =
       product.nameArm.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -318,16 +314,6 @@ export function ProductCatalogView({
                 className="w-full pl-10 pr-4 py-2.5 bg-white text-slate-900 placeholder:text-slate-400 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-cyan-400 shadow-md"
               />
             </div>
-            <button
-              onClick={() => {
-                const bundleCat = SIL_PRODUCTS_CATALOG.find((p) => p.id === "bundle");
-                if (bundleCat) handleOpenConfigurator(bundleCat);
-              }}
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition cursor-pointer flex-shrink-0"
-            >
-              <Layers className="w-4 h-4 text-emerald-200" />
-              Կորպորատիվ Համալիր Փաթեթ (15% Զեղչ)
-            </button>
           </div>
         </div>
       </div>

@@ -5,8 +5,8 @@ import { setCurrentUser, type PortalUser } from '../utils/authStore';
 
 export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('Admin');
+  const [password, setPassword] = useState('Admin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
@@ -43,6 +43,12 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
     }
   }
 
+  const fillAdmin = () => {
+    setUsername('Admin');
+    setPassword('Admin');
+    setError('');
+  };
+
   return (
     <div className="min-h-screen bg-[#061A40] flex items-center justify-center p-5">
       <div className="w-full max-w-md rounded-[28px] bg-white shadow-2xl overflow-hidden border border-slate-100">
@@ -63,8 +69,8 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
             </>
           )}
 
-          <Field label="Օգտանուն (Username)" value={username} onChange={setUsername} />
-          <Field label="Գաղտնաբառ (Password)" value={password} onChange={setPassword} type="password" />
+          <Field label="Username" value={username} onChange={setUsername} />
+          <Field label="Password" value={password} onChange={setPassword} type="password" />
 
           <button
             disabled={busy}
