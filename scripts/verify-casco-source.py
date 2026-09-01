@@ -5,9 +5,13 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
-BOOK = ROOT / "knowledge-base" / "source-documents" / "casco calculator 2024 - առանց ՃՈՈ.xlsx"
+BOOK = ROOT / "knowledge-base" / "source-documents" / "casco_calculator_2024.xlsx"
 if not BOOK.exists():
-    raise SystemExit(f"Missing source workbook: {BOOK}")
+    BOOK_ALT = ROOT / "knowledge-base" / "source-documents" / "casco calculator 2024 - առանց ՃՈՈ.xlsx"
+    if BOOK_ALT.exists():
+        BOOK = BOOK_ALT
+    else:
+        raise SystemExit(f"Missing source workbook: {BOOK}")
 
 wb = load_workbook(BOOK, data_only=True, read_only=True)
 ws = wb["result 2"]
