@@ -4,6 +4,8 @@ import fs from "fs";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "firebase/firestore";
 
 dotenv.config();
 
@@ -12,6 +14,20 @@ const PORT = Number(process.env.PORT) || 3000;
 const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
 const KB = path.join(ROOT, "knowledge-base");
+
+// Initialize Firebase for Backend Use
+const firebaseConfigPath = path.join(ROOT, "firebase-applet-config.json");
+let db: any = null;
+if (fs.existsSync(firebaseConfigPath)) {
+  try {
+    const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
+    const firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    console.log("Firebase/Firestore initialized successfully in server backend.");
+  } catch (err) {
+    console.error("Failed to initialize Firebase/Firestore on server backend:", err);
+  }
+}
 
 app.use(express.json({ limit: "20mb" }));
 app.use((req, res, next) => {
@@ -297,7 +313,21 @@ const handleChatRequest = async (req: any, res: any) => {
   const { messages = [], context = "", products = [], underwritingRules = [], engine = "auto" } = req.body || {};
   const lastUserMsg = messages.filter((m: any) => m.role === "user").pop()?.content || "";
   const knowledge = buildKnowledgePrompt(lastUserMsg, context);
-  const dynamicSystem = `${SYSTEM_INSTRUCTION}\n\n[ՊՐՈԴՈՒԿՏՆԵՐ]\n${JSON.stringify(products, null, 2)}\n\n[UNDERWRITING ԿԱՆՈՆՆԵՐ]\n${JSON.stringify(underwritingRules, null, 2)}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
+
+  let activeInstruction = SYSTEM_INSTRUCTION;
+  if (db) {
+    try {
+      const docRef = doc(db, "bot_configs", "advisor_bot");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists() && docSnap.data().systemInstruction) {
+        activeInstruction = docSnap.data().systemInstruction;
+      }
+    } catch (err) {
+      console.warn("Firestore bot instruction load failed, using default:", err);
+    }
+  }
+
+  const dynamicSystem = `${activeInstruction}\n\n[ՊՐՈԴՈՒԿՏՆԵՐ]\n${JSON.stringify(products, null, 2)}\n\n[UNDERWRITING ԿԱՆՈՆՆԵՐ]\n${JSON.stringify(underwritingRules, null, 2)}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
   const contents = messages.map((m: any) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
@@ -1030,6 +1060,299 @@ app.post("/api/valuation/vehicle-market-value", async (req, res) => {
       aiCommentary: `Հայաստանի ավտոշուկայում ${make} ${model} (${manufactureYear}թ.) ավտոմեքենան ունի բարձր իրացվելիություն։ Միջին շուկայական գինը ձևավորվում է ըստ տրանսպորտային միջոցի վազքի և ընդհանուր տեխնիկական վիճակի։`,
       fallback: true
     });
+  }
+});
+
+// ==================== AI POLICY & OPERATIONS CONTROL CENTER ENDPOINTS ====================
+
+// 1. Interpret Natural Language Policy Rule using Gemini
+app.post("/api/ai/interpret-rule", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const { ruleText, productType } = req.body || {};
+  if (!ruleText || !productType) {
+    return res.status(400).json({ error: "Missing ruleText or productType" });
+  }
+
+  const prompt = `You are an expert insurance logic translator for "SIL INSURANCE" CJSC.
+Your job is to translate the following Armenian natural language rule instruction into a valid structured JSON rule object.
+
+Instruction: "${ruleText}"
+Product Type: "${productType}"
+
+Output ONLY a valid, raw JSON object matching this schema, without any markdown formatting, backticks, or wrapping (no \`\`\`json block):
+{
+  "productType": "${productType}",
+  "ruleType": "surcharge" | "discount" | "underwriting_trigger" | "flag_review",
+  "condition": "A valid JavaScript logical expression using parameters like manufactureYear, totalSumInsured, fuelType, ownerAge, isElectric, enginePowerHp, isSpecialPurpose",
+  "description": "A clean, concise Armenian explanation of the rule for agents",
+  "value": a number representing percentage (e.g. 10 for 10% surcharge/discount, or null for triggers),
+  "expressionDescription": "A clear Armenian summary of what the JavaScript condition checks"
+}
+
+Example input: "ԿԱՍԿՈ-ի դեպքում եթե ավտոմեքենայի տարիքը 12 տարուց մեծ է, կիրառել 7% հավելավճար"
+Example output:
+{
+  "productType": "casco",
+  "ruleType": "surcharge",
+  "condition": "(new Date().getFullYear() - manufactureYear) > 12",
+  "description": "7% հավելավճար 12 տարուց հին ավտոմեքենաների համար",
+  "value": 7,
+  "expressionDescription": "Մեքենայի տարիքը (ընթացիկ տարի - արտադրության տարեթիվ) > 12"
+}
+
+Return ONLY the raw JSON.`;
+
+  try {
+    const result = await callGemini(
+      [{ role: "user", parts: [{ text: prompt }] }],
+      "You are a strict JSON rule compiler. Return ONLY a single raw valid JSON object.",
+      { responseMimeType: "application/json" }
+    );
+    let text = result.text.trim();
+    if (text.startsWith("```json")) text = text.replace(/^```json\s*/, "").replace(/```$/, "").trim();
+    else if (text.startsWith("```")) text = text.replace(/^```\s*/, "").replace(/```$/, "").trim();
+    
+    const parsed = JSON.parse(text);
+    res.json({ status: "ok", rule: parsed, modelUsed: result.modelUsed });
+  } catch (err: any) {
+    console.error("Interpret rule error:", err);
+    res.status(500).json({ error: "Չհաջողվեց թարգմանել կանոնը AI-ի միջոցով", details: err?.message });
+  }
+});
+
+// 2. Dynamic Rules Store endpoints (Firestore backed, with memory fallback)
+let localRulesCache: any[] = []; // In-memory fallback if Firestore fails
+
+app.get("/api/admin/dynamic-rules", auth, async (req: any, res: any) => {
+  if (!db) {
+    return res.json({ status: "ok", rules: localRulesCache });
+  }
+  try {
+    const querySnapshot = await getDocs(collection(db, "dynamic_policy_rules"));
+    const rules: any[] = [];
+    querySnapshot.forEach((doc) => {
+      rules.push({ id: doc.id, ...doc.data() });
+    });
+    res.json({ status: "ok", rules });
+  } catch (err: any) {
+    console.error("Firestore get dynamic-rules failed:", err);
+    res.json({ status: "ok", rules: localRulesCache, warning: "Loaded from memory fallback" });
+  }
+});
+
+app.post("/api/admin/dynamic-rules", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const ruleData = req.body || {};
+  ruleData.createdAt = new Date().toISOString();
+  ruleData.isActive = ruleData.isActive !== false;
+
+  if (!db) {
+    const id = "local_" + crypto.randomUUID();
+    const newRule = { id, ...ruleData };
+    localRulesCache.push(newRule);
+    addServerAudit("dynamic_rules.create", req.user.id, { id });
+    return res.json({ status: "ok", rule: newRule });
+  }
+
+  try {
+    const docRef = await addDoc(collection(db, "dynamic_policy_rules"), ruleData);
+    addServerAudit("dynamic_rules.create", req.user.id, { id: docRef.id });
+    res.json({ status: "ok", rule: { id: docRef.id, ...ruleData } });
+  } catch (err: any) {
+    console.error("Firestore add dynamic-rules failed:", err);
+    res.status(500).json({ error: "Failed to save rule to Firestore", details: err?.message });
+  }
+});
+
+app.delete("/api/admin/dynamic-rules/:id", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const id = req.params.id;
+  addServerAudit("dynamic_rules.delete", req.user.id, { id });
+
+  if (!db || id.startsWith("local_")) {
+    localRulesCache = localRulesCache.filter(r => r.id !== id);
+    return res.json({ status: "ok" });
+  }
+
+  try {
+    await deleteDoc(doc(db, "dynamic_policy_rules", id));
+    res.json({ status: "ok" });
+  } catch (err: any) {
+    console.error("Firestore delete dynamic-rules failed:", err);
+    res.status(500).json({ error: "Failed to delete rule from Firestore", details: err?.message });
+  }
+});
+
+// 3. Bot Prompt and Behavioral configuration endpoints
+app.get("/api/admin/bot-config", auth, async (req: any, res: any) => {
+  if (!db) {
+    return res.json({ status: "ok", systemInstruction: SYSTEM_INSTRUCTION });
+  }
+  try {
+    const docRef = doc(db, "bot_configs", "advisor_bot");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      res.json({ status: "ok", ...docSnap.data() });
+    } else {
+      res.json({ status: "ok", systemInstruction: SYSTEM_INSTRUCTION });
+    }
+  } catch (err: any) {
+    console.error("Firestore get bot-config failed:", err);
+    res.json({ status: "ok", systemInstruction: SYSTEM_INSTRUCTION });
+  }
+});
+
+app.post("/api/admin/bot-config", auth, requireRole("admin"), async (req: any, res: any) => {
+  const { systemInstruction } = req.body || {};
+  if (!systemInstruction) {
+    return res.status(400).json({ error: "systemInstruction is required" });
+  }
+
+  addServerAudit("bot_config.update", req.user.id);
+
+  if (!db) {
+    return res.status(503).json({ error: "Firestore connection unavailable, cannot save persistent config." });
+  }
+
+  try {
+    await setDoc(doc(db, "bot_configs", "advisor_bot"), {
+      systemInstruction,
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.user.name
+    });
+    res.json({ status: "ok", message: "Չատբոտի հրահանգը հաջողությամբ պահպանվել և ակտիվացվել է" });
+  } catch (err: any) {
+    console.error("Firestore save bot-config failed:", err);
+    res.status(500).json({ error: "Չհաջողվեց պահպանել Firestore-ում", details: err?.message });
+  }
+});
+
+// 4. Test Bot Behavior (Shadow Testing Playground)
+app.post("/api/ai/test-bot-behavior", auth, requireRole("admin"), async (req: any, res: any) => {
+  const { systemInstruction } = req.body || {};
+  if (!systemInstruction) {
+    return res.status(400).json({ error: "systemInstruction is required" });
+  }
+
+  const testCases = [
+    "Ի՞նչ փաստաթղթեր են պետք ԿԱՍԿՈ հատուցման համար",
+    "Արդյո՞ք ջրհեղեղը ներառված է բնակարանի ապահովագրության մեջ",
+    "Ինչպե՞ս է հաշվարկվում ֆրանշիզան բեռների փոխադրման ժամանակ",
+    "Որո՞նք են մասնագիտական պատասխանատվության բացառությունները"
+  ];
+
+  const results = [];
+
+  for (const tc of testCases) {
+    try {
+      const knowledge = buildKnowledgePrompt(tc, "");
+      const fullPromptActive = `${SYSTEM_INSTRUCTION}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
+      const fullPromptDraft = `${systemInstruction}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
+
+      const activeRes = await callUnifiedAi([{ role: "user", parts: [{ text: tc }], content: tc }], fullPromptActive);
+      const draftRes = await callUnifiedAi([{ role: "user", parts: [{ text: tc }], content: tc }], fullPromptDraft);
+
+      // Compute comparison rating
+      const evalPrompt = `Compare the following two insurance assistant answers to the user's question.
+Question: "${tc}"
+Answer A (Active): "${activeRes.text.slice(0, 1000)}"
+Answer B (Draft): "${draftRes.text.slice(0, 1000)}"
+
+Rate Answer B compared to Answer A. Is it better, equivalent, or worse in terms of precision, professional tone, and policy accuracy?
+Provide a brief 1-sentence comparison in Armenian and a status ("better" | "equivalent" | "worse" | "needs_attention").
+
+Return ONLY a JSON object:
+{
+  "comparison": "Armenian comparison sentence...",
+  "status": "status_value"
+}`;
+      let comparisonText = "Համարժեք պատասխան։";
+      let status = "equivalent";
+
+      try {
+        const evalRes = await callGemini(
+          [{ role: "user", parts: [{ text: evalPrompt }] }],
+          "You are a helpful grading assistant. Return ONLY a valid JSON object.",
+          { responseMimeType: "application/json" }
+        );
+        let et = evalRes.text.trim();
+        if (et.startsWith("```json")) et = et.replace(/^```json\s*/, "").replace(/```$/, "").trim();
+        else if (et.startsWith("```")) et = et.replace(/^```\s*/, "").replace(/```$/, "").trim();
+        const parsedEval = JSON.parse(et);
+        comparisonText = parsedEval.comparison || comparisonText;
+        status = parsedEval.status || status;
+      } catch {}
+
+      results.push({
+        question: tc,
+        activeResponse: activeRes.text,
+        draftResponse: draftRes.text,
+        comparison: comparisonText,
+        status
+      });
+    } catch (tcErr: any) {
+      results.push({
+        question: tc,
+        activeResponse: "Սխալ՝ " + tcErr.message,
+        draftResponse: "Սխալ՝ " + tcErr.message,
+        comparison: "Հարցումը ձախողվեց",
+        status: "needs_attention"
+      });
+    }
+  }
+
+  res.json({ status: "ok", results });
+});
+
+// 5. Template Mappings Configuration Endpoints
+const DEFAULT_MAPPINGS = [
+  { placeholder: "ClientName", systemField: "clientName", label: "Հաճախորդի Անուն/Ազգանուն" },
+  { placeholder: "TotalSumInsured", systemField: "totalSumInsured", label: "Ապահովագրական Գումար" },
+  { placeholder: "AnnualPremium", systemField: "annualPremium", label: "Տարեկան Ապահովագրավճար" },
+  { placeholder: "QuotationNumber", systemField: "quotationNumber", label: "Գնառաջարկի Համար" },
+  { placeholder: "VehicleModel", systemField: "productSpecificDetails.vehicleModel", label: "Մեքենայի Մոդել" },
+  { placeholder: "ManufactureYear", systemField: "productSpecificDetails.manufactureYear", label: "Արտադրության Տարեթիվ" },
+  { placeholder: "StartDate", systemField: "startDate", label: "Սկզբնաժամկետ" },
+  { placeholder: "EndDate", systemField: "endDate", label: "Վերջնաժամկետ" }
+];
+
+app.get("/api/admin/template-mappings", auth, async (req: any, res: any) => {
+  if (!db) {
+    return res.json({ status: "ok", mappings: DEFAULT_MAPPINGS });
+  }
+  try {
+    const docRef = doc(db, "docx_template_mappings", "default_map");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists() && docSnap.data().mappings) {
+      res.json({ status: "ok", mappings: docSnap.data().mappings });
+    } else {
+      res.json({ status: "ok", mappings: DEFAULT_MAPPINGS });
+    }
+  } catch (err: any) {
+    console.error("Firestore get template-mappings failed:", err);
+    res.json({ status: "ok", mappings: DEFAULT_MAPPINGS });
+  }
+});
+
+app.post("/api/admin/template-mappings", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
+  const { mappings } = req.body || {};
+  if (!mappings || !Array.isArray(mappings)) {
+    return res.status(400).json({ error: "mappings array is required" });
+  }
+
+  addServerAudit("template_mappings.update", req.user.id);
+
+  if (!db) {
+    return res.status(503).json({ error: "Firestore connection unavailable, cannot save mappings." });
+  }
+
+  try {
+    await setDoc(doc(db, "docx_template_mappings", "default_map"), {
+      mappings,
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.user.name
+    });
+    res.json({ status: "ok", message: "Ձևանմուշի քարտեզագրումները հաջողությամբ պահպանվել են" });
+  } catch (err: any) {
+    console.error("Firestore save template-mappings failed:", err);
+    res.status(500).json({ error: "Failed to save template mappings", details: err?.message });
   }
 });
 
