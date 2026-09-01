@@ -8,6 +8,7 @@ import { runSystemHealthCheck, type HealthCheck } from '../utils/systemHealth';
 import { getCurrentUser } from '../utils/authStore';
 import { KnowledgeBaseAdmin } from './KnowledgeBaseAdmin';
 import { SmartOperations } from './SmartOperations';
+import { ProductTemplateMapper } from './TemplateMapper/ProductTemplateMapper';
 
 type Tab='dashboard'|'users'|'approvals'|'logs'|'kb'|'rules'|'templates'|'security'|'analytics'|'settings'|'database'|'ai-overview'|'ai-rules'|'ai-bot'|'ai-templates';
 const roles=['agent','underwriter','manager','auditor','admin'];
@@ -15,13 +16,13 @@ const productKeys=Object.keys(FIXED_QUOTATION_RULES) as (keyof typeof FIXED_QUOT
 export function AdminSettings(){
  const localQuotes = useMemo(() => {
    try {
-     return JSON.parse(localStorage.getItem('sil-quote-history') || '[]');
+     return JSON.parse(localStorage.getItem('sil-quote-history') || localStorage.getItem('sil_quote_history') || '[]');
    } catch {
      return [];
    }
  }, []);
  const me=getCurrentUser(); const [tab,setTab]=useState<Tab>('dashboard'); const [users,setUsers]=useState<any[]>([]); const [logs,setLogs]=useState<any[]>(getAuditLog()); const [serverLogs,setServerLogs]=useState<any[]>([]); const [rules,setRules]=useState<any>(getDraftQuotationRules()); const [product,setProduct]=useState<any>(productKeys[0]); const [content,setContent]=useState<any>(getSiteContent()); const [health,setHealth]=useState<HealthCheck[]|null>(null); const [reg,setReg]=useState<any[]|null>(null); const [q,setQ]=useState(''); const [saved,setSaved]=useState(false); const [version,setVersion]=useState(getRulesVersion());
- const token=localStorage.getItem('sil-auth-token'); const headers:any=token?{Authorization:`Bearer ${token}`}:{};
+ const token=localStorage.getItem('sil-auth-token') || localStorage.getItem('sil_token') || ''; const headers:any=token?{Authorization:`Bearer ${token}`}:{};
  const load=async()=>{try{if(['admin','manager'].includes(me?.role||'')){const r=await fetch('/api/admin/users',{headers});if(r.ok)setUsers((await r.json()).users||[])} if(['admin','manager','auditor'].includes(me?.role||'')){const r=await fetch('/api/admin/audit',{headers});if(r.ok)setServerLogs((await r.json()).events||[])}}catch{}};
  useEffect(()=>{load()},[]);
  const rule=rules[product] as FixedProductRule; const save=()=>{saveQuotationRules(rules);saveSiteContent(content);setSaved(true);addAuditEvent({action:'admin.settings.save',entity:'settings',details:{product}});setTimeout(()=>setSaved(false),1200)};
@@ -50,7 +51,7 @@ export function AdminSettings(){
  {tab==='ai-overview'&&<SmartOperations quotes={localQuotes} forcedTab="overview" />}
  {tab==='ai-rules'&&<SmartOperations quotes={localQuotes} forcedTab="rules-engine" />}
  {tab==='ai-bot'&&<SmartOperations quotes={localQuotes} forcedTab="bot-playground" />}
- {tab==='ai-templates'&&<SmartOperations quotes={localQuotes} forcedTab="template-mapper" />}
+ {(tab==='ai-templates' || tab==='templates')&&<ProductTemplateMapper token={token} />}
  {tab==='users'&&<UsersPanel users={users} onUpdate={updateUser}/>} 
  {tab==='approvals'&&<Approvals users={users} onApprove={approve}/>} 
  {tab==='database'&&<DatabaseConsole users={users} logs={logs} serverLogs={serverLogs} onUpdateUser={updateUser}/>}
@@ -58,7 +59,6 @@ export function AdminSettings(){
  {tab==='kb'&&<KnowledgeBaseAdmin />} 
  {tab==='security'&&<Security users={users} logs={filteredLogs}/>} 
  {tab==='analytics'&&<Analytics users={users} logs={filteredLogs}/>} 
- {tab==='templates'&&<Templates/>}
  {tab==='rules'&&<Rules rules={rules} setRules={setRules} product={product} setProduct={setProduct} version={version} onHealth={async()=>setHealth(await runSystemHealthCheck())} health={health} onRegression={()=>setReg(runCascoRegression())} regression={reg}/>} 
  {tab==='settings'&&<SystemSettings content={content} setContent={setContent}/>} 
  {['rules','settings'].includes(tab)&&<div className="flex flex-wrap gap-3"><button onClick={save} className="sil-primary px-5 py-3 rounded-xl font-black flex gap-2 items-center"><Save size={17}/>{saved?'Պահպանված է':'Պահպանել Draft'}</button><button onClick={publish} className="px-5 py-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-black">Publish v{version}</button></div>}
@@ -71,7 +71,7 @@ function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any
   const [searchQuery, setSearchQuery] = useState('');
   const [localQuotes, setLocalQuotes] = useState<any[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('sil_quote_history') || '[]');
+      return JSON.parse(localStorage.getItem('sil-quote-history') || localStorage.getItem('sil_quote_history') || '[]');
     } catch {
       return [];
     }
@@ -81,6 +81,7 @@ function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any
     if (confirm('Վստա՞հ եք, որ ցանկանում եք ջնջել այս գնառաջարկը տվյալների բազայից:')) {
       const updated = localQuotes.filter(q => q.id !== id);
       setLocalQuotes(updated);
+      localStorage.setItem('sil-quote-history', JSON.stringify(updated));
       localStorage.setItem('sil_quote_history', JSON.stringify(updated));
       window.dispatchEvent(new Event('storage'));
     }
@@ -88,6 +89,7 @@ function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any
 
   const handleClearAuditLogs = () => {
     if (confirm('Վստա՞հ եք, որ ցանկանում եք մաքրել բոլոր տեղային աուդիտի գրանցումները:')) {
+      localStorage.removeItem('sil-audit-log-v1');
       localStorage.removeItem('sil_audit_logs');
       window.location.reload();
     }
