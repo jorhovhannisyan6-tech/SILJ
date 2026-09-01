@@ -235,7 +235,7 @@ export default function App() {
               }
             }}
             onUpdateProposal={(updated) => {
-              if (currentProposal?.status === "locked") {
+              if (currentProposal?.status === "locked" && updated.status !== "policy_issued" && updated.status !== "locked") {
                 window.alert("Այս գնառաջարկը փակված է։ Փոփոխության համար ստեղծեք նոր տարբերակ։");
                 return;
               }
@@ -247,7 +247,7 @@ export default function App() {
               setCurrentProposal(enriched);
               localStorage.setItem("sil-current-proposal", JSON.stringify(enriched));
               setQuoteHistory(prev => { const next = [enriched, ...prev.filter(p => p.id !== enriched.id)].slice(0, 200); localStorage.setItem("sil-quote-history", JSON.stringify(next)); return next; });
-              addAuditEvent({ action: enriched.status === "locked" ? "quote.lock" : "quote.update", entity: "quotation", entityId: enriched.id, details: { quotationNumber: enriched.quotationNumber, status: enriched.status, version: enriched.version } });
+              addAuditEvent({ action: enriched.status === "policy_issued" ? "quote.policy_issued" : enriched.status === "locked" ? "quote.lock" : "quote.update", entity: "quotation", entityId: enriched.id, details: { quotationNumber: enriched.quotationNumber, status: enriched.status, policyNumber: enriched.policyNumber, version: enriched.version } });
             }}
             onBackToCatalog={() => setActiveTab("catalog")}
           />

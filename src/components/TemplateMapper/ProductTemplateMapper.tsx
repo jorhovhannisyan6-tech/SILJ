@@ -2,16 +2,20 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText, Upload, RefreshCw, Sparkles, Play, Save, Trash2,
   FileEdit, History, AlertTriangle, FileSearch, Plus, CheckCircle2,
-  LayoutGrid, RotateCcw, Download, Info, Check, ShieldCheck, ChevronRight
+  LayoutGrid, RotateCcw, Download, Info, Check, ShieldCheck, ChevronRight, FileCheck
 } from 'lucide-react';
 import {
   SUPPORTED_TEMPLATE_PRODUCTS,
   CORE_SYSTEM_FIELDS,
+  CONTRACT_CORE_SYSTEM_FIELDS,
   PRODUCT_SPECIFIC_FIELDS,
   PRODUCT_DRY_RUN_MOCKS,
   DEFAULT_PRODUCT_MAPPINGS,
+  DEFAULT_CONTRACT_MAPPINGS,
+  CONTRACT_MOCK_DATA,
   TemplateMappingItem,
-  ProductTemplateMeta
+  ProductTemplateMeta,
+  TemplateKind
 } from '../../data/productTemplateDefaults';
 
 interface Props {
@@ -30,9 +34,11 @@ interface ProductSummaryItem {
   mappingsCount: number;
   updatedAt: string | null;
   updatedBy: string | null;
+  templateType?: string;
 }
 
 export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
+  const [templateKind, setTemplateKind] = useState<TemplateKind>('quotation');
   const [selectedProductId, setSelectedProductId] = useState<string>('casco');
   const [productsSummary, setProductsSummary] = useState<ProductSummaryItem[]>([]);
   const [isLoadingSummary, setIsLoadingSummary] = useState<boolean>(false);
@@ -70,23 +76,25 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
 
   // Combined system fields for the selected product
   const availableSystemFields = useMemo(() => {
+    const core = templateKind === 'contract' ? CONTRACT_CORE_SYSTEM_FIELDS : CORE_SYSTEM_FIELDS;
     const specific = PRODUCT_SPECIFIC_FIELDS[selectedProductId] || [];
     return [
-      { category: "Հիմնական Դաշտեր (Core)", fields: CORE_SYSTEM_FIELDS },
+      { category: templateKind === 'contract' ? "Պայմանագրի Հիմնական Դաշտեր (Contract Core)" : "Գնառաջարկի Հիմնական Դաշտեր (Quotation Core)", fields: core },
       { category: `Հատուկ Դաշտեր (${currentProductMeta.nameArm})`, fields: specific }
     ];
-  }, [selectedProductId, currentProductMeta]);
+  }, [selectedProductId, currentProductMeta, templateKind]);
 
   const flatSystemFields = useMemo(() => {
+    const core = templateKind === 'contract' ? CONTRACT_CORE_SYSTEM_FIELDS : CORE_SYSTEM_FIELDS;
     const specific = PRODUCT_SPECIFIC_FIELDS[selectedProductId] || [];
-    return [...CORE_SYSTEM_FIELDS, ...specific];
-  }, [selectedProductId]);
+    return [...core, ...specific];
+  }, [selectedProductId, templateKind]);
 
   // 1. Fetch All Products Summary
-  const fetchProductsSummary = async () => {
+  const fetchProductsSummary = async (kind: TemplateKind = templateKind) => {
     setIsLoadingSummary(true);
     try {
-      const res = await fetch("/api/admin/template-list", {
+      const res = await fetch(`/api/admin/template-list?type=${kind}`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
       });
       if (res.ok) {
@@ -103,58 +111,63 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
   };
 
   // 2. Fetch Selected Product Mappings and Template Text
-  const fetchProductMappings = async (productId: string) => {
+  const fetchProductMappings = async (productId: string, kind: TemplateKind = templateKind) => {
     setIsLoadingMappings(true);
     setMappingMessage('');
     setUploadMessage('');
     setAiAnalysisMessage('');
     setProposedMappings([]);
 
+    const defaultMappingsMap = kind === 'contract' ? DEFAULT_CONTRACT_MAPPINGS : DEFAULT_PRODUCT_MAPPINGS;
+
     try {
       // Fetch mappings
-      const res = await fetch(`/api/admin/template-mappings?product=${encodeURIComponent(productId)}`, {
+      const res = await fetch(`/api/admin/template-mappings?product=${encodeURIComponent(productId)}&type=${kind}`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
       });
       if (res.ok) {
         const data = await res.json();
-        setMappings(data.mappings || DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default);
+        setMappings(data.mappings || defaultMappingsMap[productId] || defaultMappingsMap.default);
       } else {
-        setMappings(DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default);
+        setMappings(defaultMappingsMap[productId] || defaultMappingsMap.default);
       }
 
       // Fetch template text
-      const textRes = await fetch(`/api/admin/template-text?product=${encodeURIComponent(productId)}`, {
+      const textRes = await fetch(`/api/admin/template-text?product=${encodeURIComponent(productId)}&type=${kind}`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
       });
       if (textRes.ok) {
         const textData = await textRes.json();
         setActiveTemplateText(textData.text || '');
         setIsCustomTemplate(textData.isCustomTemplate || false);
-        setActiveDocxFileName(textData.fileName || `SIL_Quotation_Template_${productId}.docx`);
+        setActiveDocxFileName(textData.fileName || (kind === 'contract' ? `SIL_Contract_Template_${productId}.docx` : `SIL_Quotation_Template_${productId}.docx`));
       }
 
       // Load product-specific version history from localStorage
-      const cachedHistory = JSON.parse(localStorage.getItem(`sil-tmpl-history-${productId}`) || "[]");
+      const cachedHistory = JSON.parse(localStorage.getItem(`sil-tmpl-history-${kind}-${productId}`) || "[]");
       setVersionHistory(cachedHistory);
 
       // Load initial dry run mock data for this product
-      const initialMock = PRODUCT_DRY_RUN_MOCKS[productId] || PRODUCT_DRY_RUN_MOCKS.default || {};
+      const initialMock = kind === 'contract'
+        ? (CONTRACT_MOCK_DATA[productId] || CONTRACT_MOCK_DATA.default || {})
+        : (PRODUCT_DRY_RUN_MOCKS[productId] || PRODUCT_DRY_RUN_MOCKS.default || {});
       setDryRunMockData({ ...initialMock });
 
     } catch (err) {
       console.error(`Failed to fetch data for product ${productId}:`, err);
-      setMappings(DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default);
+      setMappings(defaultMappingsMap[productId] || defaultMappingsMap.default);
     } finally {
       setIsLoadingMappings(false);
     }
   };
 
   useEffect(() => {
-    fetchProductsSummary();
-  }, []);
+    fetchProductsSummary(templateKind);
+    fetchProductMappings(selectedProductId, templateKind);
+  }, [templateKind]);
 
   useEffect(() => {
-    fetchProductMappings(selectedProductId);
+    fetchProductMappings(selectedProductId, templateKind);
   }, [selectedProductId]);
 
   // 3. Save Mappings for Selected Product
@@ -172,6 +185,7 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
         },
         body: JSON.stringify({
           productId: selectedProductId,
+          type: templateKind,
           mappings: targetMappings
         })
       });
@@ -195,10 +209,10 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
         };
         const updatedHistory = [newSnapshot, ...versionHistory].slice(0, 15);
         setVersionHistory(updatedHistory);
-        localStorage.setItem(`sil-tmpl-history-${selectedProductId}`, JSON.stringify(updatedHistory));
+        localStorage.setItem(`sil-tmpl-history-${templateKind}-${selectedProductId}`, JSON.stringify(updatedHistory));
 
         // Refresh overview
-        fetchProductsSummary();
+        fetchProductsSummary(templateKind);
       } else {
         setMappingMessage("❌ Չհաջողվեց պահպանել քարտեզագրումները։");
       }
@@ -211,7 +225,7 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
 
   // 4. Reset Product Mappings to System Defaults
   const handleResetToDefaults = async () => {
-    if (!confirm(`Իսկապե՞ս ցանկանում եք վերականգնել «${currentProductMeta.nameArm}» պրոդուկտի քարտեզագրումը լռելյայն համակարգային վիճակին:`)) {
+    if (!confirm(`Իսկապե՞ս ցանկանում եք վերականգնել «${currentProductMeta.nameArm}» (${templateKind === 'contract' ? 'Պայմանագիր' : 'Գնառաջարկ'}) քարտեզագրումը լռելյայն համակարգային վիճակին:`)) {
       return;
     }
 
@@ -222,15 +236,16 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ productId: selectedProductId })
+        body: JSON.stringify({ productId: selectedProductId, type: templateKind })
       });
 
       if (res.ok) {
         const data = await res.json();
-        const defaultList = data.mappings || DEFAULT_PRODUCT_MAPPINGS[selectedProductId] || DEFAULT_PRODUCT_MAPPINGS.default;
+        const defaultMappingsMap = templateKind === 'contract' ? DEFAULT_CONTRACT_MAPPINGS : DEFAULT_PRODUCT_MAPPINGS;
+        const defaultList = data.mappings || defaultMappingsMap[selectedProductId] || defaultMappingsMap.default;
         setMappings(defaultList);
         setMappingMessage("✅ " + data.message);
-        fetchProductsSummary();
+        fetchProductsSummary(templateKind);
       }
     } catch (e) {
       console.error(e);
@@ -261,6 +276,7 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
           },
           body: JSON.stringify({
             productId: selectedProductId,
+            type: templateKind,
             fileName: file.name,
             fileBase64: base64Content,
           }),
@@ -269,8 +285,8 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
         if (res.ok) {
           const data = await res.json();
           setUploadMessage("✅ " + (data.message || "Ձևանմուշը վերբեռնվեց:"));
-          fetchProductMappings(selectedProductId);
-          fetchProductsSummary();
+          fetchProductMappings(selectedProductId, templateKind);
+          fetchProductsSummary(templateKind);
         } else {
           setUploadMessage("❌ Չհաջողվեց վերբեռնել ձևանմուշը:");
         }
@@ -310,6 +326,7 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
         },
         body: JSON.stringify({
           productId: selectedProductId,
+          type: templateKind,
           fileBase64,
           fileName,
           fileText: !fileBase64 ? (activeTemplateText || promptOverride || "") : undefined,
@@ -321,7 +338,7 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
         const data = await res.json();
         if (data.proposedMappings && Array.isArray(data.proposedMappings)) {
           setProposedMappings(data.proposedMappings);
-          setAiAnalysisMessage(`✨ ԱԲ-ն հաջողությամբ գտավ և քարտեզագրեց ${data.proposedMappings.length} փոփոխական «${currentProductMeta.nameArm}» պրոդուկտի համար:`);
+          setAiAnalysisMessage(`✨ ԱԲ-ն հաջողությամբ գտավ և քարտեզագրեց ${data.proposedMappings.length} փոփոխական «${currentProductMeta.nameArm}» (${templateKind === 'contract' ? 'Պայմանագիր' : 'Գնառաջարկ'}) համար:`);
         }
       } else {
         const data = await res.json();
@@ -334,7 +351,6 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
       setIsAnalyzingTemplate(false);
     }
   };
-
   // 7. Mapping Table Handlers
   const handleMappingChange = (index: number, value: string) => {
     const updated = [...mappings];
@@ -471,7 +487,7 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
               <span>📝</span> Ձևանմուշների Քարտեզագրման Համակարգ
             </h1>
             <p className="text-xs text-slate-300 max-w-2xl">
-              Կառավարեք յուրաքանչյուր ապահովագրական պրոդուկտի համար առանձին Word (.docx) ձևանմուշներ, դաշտերի կապակցումներ, իրական ժամանակի ախտորոշում և թեստային գեներացում:
+              Կառավարեք յուրաքանչյուր ապահովագրական պրոդուկտի համար առանձին Word (.docx) ձևանմուշներ (գնառաջարկ և պայմանագիր), դաշտերի կապակցումներ, ԱԲ ավտոմատ ախտորոշում և թեստային գեներացում:
             </p>
           </div>
 
@@ -488,6 +504,38 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
             >
               <Play size={13} fill="currentColor" /> 🧪 Փորձնական Գեներացում (Dry-Run)
             </button>
+          </div>
+        </div>
+
+        {/* Template Type Mode Switcher: Quotation vs Contract */}
+        <div className="bg-black/30 p-1.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 border border-white/10">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => setTemplateKind('quotation')}
+              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                templateKind === 'quotation'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30 ring-2 ring-blue-400/40'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <FileText size={14} />
+              <span>📄 Գնառաջարկի Ձևանմուշներ (Quotations)</span>
+            </button>
+            <button
+              onClick={() => setTemplateKind('contract')}
+              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                templateKind === 'contract'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400/40'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <FileCheck size={14} />
+              <span>📜 Պայմանագրի / Վկայագրի Ձևանմուշներ (Contracts & Policies)</span>
+            </button>
+          </div>
+          <div className="text-[11px] font-mono text-slate-300 px-2 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span>Ռեժիմ՝ <b>{templateKind === 'contract' ? 'Ապահովագրության Պայմանագիր' : 'Գնային Առաջարկ'}</b></span>
           </div>
         </div>
 

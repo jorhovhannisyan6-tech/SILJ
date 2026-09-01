@@ -12,6 +12,7 @@ import { saveScenario, getScenarios, QuoteScenario } from "../../utils/scenarioS
 import { validateQuotationProposal } from "../../utils/quoteValidation";
 import { TierComparisonModal } from "./TierComparisonModal";
 import { RiskScoringPanel } from "./RiskScoringPanel";
+import { ContractGenerationModal } from "./ContractGenerationModal";
 import {
   Copy,
   Download,
@@ -35,6 +36,7 @@ import {
   Layers,
   ArrowLeft,
   Globe,
+  Award,
 } from "lucide-react";
 
 interface QuotationViewProps {
@@ -42,6 +44,7 @@ interface QuotationViewProps {
   onEdit: () => void;
   onUpdateProposal: (updated: QuotationProposal) => void;
   onBackToCatalog?: () => void;
+  token?: string;
 }
 
 export function QuotationView(props: QuotationViewProps) {
@@ -65,6 +68,7 @@ function FilledQuotationView({
   onEdit,
   onUpdateProposal,
   onBackToCatalog,
+  token,
 }: QuotationViewProps & { proposal: QuotationProposal }) {
   const [selectedLang, setSelectedLang] = useState<QuotationLanguage>("hy");
   const [copied, setCopied] = useState(false);
@@ -73,8 +77,11 @@ function FilledQuotationView({
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [tierModalOpen, setTierModalOpen] = useState(false);
+  const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [policyIssuedMessage, setPolicyIssuedMessage] = useState("");
   const [scenarios, setScenarios] = useState<QuoteScenario[]>(() => getScenarios().filter(s => s.proposalId === proposal.id));
-  const locked = proposal.status === "locked";
+  const locked = proposal.status === "locked" || proposal.status === "policy_issued";
+  const isPolicyIssued = proposal.status === "policy_issued";
   const validationIssues = validateQuotationProposal(proposal);
   const validationErrors = validationIssues.filter(i => i.severity === "error");
 
@@ -282,6 +289,16 @@ function FilledQuotationView({
             </button>
           )}
 
+          {/* 📜 CONTRACT GENERATION BUTTON */}
+          <button
+            onClick={() => setContractModalOpen(true)}
+            id="generate-contract-btn"
+            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg transition cursor-pointer active:scale-95 ring-2 ring-emerald-400/40"
+          >
+            <FileCheck className="w-4 h-4 text-emerald-100" />
+            {isPolicyIssued ? "📜 Դիտել / Տպել Պայմանագիրը" : "📜 Պատրաստել Պայմանագիր"}
+          </button>
+
           <button
             onClick={handleCopyWord}
             id="copy-word-btn"
@@ -402,8 +419,33 @@ function FilledQuotationView({
         <RiskScoringPanel productType={proposal.type} quotationData={proposal} annualPremium={proposal.annualPremium} />
       </div>
 
+      {policyIssuedMessage && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold px-4 py-3 rounded-2xl mb-4 flex items-center justify-between shadow-sm print:hidden animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Award className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{policyIssuedMessage}</span>
+          </div>
+          <button onClick={() => setPolicyIssuedMessage("")} className="text-emerald-700 hover:text-emerald-900 cursor-pointer font-black text-sm px-2">✕</button>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 mb-4 print:hidden">
-        <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 font-semibold">Կարգավիճակ՝ {locked ? "Փակված" : proposal.status === "sent" ? "Ուղարկված" : "Պատրաստ"}</span>
+        <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border ${
+          isPolicyIssued 
+            ? "bg-emerald-100 border-emerald-300 text-emerald-800" 
+            : locked 
+            ? "bg-slate-200 border-slate-300 text-slate-800" 
+            : proposal.status === "sent" 
+            ? "bg-blue-100 border-blue-200 text-blue-800" 
+            : "bg-slate-100 border-slate-200 text-slate-800"
+        }`}>
+          Կարգավիճակ՝ {isPolicyIssued ? "📜 Պայմանագիրը / Վկայագիրը Տրամադրված է" : locked ? "Փակված" : proposal.status === "sent" ? "Ուղարկված" : "Պատրաստ"}
+        </span>
+        {proposal.policyNumber && (
+          <span className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold">
+            Վկայագիր N {proposal.policyNumber}
+          </span>
+        )}
         <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 font-semibold">Տարբերակ՝ v{proposal.version || 1}</span>
         {proposal.rulesVersion && <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 font-semibold">Կանոններ՝ {proposal.rulesVersion}</span>}
         {proposal.calculatorVersion && <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 font-semibold">Հաշվիչ՝ {proposal.calculatorVersion}</span>}
@@ -778,6 +820,22 @@ function FilledQuotationView({
               specialConditions: [...(proposal.specialConditions || []), `Ընտրված ապահովագրական փաթեթ՝ ${tierId}`],
             });
           }
+        }}
+      />
+
+      <ContractGenerationModal
+        isOpen={contractModalOpen}
+        onClose={() => setContractModalOpen(false)}
+        proposal={proposal}
+        onIssuePolicy={(updatedProposal, contractData) => {
+          const updated: QuotationProposal = {
+            ...updatedProposal,
+            status: "policy_issued",
+            policyNumber: contractData.contractNumber,
+            internalNotes: `${updatedProposal.internalNotes || ""}\nՊայմանագիրը (${contractData.contractNumber}) հաջողությամբ կազմվել և վկայագիրը տրամադրվել է ${new Date().toLocaleDateString("hy-AM")}-ին:`
+          };
+          onUpdateProposal(updated);
+          setPolicyIssuedMessage(`🎉 Պայմանագիր N ${contractData.contractNumber} հաջողությամբ կազմվեց և ապահովագրական վկայագիրը տրամադրվեց:`);
         }}
       />
 

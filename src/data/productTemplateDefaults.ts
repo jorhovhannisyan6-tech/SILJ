@@ -1,5 +1,7 @@
 import { InsuranceProductType } from "../types";
 
+export type TemplateKind = "quotation" | "contract";
+
 export interface TemplateMappingItem {
   placeholder: string;
   systemField: string;
@@ -812,3 +814,338 @@ ${mappings.filter(m => m.systemField.startsWith("productSpecificDetails.")).map(
 Կազմեց՝ «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ
 Անդեռռայթինգի և ռիսկերի կառավարման վարչություն`;
 }
+
+export const CONTRACT_CORE_SYSTEM_FIELDS = [
+  { value: "contractNumber", label: "Պայմանագրի / Վկայագրի համար (contractNumber)" },
+  { value: "policyNumber", label: "Պոլիսի համար (policyNumber)" },
+  { value: "issueDate", label: "Կնքման / Տրման ամսաթիվ (issueDate)" },
+  { value: "startDate", label: "Գործողության սկիզբ (startDate)" },
+  { value: "endDate", label: "Գործողության ավարտ (endDate)" },
+  { value: "insurerName", label: "Ապահովագրող («ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ)" },
+  { value: "insurerAddress", label: "Ապահովագրողի հասցե (insurerAddress)" },
+  { value: "insurerTaxId", label: "Ապահովագրողի ՀՎՀՀ (insurerTaxId)" },
+  { value: "insurerBankDetails", label: "Ապահովագրողի բանկային ռեկվիզիտներ (insurerBankDetails)" },
+  { value: "clientName", label: "Ապահովադրի անուն / Ընկերություն (clientName)" },
+  { value: "clientPassportOrTaxId", label: "Ապահովադրի անձնագիր / ՀԾՀ / ՀՎՀՀ (clientPassportOrTaxId)" },
+  { value: "clientAddress", label: "Ապահովադրի հասցե / Գրանցման վայր (clientAddress)" },
+  { value: "clientPhone", label: "Ապահովադրի հեռախոսահամար (clientPhone)" },
+  { value: "clientEmail", label: "Ապահովադրի էլ. փոստ (clientEmail)" },
+  { value: "insuredObject", label: "Ապահովագրության օբյեկտ (insuredObject)" },
+  { value: "totalSumInsured", label: "Ապահովագրական գումար (totalSumInsured)" },
+  { value: "currency", label: "Արժույթ (AMD, USD, EUR)" },
+  { value: "annualPremium", label: "Ապահովագրավճար (annualPremium)" },
+  { value: "paymentSchedule", label: "Վճարման կարգ և գրաֆիկ (paymentSchedule)" },
+  { value: "franchiseDescription", label: "Չհատուցվող գումար / Ֆրանշիզա (franchiseDescription)" },
+  { value: "beneficiaryDetails", label: "Շահառուի տվյալներ / Բանկ (beneficiaryDetails)" },
+  { value: "coveredPerilsList", label: "Ծածկվող ռիսկեր (coveredPerilsList)" },
+  { value: "specialConditions", label: "Հատուկ պայմաններ (specialConditions)" },
+  { value: "jurisdiction", label: "Վեճերի լուծում և իրավունք (jurisdiction)" },
+];
+
+export const DEFAULT_CONTRACT_MAPPINGS: Record<string, TemplateMappingItem[]> = {
+  casco: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադրի անվանում/անուն" },
+    { placeholder: "ClientPassportOrTaxId", systemField: "clientPassportOrTaxId", label: "Անձնագիր/ՀՎՀՀ" },
+    { placeholder: "ClientAddress", systemField: "clientAddress", label: "Հասցե" },
+    { placeholder: "ClientPhone", systemField: "clientPhone", label: "Հեռախոսահամար" },
+    { placeholder: "VehicleModel", systemField: "productSpecificDetails.vehicleModel", label: "Ավտոմեքենայի մակնիշ" },
+    { placeholder: "VehicleYear", systemField: "productSpecificDetails.vehicleYear", label: "Թողարկման տարեթիվ" },
+    { placeholder: "LicensePlate", systemField: "productSpecificDetails.licensePlate", label: "Պետհամարանիշ" },
+    { placeholder: "VIN", systemField: "productSpecificDetails.vin", label: "VIN կոդ" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Ապահովագրական գումար" },
+    { placeholder: "Currency", systemField: "currency", label: "Արժույթ" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "PaymentSchedule", systemField: "paymentSchedule", label: "Վճարման ժամանակացույց" },
+    { placeholder: "Franchise", systemField: "franchiseDescription", label: "Ֆրանշիզա" },
+    { placeholder: "Beneficiary", systemField: "beneficiaryDetails", label: "Շահառու" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Գործողության սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Գործողության ավարտ" },
+    { placeholder: "CoveredRisks", systemField: "coveredPerilsList", label: "Ապահովագրական ռիսկեր" },
+    { placeholder: "SpecialTerms", systemField: "specialConditions", label: "Հատուկ պայմաններ" }
+  ],
+  property: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադիր" },
+    { placeholder: "ClientPassportOrTaxId", systemField: "clientPassportOrTaxId", label: "ՀՎՀՀ/Անձնագիր" },
+    { placeholder: "ClientAddress", systemField: "clientAddress", label: "Հասցե" },
+    { placeholder: "PropertyAddress", systemField: "productSpecificDetails.propertyAddress", label: "Ապահովագրվող գույքի հասցե" },
+    { placeholder: "PropertyArea", systemField: "productSpecificDetails.propertyArea", label: "Գույքի մակերես" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Ապահովագրական գումար" },
+    { placeholder: "Currency", systemField: "currency", label: "Արժույթ" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "PaymentSchedule", systemField: "paymentSchedule", label: "Վճարման կարգ" },
+    { placeholder: "Franchise", systemField: "franchiseDescription", label: "Ֆրանշիզա" },
+    { placeholder: "Beneficiary", systemField: "beneficiaryDetails", label: "Շահառու բանկ" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" },
+    { placeholder: "CoveredRisks", systemField: "coveredPerilsList", label: "Գույքային ռիսկեր" }
+  ],
+  cargo: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի/Պոլիսի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադիր" },
+    { placeholder: "CargoType", systemField: "productSpecificDetails.cargoType", label: "Բեռի տեսակ" },
+    { placeholder: "RouteFrom", systemField: "productSpecificDetails.routeFrom", label: "Ելակետ" },
+    { placeholder: "RouteTo", systemField: "productSpecificDetails.routeTo", label: "Նշանակման վայր" },
+    { placeholder: "TransportMode", systemField: "productSpecificDetails.transportMode", label: "Փոխադրամիջոց" },
+    { placeholder: "InvoiceNumber", systemField: "productSpecificDetails.invoiceNumber", label: "Բեռնագիր / Invoice" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Բեռի արժեք" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "Franchise", systemField: "franchiseDescription", label: "Ֆրանշիզա" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  liability: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադիր ընկերություն" },
+    { placeholder: "ActivityType", systemField: "productSpecificDetails.activityType", label: "Գործունեության տեսակ" },
+    { placeholder: "LimitPerOccurrence", systemField: "productSpecificDetails.limitPerOccurrence", label: "Սահմանաչափ 1 դեպքի համար" },
+    { placeholder: "AggregateLimit", systemField: "productSpecificDetails.aggregateLimit", label: "Համախառն սահմանաչափ" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "Franchise", systemField: "franchiseDescription", label: "Ֆրանշիզա" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  construction: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ContractorName", systemField: "productSpecificDetails.contractorName", label: "Կապալառու" },
+    { placeholder: "ProjectLocation", systemField: "productSpecificDetails.projectLocation", label: "Շինհրապարակ" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Շինմոնտաժային աշխատանքների գումար" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "Franchise", systemField: "franchiseDescription", label: "Ֆրանշիզա" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  health: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադիր կազմակերպություն/Անձ" },
+    { placeholder: "InsuredCount", systemField: "productSpecificDetails.insuredCount", label: "Աշխատակիցների/Անձանց քանակ" },
+    { placeholder: "ProgramType", systemField: "productSpecificDetails.programType", label: "Ծրագրի փաթեթ" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Տարեկան լիմիտ" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  travel: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Վկայագրի / Պոլիսի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Տրման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ճանապարհորդի անուն/ազգանուն" },
+    { placeholder: "ClientPassportOrTaxId", systemField: "clientPassportOrTaxId", label: "Անձնագրի համար" },
+    { placeholder: "Destination", systemField: "productSpecificDetails.destinationCountry", label: "Երկիր / Գոտի" },
+    { placeholder: "DurationDays", systemField: "productSpecificDetails.tripDurationDays", label: "Օրերի քանակ" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Բժշկական սահմանաչափ (EUR/USD)" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  mortgage: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Վարկառուի անուն/ազգանուն" },
+    { placeholder: "ClientPassportOrTaxId", systemField: "clientPassportOrTaxId", label: "Անձնագիր / ՀԾՀ" },
+    { placeholder: "BankName", systemField: "productSpecificDetails.bankName", label: "Շահառու Բանկ" },
+    { placeholder: "LoanNumber", systemField: "productSpecificDetails.loanNumber", label: "Վարկային պայմանագրի N" },
+    { placeholder: "PropertyAddress", systemField: "productSpecificDetails.propertyAddress", label: "Գրավադրված գույքի հասցե" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Ապահովագրական գումար" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  agro: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ֆերմեր / Տնտեսություն" },
+    { placeholder: "CropType", systemField: "productSpecificDetails.cropType", label: "Մշակաբույս" },
+    { placeholder: "FieldAreaHa", systemField: "productSpecificDetails.fieldAreaHa", label: "Մակերես հա" },
+    { placeholder: "Region", systemField: "productSpecificDetails.region", label: "Մարզ/Համայնք" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Բերքի արժեք" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  accident: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադիր" },
+    { placeholder: "InsuredPersonsCount", systemField: "productSpecificDetails.insuredPersonsCount", label: "Անձանց քանակ" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Ապահովագրական գումար" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  financial: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադիր" },
+    { placeholder: "MainContractNumber", systemField: "productSpecificDetails.contractNumber", label: "Հիմնական պայմանագրի N" },
+    { placeholder: "Beneficiary", systemField: "beneficiaryDetails", label: "Շահառու պետական մարմին" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Երաշխիքի գումար" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  aviation: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ավիաընկերություն" },
+    { placeholder: "AircraftModel", systemField: "productSpecificDetails.aircraftModel", label: "Օդանավի մոդել" },
+    { placeholder: "RegistrationMark", systemField: "productSpecificDetails.registrationMark", label: "Գրանցման համար" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Ապահովագրական արժեք" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" }
+  ],
+  default: [
+    { placeholder: "ContractNumber", systemField: "contractNumber", label: "Պայմանագրի N" },
+    { placeholder: "SignDate", systemField: "issueDate", label: "Կնքման ամսաթիվ" },
+    { placeholder: "ClientName", systemField: "clientName", label: "Ապահովադրի անվանում/անուն" },
+    { placeholder: "ClientPassportOrTaxId", systemField: "clientPassportOrTaxId", label: "Անձնագիր/ՀՎՀՀ" },
+    { placeholder: "ClientAddress", systemField: "clientAddress", label: "Հասցե" },
+    { placeholder: "InsuredObject", systemField: "insuredObject", label: "Ապահովագրության օբյեկտ" },
+    { placeholder: "SumInsured", systemField: "totalSumInsured", label: "Ապահովագրական գումար" },
+    { placeholder: "Currency", systemField: "currency", label: "Արժույթ" },
+    { placeholder: "Premium", systemField: "annualPremium", label: "Ապահովագրավճար" },
+    { placeholder: "PaymentSchedule", systemField: "paymentSchedule", label: "Վճարման կարգ" },
+    { placeholder: "Franchise", systemField: "franchiseDescription", label: "Ֆրանշիզա" },
+    { placeholder: "Beneficiary", systemField: "beneficiaryDetails", label: "Շահառու" },
+    { placeholder: "StartDate", systemField: "startDate", label: "Սկիզբ" },
+    { placeholder: "EndDate", systemField: "endDate", label: "Ավարտ" },
+    { placeholder: "CoveredRisks", systemField: "coveredPerilsList", label: "Ռիսկեր" },
+    { placeholder: "SpecialTerms", systemField: "specialConditions", label: "Հատուկ պայմաններ" }
+  ]
+};
+
+export const CONTRACT_MOCK_DATA: Record<string, Record<string, any>> = {
+  casco: {
+    contractNumber: "SIL-CASCO-POL-2026/0481",
+    policyNumber: "POL-0481-26",
+    issueDate: new Date().toLocaleDateString("hy-AM"),
+    startDate: "01.09.2026",
+    endDate: "31.08.2027",
+    clientName: "Արման Հովսեփի Կարապետյան",
+    clientPassportOrTaxId: "Անձնագիր՝ AT0541298, տրվ. 004-ի կողմից 15.04.2020 թ., ՀԾՀ՝ 2408890123",
+    clientAddress: "ՀՀ, ք. Երևան, Կոմիտասի պողոտա 28, բն. 42",
+    clientPhone: "+374 (91) 45-67-89",
+    clientEmail: "arman.karapetyan@example.com",
+    insuredObject: "TOYOTA CAMRY 2.5L, 2022 թ., VIN՝ JTDKF1RF6N312345, Համարանիշ՝ 36XX600",
+    totalSumInsured: "7,500,000",
+    currency: "AMD",
+    annualPremium: "150,000",
+    paymentSchedule: "Միանվագ վճարում պայմանագրի ստորագրումից հետո 3 բանկային օրվա ընթացքում",
+    franchiseDescription: "Ոչ պայմանական ֆրանշիզա յուրաքանչյուր դեպքի համար՝ 100,000 AMD",
+    beneficiaryDetails: "«ԱԿԲԱ ԲԱՆԿ» ԲԲԸ (Գրավառու) / Ապահովադիր",
+    coveredPerilsList: [
+      "Ավտոտրանսպորտային միջոցի վնաս կամ ոչնչացում (ՃՏՊ, բախում)",
+      "Հրդեհ, պայթյուն, կայծակ, տարերային աղետներ",
+      "Երրորդ անձանց անօրինական գործողություններ, վանդալիզմ",
+      "Ավտոտրանսպորտային միջոցի առևանգում, թալան, կողոպուտ"
+    ],
+    specialConditions: "Ապահովագրական ծածկույթը գործում է ՀՀ և ԼՂ տարածքում: Փոխհատուցումն իրականացվում է «Նորը հնի դիմաց» սկզբունքով:",
+    "productSpecificDetails.vehicleModel": "TOYOTA CAMRY",
+    "productSpecificDetails.vehicleYear": "2022",
+    "productSpecificDetails.licensePlate": "36XX600",
+    "productSpecificDetails.vin": "JTDKF1RF6N312345",
+  },
+  property: {
+    contractNumber: "SIL-PROP-POL-2026/0192",
+    policyNumber: "POL-0192-26",
+    issueDate: new Date().toLocaleDateString("hy-AM"),
+    startDate: "01.09.2026",
+    endDate: "31.08.2027",
+    clientName: "«Արաքս Տրեյդինգ» ՍՊԸ",
+    clientPassportOrTaxId: "ՀՎՀՀ՝ 02587412, Պետ. ռեգիստրի գրանցման համար՝ 286.110.10984",
+    clientAddress: "ՀՀ, ք. Երևան, Թբիլիսյան խճուղի 20",
+    clientPhone: "+374 (10) 28-90-11",
+    clientEmail: "office@arax-trading.am",
+    insuredObject: "Արտադրա-պահեստային համալիր և ապրանքային մնացորդներ",
+    totalSumInsured: "120,000,000",
+    currency: "AMD",
+    annualPremium: "312,000",
+    paymentSchedule: "2 հավասար փուլերով՝ 156,000 AMD կնքման պահին, 156,000 AMD՝ մինչև 01.03.2027 թ.",
+    franchiseDescription: "Ֆրանշիզա՝ 500,000 AMD յուրաքանչյուր ապահովագրական պատահարի համար",
+    beneficiaryDetails: "«Ամերիաբանկ» ՓԲԸ",
+    coveredPerilsList: [
+      "Հրդեհ, պայթյուն, կայծակ, ինքնաթիռի ընկնող բեկորներ",
+      "Բնական աղետներ (երկրաշարժ, փոթորիկ, կարկուտ, ջրհեղեղ)",
+      "Ջրամատակարարման և ջեռուցման համակարգերի վթարային ջրալցում",
+      "Գողություն ներթափանցմամբ, կողոպուտ, վանդալիզմ"
+    ],
+    specialConditions: "Պահպանության 24/7 անվտանգության ծառայության և հրդեհային ազդարարման համակարգի առկայություն:",
+    "productSpecificDetails.propertyAddress": "ՀՀ, ք. Երևան, Թբիլիսյան խճուղի 20",
+    "productSpecificDetails.propertyArea": "1450 քմ",
+  },
+  default: {
+    contractNumber: "SIL-GEN-POL-2026/0001",
+    policyNumber: "POL-0001-26",
+    issueDate: new Date().toLocaleDateString("hy-AM"),
+    startDate: "01.09.2026",
+    endDate: "31.08.2027",
+    clientName: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Հաճախորդ",
+    clientPassportOrTaxId: "Անձնագիր / ՀՎՀՀ 02511478",
+    clientAddress: "ՀՀ, ք. Երևան, Արամի 3",
+    clientPhone: "+374 (60) 54-00-00",
+    clientEmail: "info@silinsurance.am",
+    insuredObject: "Ապահովագրության հիմնական օբյեկտ",
+    totalSumInsured: "10,000,000",
+    currency: "AMD",
+    annualPremium: "125,000",
+    paymentSchedule: "Միանվագ վճարում",
+    franchiseDescription: "Ֆրանշիզա՝ 50,000 AMD",
+    beneficiaryDetails: "Ապահովադիր",
+    coveredPerilsList: ["Հիմնական ապահովագրական ռիսկերի փաթեթ"],
+    specialConditions: "Պայմանագիրը գործում է համաձայն ընկերության ընդհանուր կանոնների:"
+  }
+};
+
+export function getProductContractReferenceText(productId: string): string {
+  const p = SUPPORTED_TEMPLATE_PRODUCTS.find(item => item.id === productId) || SUPPORTED_TEMPLATE_PRODUCTS[0];
+  const mappings = DEFAULT_CONTRACT_MAPPINGS[productId] || DEFAULT_CONTRACT_MAPPINGS.default;
+  
+  return `«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՊԱՀՈՎԱԳՐԱԿԱՆ ՓԲԸ
+ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՇՏՈՆԱԿԱՆ ՊԱՅՄԱՆԱԳԻՐ / ՎԿԱՅԱԳԻՐ N {{ContractNumber}}
+(Ապահովագրատեսակ՝ ${p.nameArm.toUpperCase()})
+
+ք. Երևան                                                          «{{SignDate}}» թ.
+
+«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» Ապահովագրական ՓԲԸ-ն (այսուհետ՝ «Ապահովագրող»), ի դեմս Գլխավոր տնօրենի, ով գործում է Ընկերության կանոնադրության հիման վրա, մի կողմից, և
+{{ClientName}}-ը (այսուհետ՝ «Ապահովադիր»), մյուս կողմից (միասին այսուհետ՝ «Կողմեր»), 
+հիմք ընդունելով Ապահովադրի դիմում-հարցաթերթիկը և գնառաջարկը, կնքեցին սույն Ապահովագրության Պայմանագիրը (այսուհետ՝ Պայմանագիր) հետևյալի մասին.
+
+1. ՊԱՅՄԱՆԱԳՐԻ ԱՌԱՐԿԱՆ ԵՎ ՕԲՅԵԿՏԸ
+1.1. Սույն Պայմանագրով Ապահովագրողը պարտավորվում է Պայմանագրով նախատեսված ապահովագրավճարի դիմաց Պայմանագրում նշված ապահովագրական պատահարի տեղի ունենալու դեպքում Ապահովադրին (Շահառուին) հատուցել պատճառված վնասը:
+1.2. Ապահովագրության օբյեկտը և մանրամասները՝
+${mappings.filter(m => m.systemField.startsWith("productSpecificDetails.")).map(m => `- ${m.label}՝ {{${m.placeholder}}}`).join("\n")}
+
+2. ԱՊԱՀՈՎԱԳՐԱԿԱՆ ԳՈՒՄԱՐԸ, ՍԱԿԱԳԻՆԸ ԵՎ ԱՊԱՀՈՎԱԳՐԱՎՃԱՐԸ
+2.1. Ապահովագրական գումարը կազմում է՝ {{SumInsured}} {{Currency}}:
+2.2. Վճարման ենթակա ապահովագրավճարը կազմում է՝ {{Premium}} {{Currency}}:
+2.3. Ապահովագրավճարի վճարման կարգը և ժամկետները՝ {{PaymentSchedule}}:
+2.4. Չհատուցվող գումար (Ֆրանշիզա)՝ {{Franchise}}:
+2.5. Շահառու՝ {{Beneficiary}}:
+
+3. ԾԱԾԿՎՈՂ ՌԻՍԿԵՐԸ ԵՎ ՀԱՏՈՒԿ ՊԱՅՄԱՆՆԵՐԸ
+3.1. Ապահովագրական ռիսկեր՝ {{CoveredRisks}}:
+3.2. Հատուկ պայմաններ և դրույթներ՝ {{SpecialTerms}}:
+
+4. ՊԱՅՄԱՆԱԳՐԻ ԳՈՐԾՈՂՈՒԹՅԱՆ ԺԱՄԿԵՏԸ
+4.1. Սույն Պայմանագիրն ուժի մեջ է մտնում «{{StartDate}}»-ից և գործում է մինչև «{{EndDate}}» ներառյալ:
+
+5. ԿՈՂՄԵՐԻ ԻՐԱՎԱԲԱՆԱԿԱՆ ՀԱՍՑԵՆԵՐԸ ԵՎ ՌԵԿՎԻԶԻՏՆԵՐԸ
+
+ԱՊԱՀՈՎԱԳՐՈՂ՝                                                  ԱՊԱՀՈՎԱԴԻՐ՝
+«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ                                         {{ClientName}}
+ՀՀ, ք. Երևան, Արամի 3                                         Հասցե՝ {{ClientAddress}}
+ՀՎՀՀ՝ 02542158                                                Անձնագիր / ՀՎՀՀ՝ {{ClientPassportOrTaxId}}
+Հ/Հ՝ 11500123456789 («ՀԱՅԲԻԶՆԵՍԲԱՆԿ» ՓԲԸ)                      Հեռախոս՝ {{ClientPhone}}
+Հեռ.՝ +374 (60) 54-00-00                                     
+
+________________________ / Լիազորված անձ /                     ________________________ / {{ClientName}} /
+(ստորագրություն և կնիք)                                        (ստորագրություն)`;
+}
+

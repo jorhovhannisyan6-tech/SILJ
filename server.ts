@@ -883,6 +883,30 @@ app.post("/api/gemini/generate-proposal-analysis", auth, async (req, res) => {
   const productId = type || quotationData.type || "";
   const docs = KNOWLEDGE_BASE.filter((d: any) => d.productId === productId);
   const knowledge = docs.map((d: any) => `===== ${PRODUCT_LABELS[d.productId] || d.productId} | ${d.sourceFile} =====\n${String(d.text || "").slice(0, 18000)}`).join("\n\n");
+
+  if (quotationData.requestType === "contract_legal_clauses") {
+    const topic = quotationData.topic || "standard_terms";
+    const prompt = `Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ավագ իրավախորհրդատու և պայմանագրային փորձագետ Արհեստական Բանականությունն (ԱԲ) ես։
+Քո նպատակն է ձևակերպել կոնկրետ, իրավաբանորեն անթերի և պրոֆեսիոնալ ապահովագրական դրույթներ/հատուկ պայմաններ «${PRODUCT_LABELS[productId] || productId}» ապահովագրության պայմանագրի համար։
+
+Թեմա՝ ${topic}
+Պայմանագրի / Գնառաջարկի տվյալներ՝
+${JSON.stringify(quotationData, null, 2)}
+
+Պաշտոնական Աղբյուրներ (Knowledge Base)՝
+${knowledge || "Համապատասխան աղբյուր չի գտնվել։"}
+
+Ձևակերպիր հստակ, համարակալված կետերով հայերեն իրավական դրույթներ, որոնք պատրաստ են տեղադրվելու ապահովագրության պայմանագրի «Հատուկ Պայմաններ և Լրացուցիչ Դրույթներ» բաժնում։
+Տեքստը պետք է լինի խիստ պրոֆեսիոնալ, առանց ավելորդ ներածության, անմիջապես կետերով։`;
+
+    try {
+      const result = await callUnifiedAi([{ role: "user", parts: [{ text: prompt }], content: prompt }], SYSTEM_INSTRUCTION + "\nԴու ապահովագրական իրավաբան ես։ Գրիր հստակ պայմանագրային կետեր։");
+      return res.json({ analysis: result.text, modelUsed: result.modelUsed, sources: docs.map((d: any) => d.sourceFile) });
+    } catch (e: any) {
+      return res.status(503).json({ error: "Gemini-ը հասանելի չէ", details: e?.message || "unknown" });
+    }
+  }
+
   const prompt = `Ստեղծիր ներքին underwriting եզրակացություն հայերենով՝ հիմնվելով միայն փոխանցված quote տվյալների և համապատասխան SIL Insurance աղբյուրների վրա։ Մի հաստատիր ապահովագրական դեպք կամ պայմանագիր։ Եթե աղբյուրը բավարար չէ, նշիր դա։ Quote տվյալներ՝\n${JSON.stringify(quotationData, null, 2)}\n\nԱղբյուրներ՝\n${knowledge || "Համապատասխան աղբյուր չի գտնվել։"}`;
   try {
     const result = await callUnifiedAi([{ role: "user", parts: [{ text: prompt }], content: prompt }], SYSTEM_INSTRUCTION + "\nՊատասխանը կառուցիր՝ 1) Ընդհանուր գնահատական, 2) Հիմնական ռիսկեր, 3) Պայմանների համապատասխանություն, 4) Լրացուցիչ ստուգումներ, 5) Աղբյուրներ։");
@@ -1508,32 +1532,41 @@ Return ONLY a JSON object:
   res.json({ status: "ok", results });
 });
 
-// 5. Template Mappings Configuration Endpoints (Multi-Product Supported)
+// 5. Template Mappings Configuration Endpoints (Multi-Product & Quotation/Contract Supported)
 import { 
   DEFAULT_PRODUCT_MAPPINGS, 
+  DEFAULT_CONTRACT_MAPPINGS,
   SUPPORTED_TEMPLATE_PRODUCTS, 
   PRODUCT_SPECIFIC_FIELDS, 
   CORE_SYSTEM_FIELDS, 
-  getProductReferenceText 
+  CONTRACT_CORE_SYSTEM_FIELDS,
+  getProductReferenceText,
+  getProductContractReferenceText
 } from "./src/data/productTemplateDefaults";
 
 app.get("/api/admin/template-list", auth, async (req: any, res: any) => {
+  const templateType = (req.query.type as string) === "contract" ? "contract" : "quotation";
   const templatesDir = path.join(process.cwd(), "templates");
   const result = [];
 
+  const metaCollection = templateType === "contract" ? "docx_contract_templates_meta" : "docx_templates_meta";
+  const mappingCollection = templateType === "contract" ? "docx_contract_mappings" : "docx_template_mappings";
+  const defaultMappingsMap = templateType === "contract" ? DEFAULT_CONTRACT_MAPPINGS : DEFAULT_PRODUCT_MAPPINGS;
+
   for (const prod of SUPPORTED_TEMPLATE_PRODUCTS) {
-    const customFilePath = path.join(templatesDir, `SIL_Quotation_Template_${prod.id}.docx`);
-    const defaultFilePath = path.join(templatesDir, "SIL_Quotation_Template_Source.docx");
+    const filePrefix = templateType === "contract" ? "SIL_Contract_Template_" : "SIL_Quotation_Template_";
+    const customFilePath = path.join(templatesDir, `${filePrefix}${prod.id}.docx`);
+    const defaultFilePath = path.join(templatesDir, `${filePrefix}Source.docx`);
     const hasCustomDocx = fs.existsSync(customFilePath) || (prod.id === "default" && fs.existsSync(defaultFilePath));
     
-    let mappingsCount = (DEFAULT_PRODUCT_MAPPINGS[prod.id] || DEFAULT_PRODUCT_MAPPINGS.default).length;
+    let mappingsCount = (defaultMappingsMap[prod.id] || defaultMappingsMap.default).length;
     let updatedAt: string | null = null;
     let updatedBy: string | null = null;
     let customFileName: string | null = null;
 
     if (db) {
       try {
-        const docRef = doc(db, "docx_template_mappings", prod.id);
+        const docRef = doc(db, mappingCollection, prod.id);
         const snap = await getDoc(docRef);
         if (snap.exists()) {
           const data = snap.data();
@@ -1544,7 +1577,7 @@ app.get("/api/admin/template-list", auth, async (req: any, res: any) => {
           updatedBy = data.updatedBy || null;
         }
 
-        const metaRef = doc(db, "docx_templates_meta", prod.id);
+        const metaRef = doc(db, metaCollection, prod.id);
         const metaSnap = await getDoc(metaRef);
         if (metaSnap.exists()) {
           customFileName = metaSnap.data().fileName || null;
@@ -1563,67 +1596,76 @@ app.get("/api/admin/template-list", auth, async (req: any, res: any) => {
       icon: prod.icon,
       category: prod.category,
       description: prod.description,
-      sourceDocxName: customFileName || prod.sourceDocxName,
+      sourceDocxName: customFileName || (templateType === "contract" ? `SIL_Contract_Template_${prod.id}.docx` : prod.sourceDocxName),
       hasCustomDocx,
       mappingsCount,
       updatedAt,
-      updatedBy
+      updatedBy,
+      templateType
     });
   }
 
-  res.json({ status: "ok", products: result });
+  res.json({ status: "ok", templateType, products: result });
 });
 
 app.get("/api/admin/template-mappings", auth, async (req: any, res: any) => {
   const productId = (req.query.product as string) || "casco";
-  const defaultList = DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default;
+  const templateType = (req.query.type as string) === "contract" ? "contract" : "quotation";
+  const defaultMappingsMap = templateType === "contract" ? DEFAULT_CONTRACT_MAPPINGS : DEFAULT_PRODUCT_MAPPINGS;
+  const defaultList = defaultMappingsMap[productId] || defaultMappingsMap.default;
+  const mappingCollection = templateType === "contract" ? "docx_contract_mappings" : "docx_template_mappings";
 
   if (!db) {
-    return res.json({ status: "ok", productId, mappings: defaultList, isDefault: true });
+    return res.json({ status: "ok", productId, templateType, mappings: defaultList, isDefault: true });
   }
   try {
-    const docRef = doc(db, "docx_template_mappings", productId);
+    const docRef = doc(db, mappingCollection, productId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists() && docSnap.data().mappings && Array.isArray(docSnap.data().mappings)) {
       res.json({ 
         status: "ok", 
         productId, 
+        templateType,
         mappings: docSnap.data().mappings,
         updatedAt: docSnap.data().updatedAt,
         updatedBy: docSnap.data().updatedBy,
         isDefault: false
       });
     } else {
-      res.json({ status: "ok", productId, mappings: defaultList, isDefault: true });
+      res.json({ status: "ok", productId, templateType, mappings: defaultList, isDefault: true });
     }
   } catch (err: any) {
-    console.error(`Firestore get template-mappings for ${productId} failed:`, err);
-    res.json({ status: "ok", productId, mappings: defaultList, isDefault: true });
+    console.error(`Firestore get template-mappings for ${productId} (${templateType}) failed:`, err);
+    res.json({ status: "ok", productId, templateType, mappings: defaultList, isDefault: true });
   }
 });
 
 app.post("/api/admin/template-mappings", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
-  const { mappings, productId = "casco" } = req.body || {};
+  const { mappings, productId = "casco", type = "quotation" } = req.body || {};
+  const templateType = type === "contract" ? "contract" : "quotation";
+  const mappingCollection = templateType === "contract" ? "docx_contract_mappings" : "docx_template_mappings";
+
   if (!mappings || !Array.isArray(mappings)) {
     return res.status(400).json({ error: "mappings array is required" });
   }
 
-  addServerAudit("template_mappings.update", req.user.id, { productId, count: mappings.length });
+  addServerAudit("template_mappings.update", req.user.id, { productId, templateType, count: mappings.length });
 
   if (!db) {
     return res.status(503).json({ error: "Firestore connection unavailable, cannot save mappings." });
   }
 
   try {
-    await setDoc(doc(db, "docx_template_mappings", productId), {
+    await setDoc(doc(db, mappingCollection, productId), {
       productId,
+      templateType,
       mappings,
       updatedAt: new Date().toISOString(),
       updatedBy: req.user.name || "Անդեռռայթեր"
     });
     res.json({ 
       status: "ok", 
-      message: `«${productId}» պրոդուկտի ձևանմուշի քարտեզագրումները հաջողությամբ պահպանվել են Firestore-ում:` 
+      message: `«${productId}» (${templateType === "contract" ? "Պայմանագիր" : "Գնառաջարկ"}) ձևանմուշի քարտեզագրումները հաջողությամբ պահպանվել են Firestore-ում:` 
     });
   } catch (err: any) {
     console.error(`Firestore save template-mappings for ${productId} failed:`, err);
@@ -1632,14 +1674,17 @@ app.post("/api/admin/template-mappings", auth, requireRole("admin", "underwriter
 });
 
 app.post("/api/admin/template-reset", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
-  const { productId = "casco" } = req.body || {};
-  const defaultList = DEFAULT_PRODUCT_MAPPINGS[productId] || DEFAULT_PRODUCT_MAPPINGS.default;
+  const { productId = "casco", type = "quotation" } = req.body || {};
+  const templateType = type === "contract" ? "contract" : "quotation";
+  const defaultMappingsMap = templateType === "contract" ? DEFAULT_CONTRACT_MAPPINGS : DEFAULT_PRODUCT_MAPPINGS;
+  const defaultList = defaultMappingsMap[productId] || defaultMappingsMap.default;
+  const mappingCollection = templateType === "contract" ? "docx_contract_mappings" : "docx_template_mappings";
 
-  addServerAudit("template_mappings.reset", req.user.id, { productId });
+  addServerAudit("template_mappings.reset", req.user.id, { productId, templateType });
 
   if (db) {
     try {
-      await deleteDoc(doc(db, "docx_template_mappings", productId));
+      await deleteDoc(doc(db, mappingCollection, productId));
     } catch (err) {
       console.warn("Could not delete from Firestore:", err);
     }
@@ -1647,13 +1692,15 @@ app.post("/api/admin/template-reset", auth, requireRole("admin", "underwriter"),
 
   res.json({
     status: "ok",
-    message: `«${productId}» պրոդուկտի քարտեզագրումը հաջողությամբ վերականգնվեց համակարգային լռելյայն վիճակին:`,
+    message: `«${productId}» (${templateType === "contract" ? "Պայմանագիր" : "Գնառաջարկ"}) քարտեզագրումը հաջողությամբ վերականգնվեց համակարգային լռելյայն վիճակին:`,
     mappings: defaultList
   });
 });
 
 app.post("/api/admin/upload-docx-template", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
-  const { fileBase64, fileName, productId = "casco" } = req.body || {};
+  const { fileBase64, fileName, productId = "casco", type = "quotation" } = req.body || {};
+  const templateType = type === "contract" ? "contract" : "quotation";
+
   if (!fileBase64) {
     return res.status(400).json({ error: "Missing required field: fileBase64" });
   }
@@ -1667,19 +1714,23 @@ app.post("/api/admin/upload-docx-template", auth, requireRole("admin", "underwri
       fs.mkdirSync(templatesDir, { recursive: true });
     }
 
-    const templatePath = path.join(templatesDir, `SIL_Quotation_Template_${productId}.docx`);
+    const filePrefix = templateType === "contract" ? "SIL_Contract_Template_" : "SIL_Quotation_Template_";
+    const targetFileName = fileName || `${filePrefix}${productId}.docx`;
+    const templatePath = path.join(templatesDir, `${filePrefix}${productId}.docx`);
     fs.writeFileSync(templatePath, buffer);
 
     if (productId === "default") {
-      const defaultPath = path.join(templatesDir, "SIL_Quotation_Template_Source.docx");
+      const defaultPath = path.join(templatesDir, `${filePrefix}Source.docx`);
       fs.writeFileSync(defaultPath, buffer);
     }
 
+    const metaCollection = templateType === "contract" ? "docx_contract_templates_meta" : "docx_templates_meta";
     if (db) {
       try {
-        await setDoc(doc(db, "docx_templates_meta", productId), {
+        await setDoc(doc(db, metaCollection, productId), {
           productId,
-          fileName: fileName || `SIL_Quotation_Template_${productId}.docx`,
+          templateType,
+          fileName: targetFileName,
           uploadedAt: new Date().toISOString(),
           uploadedBy: req.user.name || "Անդեռռայթեր",
           fileSizeBytes: buffer.length
@@ -1689,11 +1740,11 @@ app.post("/api/admin/upload-docx-template", auth, requireRole("admin", "underwri
       }
     }
 
-    addServerAudit("docx_template.upload", req.user.id, { fileName, productId });
+    addServerAudit("docx_template.upload", req.user.id, { fileName: targetFileName, productId, templateType });
 
     res.json({
       status: "ok",
-      message: `Word ձևանմուշը (${fileName || `SIL_Quotation_Template_${productId}.docx`}) հաջողությամբ վերբեռնվեց և ակտիվացվեց «${productId}» պրոդուկտի համար:`
+      message: `Word ${templateType === "contract" ? "պայմանագրի" : "գնառաջարկի"} ձևանմուշը (${targetFileName}) հաջողությամբ վերբեռնվեց և ակտիվացվեց «${productId}» պրոդուկտի համար:`
     });
   } catch (err: any) {
     console.error("Failed to upload docx template:", err);
@@ -1703,11 +1754,13 @@ app.post("/api/admin/upload-docx-template", auth, requireRole("admin", "underwri
 
 app.get("/api/admin/template-text", auth, async (req: any, res: any) => {
   const productId = (req.query.product as string) || "casco";
+  const templateType = (req.query.type as string) === "contract" ? "contract" : "quotation";
 
   try {
     const templatesDir = path.join(process.cwd(), "templates");
-    const specificPath = path.join(templatesDir, `SIL_Quotation_Template_${productId}.docx`);
-    const fallbackPath = path.join(templatesDir, "SIL_Quotation_Template_Source.docx");
+    const filePrefix = templateType === "contract" ? "SIL_Contract_Template_" : "SIL_Quotation_Template_";
+    const specificPath = path.join(templatesDir, `${filePrefix}${productId}.docx`);
+    const fallbackPath = path.join(templatesDir, `${filePrefix}Source.docx`);
     const kbFallbackPath = path.join(process.cwd(), "knowledge-base", "templates", "quotation-template-source.docx");
     
     let targetPath = "";
@@ -1718,7 +1771,7 @@ app.get("/api/admin/template-text", auth, async (req: any, res: any) => {
       isCustom = true;
     } else if (fs.existsSync(fallbackPath)) {
       targetPath = fallbackPath;
-    } else if (fs.existsSync(kbFallbackPath)) {
+    } else if (templateType === "quotation" && fs.existsSync(kbFallbackPath)) {
       targetPath = kbFallbackPath;
     }
 
@@ -1729,6 +1782,7 @@ app.get("/api/admin/template-text", auth, async (req: any, res: any) => {
         return res.json({ 
           status: "ok", 
           productId,
+          templateType,
           text: result.value, 
           isCustomTemplate: isCustom,
           fileName: path.basename(targetPath)
@@ -1736,22 +1790,30 @@ app.get("/api/admin/template-text", auth, async (req: any, res: any) => {
       }
     }
 
-    // Fallback to structured product reference text
-    const referenceText = getProductReferenceText(productId);
+    // Fallback to structured reference text
+    const referenceText = templateType === "contract" 
+      ? getProductContractReferenceText(productId) 
+      : getProductReferenceText(productId);
+
     res.json({ 
       status: "ok", 
       productId,
+      templateType,
       text: referenceText, 
       isCustomTemplate: false,
-      fileName: `SIL_Quotation_Template_${productId}.docx (Reference)`
+      fileName: `${filePrefix}${productId}.docx (Reference)`
     });
 
   } catch (err: any) {
     console.error(`Failed to read template text for ${productId}:`, err);
-    const referenceText = getProductReferenceText(productId);
+    const referenceText = templateType === "contract" 
+      ? getProductContractReferenceText(productId) 
+      : getProductReferenceText(productId);
+
     res.json({ 
       status: "ok", 
       productId,
+      templateType,
       text: referenceText, 
       isCustomTemplate: false,
       fileName: "Reference Default"
@@ -1760,7 +1822,8 @@ app.get("/api/admin/template-text", auth, async (req: any, res: any) => {
 });
 
 app.post("/api/ai/analyze-template", auth, requireRole("admin", "underwriter"), async (req: any, res: any) => {
-  const { fileBase64, fileText, fileName, productId = "casco" } = req.body || {};
+  const { fileBase64, fileText, fileName, productId = "casco", type = "quotation" } = req.body || {};
+  const templateType = type === "contract" ? "contract" : "quotation";
   let text = fileText || "";
 
   try {
@@ -1780,25 +1843,29 @@ app.post("/api/ai/analyze-template", auth, requireRole("admin", "underwriter"), 
 
     const prodMeta = SUPPORTED_TEMPLATE_PRODUCTS.find(p => p.id === productId) || SUPPORTED_TEMPLATE_PRODUCTS[0];
     const specificFields = PRODUCT_SPECIFIC_FIELDS[productId] || [];
+    const coreFields = templateType === "contract" ? CONTRACT_CORE_SYSTEM_FIELDS : CORE_SYSTEM_FIELDS;
+
     const fieldsListPrompt = [
-      ...CORE_SYSTEM_FIELDS.map(f => `- ${f.value} (${f.label})`),
+      ...coreFields.map(f => `- ${f.value} (${f.label})`),
       ...specificFields.map(f => `- ${f.value} (${f.label})`)
     ].join("\n");
 
     const excerpt = text.slice(0, 30000);
 
-    const systemInstruction = `You are an expert insurance business analyst and document engineer for SIL Insurance Company.
-Your job is to analyze the text of an insurance quotation template or form for the product: "${prodMeta.nameArm}" (${prodMeta.nameEn}).
-Extract all variables, placeholders, or dynamic data fields (often enclosed in curly braces like {{ClientName}}, {{TotalSumInsured}}, {{VehicleModel}}, or blanks/underlines indicating dynamic inputs).
-Map these extracted variables to the system's available dynamic quotation fields for this product.
+    const docTypeName = templateType === "contract" ? "ապահովագրության պայմանագրի / վկայագրի (Contract / Policy)" : "գնառաջարկի (Quotation)";
+
+    const systemInstruction = `You are an expert insurance business analyst, underwriter, and legal document engineer for SIL Insurance Company.
+Your job is to analyze the text of an insurance ${docTypeName} template for the product: "${prodMeta.nameArm}" (${prodMeta.nameEn}).
+Extract all variables, placeholders, or dynamic data fields (often enclosed in curly braces like {{ClientName}}, {{ContractNumber}}, {{TotalSumInsured}}, {{SumInsured}}, {{Premium}}, {{SignDate}}, or underlines/blanks indicating dynamic inputs).
+Map these extracted variables to the system's available dynamic ${templateType} fields for this product.
 Output ONLY a valid JSON array of objects, where each object represents a placeholder mapping.
 Do not wrap in markdown codeblocks if possible. Just output the clean JSON array.`;
 
-    const prompt = `Ահա «${prodMeta.nameArm}» (${prodMeta.id}) ապահովագրության գնառաջարկի ձևանմուշի տեքստը:
-Խնդրում ենք գտնել բոլոր փոփոխականները, դատարկ տեղերը կամ ձևանմուշի placeholders-ը (օրինակ՝ {{ClientName}}, {{TotalSumInsured}}, {{VehicleModel}} կամ նմանատիպ դաշտերը), որոնք պետք է լրացվեն համակարգից։
+    const prompt = `Ահա «${prodMeta.nameArm}» (${prodMeta.id}) ապահովագրության ${docTypeName} ձևանմուշի տեքստը:
+Խնդրում ենք գտնել բոլոր փոփոխականները, դատարկ տեղերը կամ ձևանմուշի placeholders-ը (օրինակ՝ {{ClientName}}, {{ContractNumber}}, {{SumInsured}}, {{Premium}}, {{VehicleModel}} կամ նմանատիպ դաշտերը), որոնք պետք է լրացվեն համակարգից։
 Կատարիր ավտոմատ քարտեզագրում հետևյալ համակարգային դաշտերի հետ, եթե դրանք իմաստային համընկնում են:
 
-Համակարգում «${prodMeta.nameArm}» պրոդուկտի համար հասանելի դաշտերն են.
+Համակարգում «${prodMeta.nameArm}» ${docTypeName} համար հասանելի դաշտերն են.
 ${fieldsListPrompt}
 
 Վերադարձրու JSON զանգված հետևյալ ձևաչափով (ՄԻԱՅՆ JSON)՝
@@ -1833,6 +1900,7 @@ ${excerpt}
     res.json({
       status: "ok",
       productId,
+      templateType,
       proposedMappings,
       extractedTextLength: text.length,
       templateText: text
