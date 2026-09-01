@@ -6,16 +6,16 @@
   "scripts": {
     "dev": "tsx server.ts",
     "dev:web": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "build:web": "vite build",
-    "preview": "tsx server.ts",
-    "start": "tsx server.ts",
+    "preview": "node dist/server.cjs",
+    "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
     "qa": "node scripts/qa-static.mjs",
     "cloudrun:build": "npm run build",
     "cloudrun:start": "npm start",
     "check:runtime": "node scripts/check-runtime.mjs",
-    "build:production": "vite build",
+    "build:production": "npm run build",
     "qa:regression": "node scripts/regression-check.js",
     "qa:security": "node scripts/security-check.js"
   },
@@ -24,6 +24,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
+    "esbuild": "^0.25.0",
     "express": "^4.21.2",
     "firebase": "^12.18.0",
     "html2canvas": "^1.4.1",
@@ -43,7 +44,6 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0"
+    "autoprefixer": "^10.4.21"
   }
 }

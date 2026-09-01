@@ -932,9 +932,20 @@ app.post("/api/ai/translate-proposal", auth, async (req, res) => {
   const prompt = `Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի պաշտոնական թարգմանիչն ես։
 Թարգմանիր հետևյալ ապահովագրական գնառաջարկի տվյալները ${targetLang === "en" ? "Անգլերեն (English)" : "Ռուսերեն (Russian)"} լեզվով՝ պահպանելով բոլոր մասնագիտական տերմինների ճշգրտությունը։
 Տեքստերը պետք է լինեն լիարժեք, պրոֆեսիոնալ և գրագետ։
-Թարգմանիր միայն տեքստային դաշտերը (ինչպիսիք են clientName, productNameArm, productSpecificDetails-ի բոլոր տեքստային արժեքները, coverages, remarks, underwriting-ի մեկնաբանությունները, status-ները եթե անհրաժեշտ է և այլն)։
-ՄԻ փոփոխիր թվերը, գումարները, սակագները, ամսաթվերը, id-ները և բանալիները։
-Վերադարձրու ՄԻԱՅՆ վավեր JSON պատասխան՝ նույն սխեմայով և կառուցվածքով, առանց որևէ markdown կոդային բլոկի (no \`\`\`json blocks) կամ լրացուցիչ բացատրությունների։
+
+ԿԱՐԵՎՈՐ ՀՐԱՀԱՆԳՆԵՐ ԸՆԿԵՐՈՒԹՅԱՆ ԵՎ ՏԵՐՄԻՆՆԵՐԻ ԹԱՐԳՄԱՆՈՒԹՅԱՆ ՀԱՄԱՐ՝
+1. ՊԱՐՏԱԴԻՐ ԹԱՐԳՄԱՆԻՐ ընկերության անվանումը և հարակից տերմինները.
+   - «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ / «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» Ապահովագրական ՓԲԸ -> ${targetLang === "en" ? '"SIL INSURANCE CJSC"' : '"СЗАО «СИЛ ИНՇՈՒՐԱՆՍ»"'}
+   - «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» -> ${targetLang === "en" ? '"SIL Insurance"' : '"«СИЛ ИНՇՈՒՐԱՆՍ»"'}
+   - Ապահովագրական Ընկերություն / Ապահովագրող -> ${targetLang === "en" ? '"Insurance Company" / "Insurer"' : '"Страховая Компания" / "Страховщик"'}
+   - Ապահովադիր -> ${targetLang === "en" ? '"Policyholder"' : '"Страхователь"'}
+   - Շահառու -> ${targetLang === "en" ? '"Beneficiary"' : '"Выгодоприобретатель"'}
+   - Չհատուցվող գումար / Ֆրանշիզա -> ${targetLang === "en" ? '"Deductible / Franchise"' : '"Франшиза"'}
+   - Ապահովագրավճար -> ${targetLang === "en" ? '"Insurance Premium"' : '"Страховая премия"'}
+   - Գլխավոր Անդեռռայթեր -> ${targetLang === "en" ? '"Chief Underwriter"' : '"Главный Андеррайтер"'}
+2. Թարգմանիր բոլոր տեքստային դաշտերը (clientName, productNameArm, productSpecificDetails-ի բոլոր տեքստային արժեքները, coverages, coveredPerilsList, specialConditions, remarks, franchiseDescription, paymentTerms, beneficiaryDetails, objectDescription և այլն)։
+3. ՄԻ փոփոխիր թվերը, գումարները, սակագները, ամսաթվերը, id-ները և բանալիները։
+4. Վերադարձրու ՄԻԱՅՆ վավեր JSON պատասխան՝ նույն սխեմայով և կառուցվածքով, առանց որևէ markdown կոդային բլոկի (no \`\`\`json blocks)։
 
 Գնառաջարկի տվյալներ՝
 ${JSON.stringify(proposal, null, 2)}`;
@@ -944,7 +955,35 @@ ${JSON.stringify(proposal, null, 2)}`;
     let text = result.text.trim();
     if (text.startsWith("```json")) text = text.replace(/^```json\s*/, "").replace(/```$/, "").trim();
     else if (text.startsWith("```")) text = text.replace(/^```\s*/, "").replace(/```$/, "").trim();
-    const parsed = JSON.parse(text);
+    let parsed = JSON.parse(text);
+
+    // Deep post-processing to guarantee Armenian company name references are replaced
+    const cleanCompanyNames = (obj: any): any => {
+      if (typeof obj === "string") {
+        let s = obj;
+        if (targetLang === "en") {
+          s = s.replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*Ապահովագրական\s*ՓԲԸ/gi, "SIL INSURANCE CJSC")
+               .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*ԱՓԲԸ/gi, "SIL INSURANCE CJSC")
+               .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?/gi, "SIL Insurance");
+        } else if (targetLang === "ru") {
+          s = s.replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*Ապահովագրական\s*ՓԲԸ/gi, "СЗАО «СИЛ ИНՇՈՒՐԱՆՍ»")
+               .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*ԱՓԲԸ/gi, "СЗАО «СИЛ ИНՇՈՒՐԱՆՍ»")
+               .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?/gi, "«СИЛ ИНՇՈՒՐԱՆՍ»");
+        }
+        return s;
+      }
+      if (Array.isArray(obj)) return obj.map(cleanCompanyNames);
+      if (obj && typeof obj === "object") {
+        const out: any = {};
+        for (const k of Object.keys(obj)) {
+          out[k] = cleanCompanyNames(obj[k]);
+        }
+        return out;
+      }
+      return obj;
+    };
+
+    parsed = cleanCompanyNames(parsed);
     res.json({ status: "ok", proposal: parsed, modelUsed: result.modelUsed });
   } catch (e: any) {
     console.error("Translation failed:", e?.message);

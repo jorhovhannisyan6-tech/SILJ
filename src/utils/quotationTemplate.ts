@@ -189,7 +189,7 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
   const isRu = lang === "ru";
 
   const t = {
-    mainData: isEn ? "MAIN INSURANCE DETAILS" : isRu ? "ОСНОВНЫԵ ДАННЫЕ СТРАХОВАНИЯ" : "ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՀԻՄՆԱԿԱՆ ՏՎՅԱԼՆԵՐ",
+    mainData: isEn ? "MAIN INSURANCE DETAILS" : isRu ? "ОСНОВНЫЕ ДАННЫЕ СТРАХОВАНИЯ" : "ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՀԻՄՆԱԿԱՆ ՏՎՅԱԼՆԵՐ",
     specialData: isEn ? "PRODUCT SPECIFIC DETAILS" : isRu ? "СПЕЦИАЛЬНЫЕ УСЛОВИЯ ПРОДУКТА" : "ՊՐՈԴՈՒԿՏԻ ՀԱՏՈՒԿ ՏՎՅԱԼՆԵՐ",
     financialOffer: isEn ? "FINANCIAL PROPOSAL" : isRu ? "ФИНАНСОВОЕ ПРЕДЛОЖЕНИЕ" : "ՖԻՆԱՆՍԱԿԱՆ ԱՌԱՋԱՐԿ",
     financialTerms: isEn ? "MAIN FINANCIAL TERMS" : isRu ? "ОСНОВНЫЕ ФИНАНСОВЫЕ УСЛОВИЯ" : "ՀԻՄՆԱԿԱՆ ՖԻՆԱՆՍԱԿԱՆ ՊԱՅՄԱՆՆԵՐ",
@@ -199,7 +199,8 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
     specialConditions: isEn ? "SPECIAL CONDITIONS" : isRu ? "ОСОБЫЕ УСЛОВИЯ" : "ՀԱՏՈՒԿ ՊԱՅՄԱՆՆԵՐ",
     requiredDocs: isEn ? "REQUIRED DOCUMENTS" : isRu ? "НЕОБХОДИМЫЕ ДОКУМЕНТЫ" : "ԱՆՀՐԱԺԵՇՏ ՓԱՍՏԱԹՂԹԵՐ",
     importantNote: isEn ? "IMPORTANT NOTICE" : isRu ? "ВАЖНОЕ ПРИМЕЧАНИЕ" : "ԿԱՐԵՎՈՐ ՆՇՈՒՄ",
-    insurer: isEn ? "Insured by SIL Insurance CJSC" : isRu ? "ЗАО СПАО «СИЛ ИНШУРАНС»" : "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ",
+    insurerLabel: isEn ? "Insurer" : isRu ? "Страховщик" : "Ապահովագրող",
+    insurerName: isEn ? "SIL INSURANCE CJSC" : isRu ? "СЗАО «СИЛ ИНШУРАНС»" : "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ",
     policyholder: isEn ? "Policyholder" : isRu ? "Страхователь" : "Ապահովադիր",
     beneficiary: isEn ? "Beneficiary" : isRu ? "Выгодоприобретатель" : "Շահառու",
     insuranceType: isEn ? "Insurance Type" : isRu ? "Вид страхования" : "Ապահովագրության տեսակ",
@@ -214,7 +215,7 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
     presentedTo: isEn ? "Presented to:" : isRu ? "Представляется:" : "Ներկայացվում է՝",
     quoteHeader: isEn ? "QUOTATION PROPOSAL" : isRu ? "КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ" : "ԳՆԱՌԱՋԱՐԿ",
     total: isEn ? "Total" : isRu ? "Итого" : "Ընդամենը",
-    silRepresentative: isEn ? "For SIL Insurance CJSC:" : isRu ? "От имени ЗАО СПАО «СИЛ ИНШУРАНС»:" : "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի կողմից՝",
+    silRepresentative: isEn ? "For SIL Insurance CJSC:" : isRu ? "От имени СЗАО «СИЛ ИНШУРАНС»:" : "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի կողմից՝",
     clientSignature: isEn ? "CUSTOMER / POLICYHOLDER:" : isRu ? "КЛИЕНТ (СТРАХОВАТЕЛЬ):" : "ՀԱՃԱԽՈՐԴԻ (ԱՊԱՀՈՎԱԴՐԻ) ԿՈՂՄԻՑ՝",
   };
 
@@ -243,7 +244,7 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
   const row = (label: string, value: unknown) => `<tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>`;
 
   const productRows = [
-    row(t.insurer, "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ"),
+    row(t.insurerLabel, t.insurerName),
     row(t.policyholder, client),
     row(t.beneficiary, beneficiary),
     row(t.insuranceType, product),
@@ -258,13 +259,61 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
 
   const detailRows = detailsRows(proposal, lang);
 
+  const contactHtml = isEn
+    ? `3, 5 Arami str., Yerevan, RA<br/>Tel: (+374 60) 54 00 00<br/><a href="mailto:info@silinsurance.am">info@silinsurance.am</a> | <a href="https://www.silinsurance.am">www.silinsurance.am</a>`
+    : isRu
+    ? `РА, г. Ереван, ул. Арами 3, 5<br/>Тел.: (+374 60) 54 00 00<br/><a href="mailto:info@silinsurance.am">info@silinsurance.am</a> | <a href="https://www.silinsurance.am">www.silinsurance.am</a>`
+    : `ՀՀ, ք. Երևան, Արամի 3,5<br/>hեռ․՝ (+374 60) 54 00 00<br/><a href="mailto:info@silinsurance.am">info@silinsurance.am</a> | <a href="https://www.silinsurance.am">www.silinsurance.am</a>`;
+
+  let agentNameDisplay = proposal.agentName || t.insurerName;
+  if (agentNameDisplay === "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ" || !agentNameDisplay) {
+    agentNameDisplay = t.insurerName;
+  } else if (isEn) {
+    agentNameDisplay = agentNameDisplay
+      .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*Ապահովագրական\s*ՓԲԸ/gi, "SIL INSURANCE Insurance CJSC")
+      .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*ԱՓԲԸ/gi, "SIL INSURANCE CJSC")
+      .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?/gi, "SIL Insurance");
+  } else if (isRu) {
+    agentNameDisplay = agentNameDisplay
+      .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*Ապահովագրական\s*ՓԲԸ/gi, "СЗАО «СИЛ ИНШУРАНС»")
+      .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?\s*ԱՓԲԸ/gi, "СЗАО «СИЛ ИНШՈՒՐԱՆՍ»")
+      .replace(/«?ՍԻԼ\s*ԻՆՇՈՒՐԱՆՍ»?/gi, "«СИЛ ИНШՈՒՐԱՆՍ»");
+  }
+
+  let agentTitleDisplay = proposal.agentTitle || (isEn ? "Insurance Company" : isRu ? "Страховая компания" : "Ապահովագրական Ընկերություն");
+  if (isEn) {
+    agentTitleDisplay = agentTitleDisplay
+      .replace(/Ապահովագրական\s*Ընկերություն/gi, "Insurance Company")
+      .replace(/Անդեռռայթեր/gi, "Underwriter")
+      .replace(/Ագենտ/gi, "Insurance Agent")
+      .replace(/Գլխավոր\s*Անդեռռայթեր/gi, "Chief Underwriter");
+  } else if (isRu) {
+    agentTitleDisplay = agentTitleDisplay
+      .replace(/Ապահովագրական\s*Ընկերություն/gi, "Страховая компания")
+      .replace(/Անդեռռայթեր/gi, "Андеррайтер")
+      .replace(/Ագենտ/gi, "Страховой Агент")
+      .replace(/Գլխավոր\s*Անդեռռայթեր/gi, "Главный Андеррайтер");
+  }
+
+  const footerText = isEn
+    ? `SIL Insurance CJSC • 3, 5 Arami str., Yerevan, RA • Tel: (+374 60) 54-00-00 • info@silinsurance.am • www.silinsurance.am`
+    : isRu
+    ? `СЗАО «СИЛ ИНШУРАНՍ» • РА, г. Ереван, ул. Арами 3, 5 • Тел.: (+374 60) 54-00-00 • info@silinsurance.am • www.silinsurance.am`
+    : `«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ • ՀՀ, ք. Երևան, Արամի 3,5 • Հեռ.՝ (+374 60) 54 00 00 • info@silinsurance.am • www.silinsurance.am`;
+
+  const importantNoticeP = isEn
+    ? "This document is a formal insurance quotation issued by SIL Insurance CJSC."
+    : isRu
+    ? "Настоящий документ является официальным коммерческим предложением СЗАО «СИЛ ИНШУРАНС»."
+    : "Սույն գնառաջարկը տեղեկատվական և նախնական առաջարկ է և ինքնին չի հանդիսանում ապահովագրական պայմանագիր։";
+
   return `
   <style>${quotationTemplateCss()}</style>
   <div class="sil-template">
     <section class="quote-page cover">
       <div class="cover-header"><div>
         <img class="cover-logo" src="${horizontalLogo}" alt="Sil insurance" />
-        <div class="contact">ՀՀ, ք. Երևան, Արամի 3,5<br/>hեռ․՝ (+374 60) 54 00 00<br/>info@silinsurance.am | www.silinsurance.am</div>
+        <div class="contact">${contactHtml}</div>
       </div></div>
       <div class="cover-title">${esc(product)}</div>
       <div class="presented">${t.presentedTo}<br/>«${esc(client)}»</div>
@@ -297,13 +346,13 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
       ${list(conditions, true)}
       <h2 class="section-heading">${t.importantNote}</h2>
       <div class="body-text">
-        <p>${isEn ? "This document is a formal insurance quotation issued by SIL Insurance CJSC." : isRu ? "Настоящий документ является официальным коммерческим предложением ЗАО СПАО «СИЛ ИНШУРАНС»." : "Սույն գնառաջարկը տեղեկատվական և նախնական առաջարկ է և ինքնին չի հանդիսանում ապահովագրական պայմանագիր։"}</p>
+        <p>${importantNoticeP}</p>
       </div>
       <div class="signature">
-        <div><strong>${t.silRepresentative}</strong><br/>${esc(proposal.agentName)}<br/><span class="muted">${esc(proposal.agentTitle)}</span><div class="line">${isEn ? "Signature / Stamp" : isRu ? "Подпись / Печать" : "Ստորագրություն / Կնիք (Կ․Տ․)"}</div></div>
+        <div><strong>${t.silRepresentative}</strong><br/>${esc(agentNameDisplay)}<br/><span class="muted">${esc(agentTitleDisplay)}</span><div class="line">${isEn ? "Signature / Stamp" : isRu ? "Подпись / Печать" : "Ստորագրություն / Կնիք (Կ․Տ․)"}</div></div>
         <div><strong>${t.clientSignature}</strong><br/>${esc(client)}<br/><span class="muted">${isEn ? "Read and accepted" : isRu ? "Ознакомлен" : "Ծանոթացել եմ գնառաջարկի պայմաններին"}</span><div class="line">${isEn ? "Signature" : isRu ? "Подпись" : "Ստորագրություն"}</div></div>
       </div>
-      <div class="footer">SIL Insurance CJSC • Yerevan, Arami 3,5 • Tel: (+374 60) 54-00-00 • info@silinsurance.am • www.silinsurance.am</div>
+      <div class="footer">${footerText}</div>
     </section>
   </div>`;
 }
