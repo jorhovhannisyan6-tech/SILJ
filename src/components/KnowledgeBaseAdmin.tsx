@@ -23,6 +23,7 @@ const PRODUCT_NAMES: Record<string, string> = {
   "professional-liability": "Մասնագիտական պատասխանատվություն",
   "machinery-breakdown": "Մեքենաների խափանում",
   "warehouse-liability": "Պահեստների պատասխանատվություն",
+  accident: "Դժբախտ պատահարների ապահովագրություն",
 };
 
 export function KnowledgeBaseAdmin() {

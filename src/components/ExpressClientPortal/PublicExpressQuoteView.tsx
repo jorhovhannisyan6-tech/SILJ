@@ -37,6 +37,11 @@ export function PublicExpressQuoteView({ initialProductType = "casco", onCloseEx
   const [destination, setDestination] = useState("Եվրոպա (Շենգեն)");
   const [days, setDays] = useState(10);
 
+  // Accident fields
+  const [accCoverageType, setAccCoverageType] = useState("24_hours");
+  const [accPersons, setAccPersons] = useState(1);
+  const [accSum, setAccSum] = useState(3000000);
+
   useEffect(() => {
     if (initialProductType) {
       setProductType(initialProductType);
@@ -66,6 +71,9 @@ export function PublicExpressQuoteView({ initialProductType = "casco", onCloseEx
     } else if (productType === "health") {
       objectSummary = `Առողջություն՝ ${insuredCount} անձ, Տարիք՝ ${age}`;
       estimatedSum = 10000000;
+    } else if (productType === "accident") {
+      objectSummary = `Դժբախտ պատահար՝ ${accPersons} անձ, ${accCoverageType === "24_hours" ? "24 ժամ" : "Աշխատանքային ժամերին"}, ${accSum.toLocaleString()} ֏ մեկ անձի համար`;
+      estimatedSum = accPersons * accSum;
     } else {
       objectSummary = `Ճանապարհորդություն՝ ${destination}, ${days} օր`;
       estimatedSum = 15000000;
@@ -133,6 +141,7 @@ export function PublicExpressQuoteView({ initialProductType = "casco", onCloseEx
                   { id: "property", label: "Գույք", icon: Home },
                   { id: "health", label: "Առողջություն", icon: HeartPulse },
                   { id: "travel", label: "Ճամփորդություն", icon: Plane },
+                  { id: "accident", label: "Դժբախտ Պատ.", icon: Activity },
                 ].map((item) => {
                   const Icon = item.icon;
                   const isSelected = productType === item.id;
@@ -160,7 +169,7 @@ export function PublicExpressQuoteView({ initialProductType = "casco", onCloseEx
               <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-200 pb-2">
                 <FileText className="w-4 h-4 text-blue-600" />
                 <span>
-                  2. {productType === "casco" ? "Ավտոմեքենայի Տվյալներ" : productType === "property" ? "Գույքի Տվյալներ" : productType === "health" ? "Առողջապահական Տվյալներ" : "Ճանապարհորդության Տվյալներ"}
+                  2. {productType === "casco" ? "Ավտոմեքենայի Տվյալներ" : productType === "property" ? "Գույքի Տվյալներ" : productType === "health" ? "Առողջապահական Տվյալներ" : productType === "accident" ? "Դժբախտ Պատահարների Տվյալներ" : "Ճանապարհորդության Տվյալներ"}
                 </span>
               </div>
 
@@ -287,6 +296,44 @@ export function PublicExpressQuoteView({ initialProductType = "casco", onCloseEx
                       value={days}
                       onChange={(e) => setDays(Number(e.target.value))}
                     />
+                  </div>
+                </div>
+              )}
+              {productType === "accident" && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Ծածկույթի տեսակ</label>
+                    <select
+                      className="sil-input font-bold"
+                      value={accCoverageType}
+                      onChange={(e) => setAccCoverageType(e.target.value)}
+                    >
+                      <option value="24_hours">24 Ժամ (Ամբողջական)</option>
+                      <option value="workplace">Միայն աշխատանքային ժամերին</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Անձանց քանակ</label>
+                      <input
+                        type="number"
+                        min="1"
+                        className="sil-input font-bold"
+                        value={accPersons}
+                        onChange={(e) => setAccPersons(Number(e.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">Գումար (մեկ անձի)</label>
+                      <input
+                        type="number"
+                        min="100000"
+                        step="100000"
+                        className="sil-input font-bold"
+                        value={accSum}
+                        onChange={(e) => setAccSum(Number(e.target.value))}
+                      />
+                    </div>
                   </div>
                 </div>
               )}

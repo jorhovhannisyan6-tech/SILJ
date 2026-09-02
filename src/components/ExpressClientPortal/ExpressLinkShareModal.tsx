@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Copy, Check, Share2, MessageCircle, ExternalLink, Car, Home, HeartPulse, Plane, Link as LinkIcon, Sparkles } from "lucide-react";
+import { X, Copy, Check, Share2, MessageCircle, ExternalLink, Car, Home, HeartPulse, Plane, Link as LinkIcon, Sparkles, Activity } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -43,6 +43,14 @@ export function ExpressLinkShareModal({ onClose, onOpenExpressView }: Props) {
       icon: Plane,
       color: "from-amber-500 to-orange-600",
       url: `${baseUrl}?express=travel`,
+    },
+    {
+      id: "accident",
+      title: "Դժբախտ Պատահարներ Express",
+      subtitle: "Անհատների և աշխատակիցների ապահովագրություն",
+      icon: Activity,
+      color: "from-rose-500 to-red-600",
+      url: `${baseUrl}?express=accident`,
     },
   ];
 

@@ -1,0 +1,66 @@
+{
+  "products": [
+    {
+      "productId": "property",
+      "sourceFile": "Գույք Պայմաններ.docx",
+      "textFile": "text/Գույք_Պայմաններ.docx.txt",
+      "characters": 116140
+    },
+    {
+      "productId": "cargo",
+      "sourceFile": "Բեռի Պայմաններ.docx",
+      "textFile": "text/beri_paymanner.docx.txt"
+    },
+    {
+      "productId": "general-liability",
+      "sourceFile": "Ընդհանուր Պատասխանատվության պայմաներ.docx",
+      "textFile": "text/Ընդհանուր_Պատասխանատվության_պայմաներ.docx.txt",
+      "characters": 18953
+    },
+    {
+      "productId": "cash-in-transit",
+      "sourceFile": "Ինկասացիոն Ռիսկ.docx",
+      "textFile": "text/Ինկասացիոն_Ռիսկ.docx.txt",
+      "characters": 32826
+    },
+    {
+      "productId": "advance-payment",
+      "sourceFile": "Կանխավճարի ապահովագրության պայմաններ.docx",
+      "textFile": "text/Կանխավճարի_ապահովագրության_պայմաններ.docx.txt",
+      "characters": 43757
+    },
+    {
+      "productId": "construction-all-risks",
+      "sourceFile": "Կապալառու Պայմաններ(Շինմոնտաժ).docx",
+      "textFile": "text/Կապալառու_Պայմաններ_Շինմոնտաժ_.docx.txt",
+      "characters": 28639
+    },
+    {
+      "productId": "professional-liability",
+      "sourceFile": "Մասնագիտական պատասխանատվության ապահովագրության պայմաններ.docx",
+      "textFile": "text/Մասնագիտական_պատասխանատվության_ապահովագրության_պայմաններ.docx.txt",
+      "characters": 40866
+    },
+    {
+      "productId": "machinery-breakdown",
+      "sourceFile": "Մեքենաների խափանման ապ-ն Պայմաններ հայերեն.docx",
+      "textFile": "text/meqenaneri_khapanman_ap-n_paymanner_hayeren.docx.txt"
+    },
+    {
+      "productId": "warehouse-liability",
+      "sourceFile": "Պահեստների պատասխանատվություն-հարցաթերթիկ.doc",
+      "textFile": "text/pahesti_pataskhanatvutyun.docx.txt"
+    },
+    {
+      "productId": "casco",
+      "sourceFile": "casco calculator 2024 - առանց ՃՈՈ.xlsx",
+      "textFile": null
+    },
+    {
+      "productId": "accident",
+      "sourceFile": "Դժբախտ Պատահարներ Պայմաններ.docx",
+      "textFile": "text/djbakht_pataharner.docx.txt",
+      "characters": 375
+    }
+  ]
+}

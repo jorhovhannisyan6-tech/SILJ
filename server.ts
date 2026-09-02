@@ -1,5 +1,3 @@
-process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
-process.on("unhandledRejection", (reason) => console.error("UNHANDLED REJECTION:", reason));
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -183,7 +181,8 @@ function ensureKnowledgeBaseTextFiles() {
     "text/kapalaru_paymanner_shinmontaj.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԿԱՊԱԼԱՌՈՒԻ ԲՈԼՈՐ ՌԻՍԿԵՐԻ (CAR / EAR) ԵՎ ՇԻՆՄՈՆՏԱԺԱՅԻՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Օբյեկտներ՝ շինարարական աշխատանքներ, մոնտաժվող սարքավորումներ, տեխնիկա։\n2. Ռիսկեր՝ հրդեհ, հեղեղ, փլուզում, սողանք, երկրաշարժ։`,
     "text/masnagitakan_pataskhanatvutyan_apahovagrutyun_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՄԱՍՆԱԳԻՏԱԿԱՆ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Օբյեկտ՝ բժիշկների, նոտարների, աուդիտորների մասնագիտական գործունեության ընթացքում թույլ տրված սխալներ, բացթողումներ, անփութություն։`,
     "text/meqenaneri_khapanman_ap-n_paymanner_hayeren.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՄԵՔԵՆԱՆԵՐԻ ԵՎ ՍԱՐՔԱՎՈՐՈՒՄՆԵՐԻ ԽԱՓԱՆՄԱՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Օբյեկտներ՝ արտադրական սարքավորումներ, հաստոցներ, մեխանիզմներ։\n2. Ռիսկեր՝ մեխանիկական և էլեկտրական խափանումներ, կարճ միացում։`,
-    "text/pahesti_pataskhanatvutyun.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՊԱՀԵՍՏՆԵՐԻ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Նպատակ՝ պահեստի սեփականատիրոջ պատասխանատվությունը պահպանության հանձնված ապրանքների կորստի կամ վնասման համար։`
+    "text/pahesti_pataskhanatvutyun.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ՊԱՀԵՍՏՆԵՐԻ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Նպատակ՝ պահեստի սեփականատիրոջ պատասխանատվությունը պահպանության հանձնված ապրանքների կորստի կամ վնասման համար։`,
+    "text/djbakht_pataharner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԴԺԲԱԽՏ ՊԱՏԱՀԱՐՆԵՐԻՑ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրական օբյեկտ՝ անձի կյանք և առողջություն։\n2. Հիմնական ռիսկեր (ներառված)՝ Դժբախտ պատահարի հետևանքով մահ, մշտական կամ ժամանակավոր անաշխատունակություն (հաշմանդամություն), բժշկական ծախսեր։\n3. Բացառություններ՝ մասնագիտական սպորտ, ալկոհոլի կամ թմրանյութի ազդեցության տակ տեղի ունեցած պատահարներ, ինքնասպանություն կամ դիտավորյալ վնաս։`
   };
 
   for (const [relPath, content] of Object.entries(fallbacks)) {
@@ -209,7 +208,8 @@ function loadKnowledgeBase() {
     { productId: "professional-liability", sourceFile: "Մասնագիտական պատասխանատվության ապահովագրության պայմաններ.docx", textFile: "text/masnagitakan_pataskhanatvutyan_apahovagrutyun_paymanner.docx.txt" },
     { productId: "machinery-breakdown", sourceFile: "Մեքենաների խափանման ապ-ն Պայմաններ հայերեն.docx", textFile: "text/meqenaneri_khapanman_ap-n_paymanner_hayeren.docx.txt" },
     { productId: "warehouse-liability", sourceFile: "Պահեստների պատասխանատվություն-հարցաթերթիկ.doc", textFile: "text/pahesti_pataskhanatvutyun.docx.txt" },
-    { productId: "casco", sourceFile: "casco calculator 2024 - առանց ՃՈՈ.xlsx", textFile: null }
+    { productId: "casco", sourceFile: "casco calculator 2024 - առանց ՃՈՈ.xlsx", textFile: null },
+    { productId: "accident", sourceFile: "Դժբախտ Պատահարներ Պայմաններ.docx", textFile: "text/djbakht_pataharner.docx.txt" }
   ];
 
   let index: any = { products: [] };
