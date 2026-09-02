@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with roles and profile information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["agent", "underwriter", "manager", "auditor", "admin"] },
+        "status": { "type": "string", "enum": ["active", "pending", "disabled"] },
+        "createdAt": { "type": "string" },
+        "lastLogin": { "type": "string" }
+      },
+      "required": ["id", "email", "role", "status"]
+    },
+    "DynamicRule": {
+      "title": "DynamicRule",
+      "description": "Dynamic insurance calculation rules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "code": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    },
+    "BotConfig": {
+      "title": "BotConfig",
+      "description": "AI advisor system instructions and configuration",
+      "type": "object",
+      "properties": {
+        "systemInstruction": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["systemInstruction"]
+    },
+    "DocxMapping": {
+      "title": "DocxMapping",
+      "description": "DOCX template mapping rules for quotations and contracts",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "mappings": { "type": "string" }
+      },
+      "required": ["productId"]
+    },
+    "KnowledgeBaseDoc": {
+      "title": "KnowledgeBaseDoc",
+      "description": "Synchronized insurance knowledge base documents",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["title", "content"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile collection"
+    },
+    "/dynamic_policy_rules/{ruleId}": {
+      "schema": "DynamicRule",
+      "description": "Dynamic policy rules collection"
+    },
+    "/bot_configs/{configId}": {
+      "schema": "BotConfig",
+      "description": "Bot configurations collection"
+    },
+    "/docx_template_mappings/{mappingId}": {
+      "schema": "DocxMapping",
+      "description": "DOCX template mappings collection"
+    },
+    "/knowledge_base_docs/{docId}": {
+      "schema": "KnowledgeBaseDoc",
+      "description": "Knowledge base documents collection"
+    }
+  }
+}

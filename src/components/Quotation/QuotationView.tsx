@@ -13,6 +13,7 @@ import { validateQuotationProposal } from "../../utils/quoteValidation";
 import { TierComparisonModal } from "./TierComparisonModal";
 import { RiskScoringPanel } from "./RiskScoringPanel";
 import { ContractGenerationModal } from "./ContractGenerationModal";
+import { notifySuccess, notifyError, notifyWarning } from "../../utils/notification";
 import {
   Copy,
   Download,
@@ -37,6 +38,7 @@ import {
   ArrowLeft,
   Globe,
   Award,
+  Send,
 } from "lucide-react";
 
 interface QuotationViewProps {
@@ -159,6 +161,32 @@ function FilledQuotationView({
       setPdfError(err?.message || "Չհաջողվեց ստեղծել PDF ֆայլը։");
     } finally {
       setGeneratingPdf(false);
+    }
+  };
+
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const handleEmailToClient = async () => {
+    const email = window.prompt("Մուտքագրեք հաճախորդի էլ․ փոստը", "");
+    if (!email) return;
+
+    setSendingEmail(true);
+    try {
+      const token = localStorage.getItem("sil-auth-token") || "";
+      const res = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          to: email,
+          subject: `«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» Գնառաջարկ - ${currentProposal.productNameArm}`,
+          attachmentName: `Quotation_${currentProposal.id}.pdf`
+        })
+      });
+      if (!res.ok) throw new Error("Email sending failed");
+      notifySuccess("Գնառաջարկը հաջողությամբ ուղարկվեց հաճախորդի էլ․ հասցեին։", "Էլ․ Փոստն ուղարկված է");
+    } catch (err) {
+      notifyError("Չհաջողվեց ուղարկել գնառաջարկը։ Խնդրում ենք ստուգել հասցեն։", "Ուղարկման ձախողում");
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -334,6 +362,15 @@ function FilledQuotationView({
           >
             <Printer className={`w-4 h-4 ${generatingPdf ? "animate-pulse" : ""}`} />
             {generatingPdf ? "PDF-ը պատրաստվում է..." : "Տպել / PDF"}
+          </button>
+
+          <button
+            onClick={handleEmailToClient}
+            disabled={sendingEmail || generatingPdf}
+            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer disabled:opacity-60 disabled:cursor-wait shadow-sm shadow-blue-900/50"
+          >
+            <Send className={`w-4 h-4 ${sendingEmail ? "animate-bounce" : ""}`} />
+            {sendingEmail ? "Ուղարկվում է..." : "Ուղարկել Փոստով"}
           </button>
 
           <button

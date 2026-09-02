@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, CheckCircle2, AlertTriangle, AlertCircle, Info, X } from "lucide-react";
 import { Header } from "./components/Header";
 import { NavigationTabs } from "./components/NavigationTabs";
 import { PropertyInsuranceForm } from "./components/PropertyForm/PropertyInsuranceForm";
@@ -24,6 +24,7 @@ import { getCurrentUser, setCurrentUser, type PortalUser, can } from "./utils/au
 import { assertQuotationReady } from "./utils/quoteValidation";
 import { ExpressLinkShareModal } from "./components/ExpressClientPortal/ExpressLinkShareModal";
 import { PublicExpressQuoteView } from "./components/ExpressClientPortal/PublicExpressQuoteView";
+import { type ToastMessage, notifyError, notifyWarning, notifyInfo } from "./utils/notification";
 import {
   PropertyInsuranceFormState,
   MortgageInsuranceData,
@@ -48,6 +49,32 @@ export default function App() {
   const [quoteHistory, setQuoteHistory] = useState<QuotationProposal[]>(() => { try { const raw = localStorage.getItem("sil-quote-history"); return raw ? JSON.parse(raw) : []; } catch { return []; } });
   const [floatingChatOpen, setFloatingChatOpen] = useState(false);
   const [expressShareModalOpen, setExpressShareModalOpen] = useState(false);
+  
+  // Real-time notifications state
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  useEffect(() => {
+    const handleNewLead = (e: any) => {
+      const lead = e.detail;
+      notifyInfo(`Նոր Express հայտ: ${lead.clientName} - ${lead.productType}`, "Նոր հաճախորդի հայտ");
+    };
+    const handleNotification = (e: any) => {
+      const newToast: ToastMessage = e.detail;
+      setToasts(prev => [...prev.slice(-4), newToast]);
+      if (newToast.duration) {
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== newToast.id));
+        }, newToast.duration);
+      }
+    };
+    window.addEventListener("sil-new-lead", handleNewLead);
+    window.addEventListener("sil-notification", handleNotification);
+    return () => {
+      window.removeEventListener("sil-new-lead", handleNewLead);
+      window.removeEventListener("sil-notification", handleNotification);
+    };
+  }, []);
+
   const [expressClientType, setExpressClientType] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -64,8 +91,32 @@ export default function App() {
   }, [activeTab]);
 
   useEffect(()=>{ if(user) localStorage.setItem("sil-active-user", JSON.stringify(user)); },[user]);
-  useEffect(()=>{ (async()=>{ if(!user)return; const token=localStorage.getItem("sil-auth-token"); if(!token)return; try{ const r=await fetch("/api/auth/me",{headers:{Authorization:`Bearer ${token}`}}); if(!r.ok){localStorage.removeItem("sil-auth-token");setCurrentUser(null);setUser(null);} }catch{} })(); },[]);
+  useEffect(()=>{ (async()=>{ if(!user)return; const token=localStorage.getItem("sil-auth-token") || localStorage.getItem("sil-session-token"); if(!token)return; try{ const r=await fetch("/api/auth/me",{headers:{Authorization:`Bearer ${token}`}}); if(!r.ok){localStorage.removeItem("sil-auth-token");localStorage.removeItem("sil-session-token");setCurrentUser(null);setUser(null);} }catch{} })(); },[]);
   useEffect(()=>{ if(activeTab === "admin" && !can(user,"users")) setActiveTab("home"); },[activeTab,user]);
+
+  // Enterprise Security: Inactivity auto-logout (45 minutes)
+  useEffect(() => {
+    if (!user) return;
+    const INACTIVITY_TIMEOUT_MS = 45 * 60 * 1000;
+    let timer: NodeJS.Timeout;
+
+    const resetInactivityTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        notifyWarning("Անվտանգության նկատառումներով Ձեր սեսիան ավարտվեց պասիվության պատճառով:", "Ավտոմատ Դուրս Գրում");
+        logout();
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    events.forEach(event => window.addEventListener(event, resetInactivityTimer, { passive: true }));
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(timer);
+      events.forEach(event => window.removeEventListener(event, resetInactivityTimer));
+    };
+  }, [user]);
 
   // If URL has ?express=casco or user opened public express portal view
   if (expressClientType) {
@@ -96,7 +147,7 @@ export default function App() {
     try {
       assertQuotationReady(proposal);
     } catch (error: any) {
-      window.alert(`Գնառաջարկը չի կարող ստեղծվել։\n\n${error?.message || "Անվավեր տվյալներ"}`);
+      notifyError(error?.message || "Անվավեր տվյալներ", "Գնառաջարկը չի կարող ստեղծվել");
       return;
     }
     const now = new Date().toISOString();
@@ -236,11 +287,11 @@ export default function App() {
             }}
             onUpdateProposal={(updated) => {
               if (currentProposal?.status === "locked" && updated.status !== "policy_issued" && updated.status !== "locked") {
-                window.alert("Այս գնառաջարկը փակված է։ Փոփոխության համար ստեղծեք նոր տարբերակ։");
+                notifyWarning("Այս գնառաջարկը փակված է։ Փոփոխության համար ստեղծեք նոր տարբերակ։", "Փակված գնառաջարկ");
                 return;
               }
               try { assertQuotationReady(updated); } catch (error: any) {
-                window.alert(`Փոփոխությունը չի պահպանվել։\n\n${error?.message || "Անվավեր տվյալներ"}`);
+                notifyError(error?.message || "Անվավեր տվյալներ", "Փոփոխությունը չի պահպանվել");
                 return;
               }
               const enriched = { ...updated, updatedAt: new Date().toISOString() };
@@ -413,6 +464,44 @@ export default function App() {
               <AiAdvisorWidget />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Real-time Notification Toast Stack */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-5 right-5 z-[120] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className={`pointer-events-auto p-4 rounded-2xl shadow-xl border flex items-start gap-3 transition-all duration-300 transform translate-y-0 animate-in slide-in-from-bottom-5 fade-in ${
+                t.type === 'error'
+                  ? 'bg-rose-950/95 border-rose-700/60 text-white'
+                  : t.type === 'success'
+                  ? 'bg-emerald-950/95 border-emerald-700/60 text-white'
+                  : t.type === 'warning'
+                  ? 'bg-amber-950/95 border-amber-700/60 text-white'
+                  : 'bg-slate-900/95 border-slate-700 text-white'
+              }`}
+            >
+              <div className="shrink-0 mt-0.5">
+                {t.type === 'error' && <AlertCircle size={20} className="text-rose-400" />}
+                {t.type === 'success' && <CheckCircle2 size={20} className="text-emerald-400" />}
+                {t.type === 'warning' && <AlertTriangle size={20} className="text-amber-400" />}
+                {t.type === 'info' && <Info size={20} className="text-blue-400" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                {t.title && <p className="text-xs font-bold tracking-wide uppercase opacity-90">{t.title}</p>}
+                <p className="text-xs font-medium mt-0.5 leading-relaxed break-words">{t.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToasts((prev) => prev.filter((item) => item.id !== t.id))}
+                className="shrink-0 text-white/60 hover:text-white p-1 rounded-lg transition"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>

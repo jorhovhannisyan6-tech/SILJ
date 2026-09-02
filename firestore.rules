@@ -6,24 +6,30 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Grant access to dynamic policy rules
+    // Users profile collection
+    match /users/{userId} {
+      allow read, write: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == 'jor.hovhannisyan6@gmail.com');
+    }
+
+    // Dynamic policy rules
     match /dynamic_policy_rules/{ruleId} {
       allow read, write: if true;
     }
 
-    // Grant access to bot configurations
+    // Bot configurations
     match /bot_configs/{configId} {
       allow read, write: if true;
     }
 
-    // Grant access to DOCX template mappings
+    // DOCX template mappings
     match /docx_template_mappings/{mappingId} {
       allow read, write: if true;
     }
 
-    // Grant access to persistent knowledge base documents
+    // Knowledge base documents
     match /knowledge_base_docs/{docId} {
       allow read, write: if true;
     }
   }
 }
+

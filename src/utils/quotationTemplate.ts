@@ -76,14 +76,36 @@ function detailsRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"
 
   switch (proposal.type) {
     case "casco":
-      push(isEn ? "Vehicle" : isRu ? "Автомобиль" : "Ավտոմեքենա", d.vehicle || d.vehicleDescription);
-      push(isEn ? "Coverage Type" : isRu ? "Тип покрытия" : "Ծածկույթի տեսակ", d.coverageType);
-      push(isEn ? "Territory" : isRu ? "Территория" : "Տարածք", d.territory);
-      push(isEn ? "Theft Coverage" : isRu ? "Покрытие угона" : "Գողության ծածկույթ", d.theftCoverage);
-      push(isEn ? "Warranty Service" : isRu ? "Гарантийное обслуживание" : "Երաշխիքային սպասարկում", d.warrantyService);
-      push(isEn ? "Drivers Option" : isRu ? "Водители" : "Վարորդների տարբերակ", d.driverCountOption);
+      push(isEn ? "Vehicle" : isRu ? "Автомобиль" : "Ավտոմեքենա", d.makeModel || d.vehicle || d.vehicleDescription);
+      push(isEn ? "Manufacture Year" : isRu ? "Год выпуска" : "Թողարկման տարեթիվ", d.year);
+      push(isEn ? "License Plate" : isRu ? "Гос. номер" : "Պետհամարանիշ", d.licensePlate);
+      push(isEn ? "VIN Code" : isRu ? "VIN код" : "VIN ծածկագիր", d.vin);
+      push(isEn ? "Registration Certificate" : isRu ? "Свидетельство о регистрации" : "Հաշվառման վկայագիր (Տեխպասպորտ)", d.registrationDoc);
+      push(isEn ? "Usage Purpose" : isRu ? "Цель эксплуатации" : "Շահագործման նպատակ", d.usagePurpose === "personal" ? (isEn ? "Personal / Family" : isRu ? "Личное / Семейное" : "Անձնական / Ընտանեկան") : d.usagePurpose === "commercial" ? (isEn ? "Corporate / Business" : isRu ? "Служебное / Бизнес" : "Ծառայողական / Բիզնես") : d.usagePurpose === "taxi_rental" ? (isEn ? "Taxi / Rental / Commercial" : isRu ? "Такси / Прокат" : "Տաքսի / Վարձակալություն") : d.usagePurpose);
+      push(isEn ? "Coverage Section" : isRu ? "Раздел покрытия" : "Ապահովագրական բաժին", d.sectionOption === "physical_only" ? (isEn ? "Section A: Physical Damage Only" : isRu ? "Раздел А: Только физический ущерб" : "Բաժին Ա. Միայն ֆիզիկական վնաս") : (isEn ? "Section A: Comprehensive (Physical Damage & Theft)" : isRu ? "Раздел А: Физический ущерб и Хищение" : "Բաժին Ա. Ֆիզիկական վնաս և Հափշտակություն"));
+      if (d.accidentCoverIncluded) {
+        push(isEn ? "Section B: Personal Accident" : isRu ? "Раздел Б: Несчастный случай (НС)" : "Բաժին Բ. Դժբախտ պատահարներ (ԴՊ)", isEn ? `${d.accidentSeats || 5} seats, up to ${formatCurrency(d.accidentLimitPerSeat || 1000000, proposal.currency)} / seat` : isRu ? `${d.accidentSeats || 5} мест, до ${formatCurrency(d.accidentLimitPerSeat || 1000000, proposal.currency)} / место` : `${d.accidentSeats || 5} նստատեղ, մինչև ${formatCurrency(d.accidentLimitPerSeat || 1000000, proposal.currency)} 1 նստատեղի համար`);
+      }
+      if (d.voluntaryTplIncluded) {
+        push(isEn ? "Section C: Voluntary TPL" : isRu ? "Раздел В: Добровольная автогражданская ответственность (ДСАГО)" : "Բաժին Գ. Կամավոր ԱՊՊԱ (Պատասխանատվություն)", isEn ? `Limit: ${formatCurrency(d.voluntaryTplLimit || 5000000, proposal.currency)}` : isRu ? `Лимит: ${formatCurrency(d.voluntaryTplLimit || 5000000, proposal.currency)}` : `Սահմանաչափ՝ ${formatCurrency(d.voluntaryTplLimit || 5000000, proposal.currency)}`);
+      }
+      if (d.additionalEquipment) {
+        push(isEn ? "Additional Non-Factory Equipment" : isRu ? "Дополнительное оборудование" : "Լրացուցիչ ոչ գործարանային սարքավորումներ", d.additionalEquipment);
+      }
+      push(isEn ? "Territory" : isRu ? "Территория" : "Ապահովագրության տարածք", d.territory);
+      push(isEn ? "Authorized Drivers" : isRu ? "Водители" : "Լիազորված վարորդներ", d.driversOption);
+      if (d.namedDrivers) {
+        push(isEn ? "Named Drivers" : isRu ? "Список водителей" : "Վարորդների ցանկ", d.namedDrivers);
+      }
+      push(isEn ? "Warranty Dealer Service" : isRu ? "Официальный сервис дилера" : "Պաշտոնական դիլերի սերվիս", d.warrantyService);
+      if (d.glassNoPolice || d.glassNoPoliceLimit) {
+        push(isEn ? "Glass Claim without Police Act" : isRu ? "Выплата по стеклам без справок ГАИ" : "Առանց Ոստիկանության ակտի հատուցում", d.glassNoPoliceLimit ? (isEn ? `Up to ${formatCurrency(d.glassNoPoliceLimit, proposal.currency)}` : isRu ? `До ${formatCurrency(d.glassNoPoliceLimit, proposal.currency)}` : `Մինչև ${formatCurrency(d.glassNoPoliceLimit, proposal.currency)}`) : (isEn ? "Included (1-2 events/yr)" : isRu ? "Включено (1-2 раза в год)" : "Ներառված է (ապակիներ / մանր վնասներ)"));
+      }
+      if (d.towing) {
+        push(isEn ? "Roadside Assistance / Towing" : isRu ? "Эвакуатор и техпомощь" : "Էվակուատոր / Ճանապարհային օգնություն", isEn ? "Free 24/7 in Armenia" : isRu ? "Бесплатно 24/7 по Армении" : "Անվճար 24/7 ՀՀ ամբողջ տարածքում");
+      }
       push(isEn ? "Payment Method" : isRu ? "Способ оплаты" : "Վճարման եղանակ", d.paymentMethod);
-      push(isEn ? "Electric Vehicle" : isRu ? "Электромобиль" : "Էլեկտրամոբիլ", d.electricVehicle === true ? (isEn ? "Yes" : isRu ? "Да" : "Այո") : d.electricVehicle === false ? (isEn ? "No" : isRu ? "Нет" : "Ոչ") : undefined);
+      push(isEn ? "Electric / Hybrid Vehicle" : isRu ? "Электромобиль / Гибрид" : "Էլեկտրամոբիլ / Հիբրիդ", d.electricVehicle === true ? (isEn ? "Yes" : isRu ? "Да" : "Այո") : undefined);
       break;
     case "mortgage":
       push(isEn ? "Package" : isRu ? "Пакет" : "Փաթեթ", d.packageLabel || proposal.mortgageBreakdown?.packageLabel);
@@ -169,6 +191,23 @@ function detailsRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"
 }
 
 function breakdownRows(proposal: QuotationProposal, lang: QuotationLanguage = "hy"): string {
+  if (proposal.cascoBreakdown?.length) {
+    return proposal.cascoBreakdown.map((r) => {
+      let displayName = r.sectionName;
+      if (lang === "en") {
+        if (r.sectionKey === "section_a") displayName = "Section A: Vehicle Hull Insurance";
+        else if (r.sectionKey === "section_b") displayName = "Section B: Personal Accident (PA)";
+        else if (r.sectionKey === "section_c") displayName = "Section C: Voluntary TPL (Liability)";
+        else if (r.sectionKey === "additional_equipment") displayName = "Additional Equipment";
+      } else if (lang === "ru") {
+        if (r.sectionKey === "section_a") displayName = "Раздел А: Страхование ТС (Автокаско)";
+        else if (r.sectionKey === "section_b") displayName = "Раздел Б: Несчастный случай (НС)";
+        else if (r.sectionKey === "section_c") displayName = "Раздел В: Добровольная автогражданская ответственность";
+        else if (r.sectionKey === "additional_equipment") displayName = "Дополнительное оборудование";
+      }
+      return `<tr><td class="blue-cell">${esc(displayName)}</td><td class="num">${esc(formatCurrency(r.sumInsured, proposal.currency))}</td><td class="center">${esc(formatPercent(r.tariff))}</td><td class="num">${esc(formatCurrency(r.premium, proposal.currency))}</td><td>${esc(r.franchise || "—")}</td></tr>`;
+    }).join("");
+  }
   if (proposal.bundleBreakdown?.length) {
     return proposal.bundleBreakdown.map((r) => `<tr><td class="blue-cell">${esc(r.productName)}</td><td class="num">${esc(formatCurrency(r.sumInsured, proposal.currency))}</td><td class="center">${esc(formatPercent(r.tariff))}</td><td class="num">${esc(formatCurrency(r.premium, proposal.currency))}</td><td>${esc(r.details)}</td></tr>`).join("");
   }

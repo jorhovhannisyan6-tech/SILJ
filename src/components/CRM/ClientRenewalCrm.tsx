@@ -26,13 +26,28 @@ import {
   Home,
   HeartPulse,
   Plane,
+  Download,
+  Award,
+  Layers,
+  TrendingUp,
+  UserPlus
 } from "lucide-react";
 import { QuotationProposal } from "../../types";
 import {
   getClientRenewals,
   updateClientRenewalStatus,
   ClientRenewalLead,
+  getClients360,
+  ClientProfile,
+  exportLeadsToCSV,
+  getClientPolicies
 } from "../../utils/clientRenewalStore";
+
+import { KanbanBoard } from "./KanbanBoard";
+import { CustomerProfileModal } from "./CustomerProfileModal";
+import { QuickCommunicationModal } from "./QuickCommunicationModal";
+import { NewLeadModal } from "./NewLeadModal";
+import { SalesPerformanceStats } from "./SalesPerformanceStats";
 
 export interface PolicyRenewalItem {
   id: string;
@@ -66,11 +81,11 @@ const DEFAULT_RENEWAL_ITEMS: PolicyRenewalItem[] = [
     productType: "casco",
     assetDescription: "Toyota Camry 2.5 (2022 թ., VIN: JTD2022ARM948)",
     startDate: "2025-09-02",
-    expiryDate: "2026-09-02",
-    daysRemaining: 5,
+    expiryDate: "2026-09-15",
+    daysRemaining: 13,
     previousPremium: 380000,
     newCalculatedPremium: 342000,
-    status: "critical",
+    status: "urgent",
     loyaltyDiscountPercent: 10,
     notes: "Հաճախորդը ցանկանում է երկարաձգել ԿԱՍԿՈ-ն 10% զեղչով։",
   },
@@ -83,11 +98,11 @@ const DEFAULT_RENEWAL_ITEMS: PolicyRenewalItem[] = [
     productType: "property",
     assetDescription: "Արտադրական տարածք և սարքավորումներ (ք. Երևան, Էրեբունի 40)",
     startDate: "2025-09-10",
-    expiryDate: "2026-09-10",
-    daysRemaining: 13,
+    expiryDate: "2026-09-20",
+    daysRemaining: 18,
     previousPremium: 1250000,
     newCalculatedPremium: 1125000,
-    status: "urgent",
+    status: "upcoming",
     loyaltyDiscountPercent: 10,
     notes: "Առաջարկվել է նաև աշխատակիցների դժբախտ պատահարների փաթեթ։",
   },
@@ -101,7 +116,7 @@ const DEFAULT_RENEWAL_ITEMS: PolicyRenewalItem[] = [
     assetDescription: "Բնակարան Հիփոթեքով (Ամերիաբանկ / Կենտրոն, Տերյան 18/2)",
     startDate: "2025-09-22",
     expiryDate: "2026-09-22",
-    daysRemaining: 25,
+    daysRemaining: 20,
     previousPremium: 84000,
     newCalculatedPremium: 79800,
     status: "upcoming",
@@ -128,33 +143,46 @@ const DEFAULT_RENEWAL_ITEMS: PolicyRenewalItem[] = [
 ];
 
 export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) => {
-  const [activeTabSection, setActiveTabSection] = useState<"leads" | "renewals">("leads");
+  const [activeTabSection, setActiveTabSection] = useState<"leads" | "clients360" | "renewals" | "sales">("leads");
   const [clientLeads, setClientLeads] = useState<ClientRenewalLead[]>([]);
+  const [clients360, setClients360] = useState<ClientProfile[]>([]);
   const [items, setItems] = useState<PolicyRenewalItem[]>(DEFAULT_RENEWAL_ITEMS);
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedItemForSms, setSelectedItemForSms] = useState<{ name: string; phone: string; text: string } | null>(null);
-  const [copiedSms, setCopiedSms] = useState(false);
 
-  const loadLeadsFromStore = () => {
-    const leads = getClientRenewals();
-    setClientLeads(leads);
+  // Modals state
+  const [selectedClientForModal, setSelectedClientForModal] = useState<ClientProfile | null>(null);
+  const [showNewLeadModal, setShowNewLeadModal] = useState(false);
+  const [selectedItemForComm, setSelectedItemForComm] = useState<{
+    name: string;
+    phone: string;
+    email?: string;
+    productType?: string;
+    premium?: number;
+    expiryDate?: string;
+  } | null>(null);
+
+  const loadData = () => {
+    setClientLeads(getClientRenewals());
+    setClients360(getClients360());
   };
 
   useEffect(() => {
-    loadLeadsFromStore();
+    loadData();
 
     const handleUpdate = () => {
-      loadLeadsFromStore();
+      loadData();
     };
 
     if (typeof window !== "undefined") {
       window.addEventListener("sil-lead-updated", handleUpdate);
+      window.addEventListener("sil-clients-updated", handleUpdate);
       window.addEventListener("storage", handleUpdate);
     }
     return () => {
       if (typeof window !== "undefined") {
         window.removeEventListener("sil-lead-updated", handleUpdate);
+        window.removeEventListener("sil-clients-updated", handleUpdate);
         window.removeEventListener("storage", handleUpdate);
       }
     };
@@ -171,7 +199,16 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
     return matchesFilter && matchesSearch;
   });
 
-  const filteredItems = items.filter((item) => {
+  const filteredClients = clients360.filter((c) => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.phone.includes(searchQuery) ||
+      c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesSearch;
+  });
+
+  const filteredRenewals = items.filter((item) => {
     const matchesFilter = activeFilter === "all" || item.status === activeFilter;
     const matchesSearch =
       item.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -180,11 +217,6 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
     return matchesFilter && matchesSearch;
   });
 
-  const handleLeadStatusChange = (id: string, newStatus: ClientRenewalLead["status"]) => {
-    updateClientRenewalStatus(id, newStatus);
-    loadLeadsFromStore();
-  };
-
   const generateProposalFromLead = (lead: ClientRenewalLead) => {
     const now = new Date();
     const validUntil = new Date(now.setDate(now.getDate() + 30)).toLocaleDateString("hy-AM");
@@ -192,7 +224,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
     const proposal: QuotationProposal = {
       id: `lead-prop-${Date.now()}`,
       quotationNumber: `SIL-EXPRESS-${Date.now().toString().slice(-6)}`,
-      type: lead.productType,
+      type: (lead.productType as any) || "casco",
       productNameArm:
         lead.productType === "casco"
           ? "ԿԱՍԿՈ Արագ Գնառաջարկ"
@@ -287,20 +319,51 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
     }
   };
 
-  const copySmsText = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedSms(true);
-    setTimeout(() => setCopiedSms(false), 2000);
+  const handle1ClickQuoteFromClient = (clientName: string, productType: string, assetDetails?: string) => {
+    const proposal: QuotationProposal = {
+      id: `prop-360-${Date.now()}`,
+      quotationNumber: `SIL-360-${Date.now().toString().slice(-6)}`,
+      type: (productType as any) || "casco",
+      productNameArm: "Անհատական Գնառաջարկ (Client 360°)",
+      categoryNameArm: "Հաճախորդի Պրոֆիլից Գեներացված",
+      date: new Date().toLocaleDateString("hy-AM"),
+      validUntil: new Date(Date.now() + 30 * 86400000).toLocaleDateString("hy-AM"),
+      clientName,
+      contactInfo: "SIL Պորտալից",
+      objectDescription: assetDetails || "Հաճախորդի տրանսպորտ / գույք",
+      totalSumInsured: 8500000,
+      currency: "AMD",
+      baseTariff: 2.5,
+      discountBonus: 10,
+      finalTariff: 2.25,
+      annualPremium: 191250,
+      franchiseDescription: "0% ՃՏՊ ֆրանշիզա",
+      franchiseAmount: 0,
+      paymentTerms: "Միանվագ կամ 2 մասով",
+      beneficiaryDetails: "Անձամբ ապահովադիրը",
+      coveredPerilsList: ["ՃՏՊ", "Հրդեհ, պայթյուն", "Գողություն", "Երրորդ անձանց վնաս"],
+      specialConditions: ["Գնառաջարկը ձևավորված է հաճախորդի 360° պրոֆիլի տվյալներով։"],
+      status: "ready",
+      version: 1,
+      agentName: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» CRM Agent",
+      agentTitle: "Ավագ Ապահովագրական Խորհրդատու",
+      agentPhone: "+374 60 54 00 00",
+      agentEmail: "info@silinsurance.am",
+    };
+
+    if (onGenerateRenewalQuote) {
+      onGenerateRenewalQuote(proposal);
+    }
   };
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Top Banner Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-[#061A40] to-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-slate-900 via-[#061A40] to-slate-900 border border-slate-800 rounded-3xl p-6 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1">
-              <Zap size={13} /> SIL Agent CRM Hub
+              <Zap size={13} /> SIL Agent CRM Hub 360°
             </span>
             {pendingLeadsCount > 0 && (
               <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white font-extrabold text-[11px] animate-pulse">
@@ -313,24 +376,43 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             Հաճախորդների CRM և Հայտերի Կառավարման Համակարգ
           </h2>
           <p className="text-xs text-slate-300 mt-1">
-            Օնլայն արագ հայտեր, պայմանագրերի երկարաձգումներ և 1-Click գնառաջարկների գեներացում
+            Խելացի Kanban ձագար, հաճախորդների 360° պրոֆիլներ, ավտոմատ երկարաձգումներ և վաճառքների պլանավորում
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input
               type="text"
-              placeholder="Որոնել հաճախորդ, հեռախոս, հայտ․․․"
+              placeholder="Որոնել հաճախորդ, հեռախոս, tags..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2 w-64 focus:outline-none focus:border-cyan-500"
+              className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-4 py-2 w-56 sm:w-64 focus:outline-none focus:border-cyan-500"
             />
           </div>
+
           <button
             type="button"
-            onClick={loadLeadsFromStore}
+            onClick={() => setShowNewLeadModal(true)}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-blue-600/30 transition cursor-pointer"
+          >
+            <UserPlus size={15} />
+            <span>+ Նոր Հայտ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => exportLeadsToCSV(clientLeads)}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+            title="Արտահանել Excel / CSV"
+          >
+            <Download size={16} />
+          </button>
+
+          <button
+            type="button"
+            onClick={loadData}
             className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
             title="Թարմացնել ցանկը"
           >
@@ -339,25 +421,44 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
         </div>
       </div>
 
-      {/* Main Mode Tabs: Express Client Leads vs Policy Renewals */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-        <div className="flex items-center gap-3">
+      {/* Main Mode Navigation Tabs */}
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => {
               setActiveTabSection("leads");
               setActiveFilter("all");
             }}
-            className={`px-5 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer ${
+            className={`px-4 py-2.5 rounded-2xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
               activeTabSection === "leads"
                 ? "bg-[#061A40] text-white shadow-md"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            <Zap className="w-4 h-4 text-amber-400" />
-            <span>⚡ Հաճախորդների Արագ Հայտեր (Express Leads)</span>
+            <Layers className="w-4 h-4 text-amber-400" />
+            <span>⚡ Վաճառքի Ձագար (Kanban Leads)</span>
             <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-xs font-black">
               {clientLeads.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTabSection("clients360");
+              setActiveFilter("all");
+            }}
+            className={`px-4 py-2.5 rounded-2xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+              activeTabSection === "clients360"
+                ? "bg-[#061A40] text-white shadow-md"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <Users className="w-4 h-4 text-cyan-400" />
+            <span>📇 Հաճախորդների Բազա 360°</span>
+            <span className="px-2 py-0.5 rounded-full bg-cyan-500 text-slate-900 text-xs font-black">
+              {clients360.length}
             </span>
           </button>
 
@@ -367,202 +468,129 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
               setActiveTabSection("renewals");
               setActiveFilter("all");
             }}
-            className={`px-5 py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer ${
+            className={`px-4 py-2.5 rounded-2xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
               activeTabSection === "renewals"
                 ? "bg-[#061A40] text-white shadow-md"
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
             <RefreshCw className="w-4 h-4 text-emerald-400" />
-            <span>🔄 Պայմանագրերի Երկարաձգում (Renewals)</span>
+            <span>🔄 Երկարաձգումներ (Renewals)</span>
             <span className="px-2 py-0.5 rounded-full bg-slate-700 text-white text-xs font-black">
               {items.length}
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTabSection("sales");
+            }}
+            className={`px-4 py-2.5 rounded-2xl font-black text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+              activeTabSection === "sales"
+                ? "bg-[#061A40] text-white shadow-md"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 text-purple-400" />
+            <span>📈 Վաճառքների Պլան & Բոնուսներ</span>
+          </button>
         </div>
       </div>
 
-      {/* VIEW SECTION 1: EXPRESS LEADS */}
+      {/* VIEW SECTION 1: KANBAN & LEADS */}
       {activeTabSection === "leads" && (
-        <div className="space-y-4">
-          {/* Status Sub-Filters */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-            <button
-              onClick={() => setActiveFilter("all")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                activeFilter === "all"
-                  ? "bg-slate-900 text-white border-slate-800 shadow-xs"
-                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              Բոլոր Հայտերը ({clientLeads.length})
-            </button>
-            <button
-              onClick={() => setActiveFilter("pending")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
-                activeFilter === "pending"
-                  ? "bg-rose-600 text-white border-rose-600 shadow-xs"
-                  : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              <span>🆕 Նոր Հայտեր ({clientLeads.filter((l) => l.status === "pending").length})</span>
-            </button>
-            <button
-              onClick={() => setActiveFilter("contacted")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                activeFilter === "contacted"
-                  ? "bg-amber-600 text-white border-amber-600 shadow-xs"
-                  : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
-              }`}
-            >
-              📞 Կապ Հաստատված ({clientLeads.filter((l) => l.status === "contacted").length})
-            </button>
-            <button
-              onClick={() => setActiveFilter("quote_sent")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                activeFilter === "quote_sent"
-                  ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                  : "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100"
-              }`}
-            >
-              📄 Գնառաջարկ Ուղարկված ({clientLeads.filter((l) => l.status === "quote_sent").length})
-            </button>
-            <button
-              onClick={() => setActiveFilter("closed")}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition ${
-                activeFilter === "closed"
-                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-              }`}
-            >
-              ✅ Ավարտված ({clientLeads.filter((l) => l.status === "closed").length})
-            </button>
-          </div>
+        <div className="space-y-5">
+          <SalesPerformanceStats leads={clientLeads} />
 
           {filteredLeads.length === 0 ? (
-            <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
+            <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
               <Zap className="w-12 h-12 text-slate-300 mx-auto" />
               <h3 className="text-base font-black text-slate-800">Հայտեր չեն գտնվել</h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Հաճախորդներին ուղարկեք «Արագ Հայտի Հղում»-ը (Header-ից)։ Հաճախորդների լրացրած տվյալներն ակնթարթորեն կհայտնվեն այստեղ։
+                Սեղմեք «+ Նոր Հայտ» կոճակը կամ հաճախորդներին ուղարկեք Express Client Link-ը։
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredLeads.map((lead) => {
-                const isPending = lead.status === "pending";
-                return (
-                  <div
-                    key={lead.id}
-                    className={`rounded-2xl p-5 border transition-all flex flex-col justify-between shadow-xs ${
-                      isPending
-                        ? "bg-gradient-to-br from-rose-50/70 via-white to-amber-50/50 border-rose-300 ring-2 ring-rose-500/20"
-                        : "bg-white border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    <div>
-                      {/* Top Header Row */}
-                      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
-                            {lead.policyNumber || "EXP-LEAD"}
-                          </span>
-                          <span className="text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-                            {lead.productType}
-                          </span>
-                        </div>
-
-                        {/* Status Select Dropdown */}
-                        <select
-                          value={lead.status}
-                          onChange={(e) =>
-                            handleLeadStatusChange(lead.id, e.target.value as ClientRenewalLead["status"])
-                          }
-                          className={`text-xs font-bold px-2.5 py-1 rounded-xl border transition cursor-pointer ${
-                            lead.status === "pending"
-                              ? "bg-rose-500 text-white border-rose-600 font-black"
-                              : lead.status === "contacted"
-                              ? "bg-amber-100 text-amber-900 border-amber-300"
-                              : lead.status === "quote_sent"
-                              ? "bg-blue-100 text-blue-900 border-blue-300"
-                              : "bg-emerald-100 text-emerald-900 border-emerald-300"
-                          }`}
-                        >
-                          <option value="pending">🆕 Նոր Հայտ</option>
-                          <option value="contacted">📞 Կապ Հաստատված</option>
-                          <option value="quote_sent">📄 Գնառաջարկ Ուղարկված</option>
-                          <option value="closed">✅ Ավարտված / Կնքված</option>
-                        </select>
-                      </div>
-
-                      {/* Client Info */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <strong className="text-base font-black text-slate-900">{lead.clientName}</strong>
-                          <span className="text-[11px] text-slate-500 font-mono">
-                            {new Date(lead.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                          <a
-                            href={`tel:${lead.phone}`}
-                            className="font-bold text-blue-700 hover:underline flex items-center gap-1"
-                          >
-                            <Phone size={13} /> {lead.phone}
-                          </a>
-                          {lead.email && (
-                            <span className="flex items-center gap-1 text-slate-500">
-                              <Mail size={13} /> {lead.email}
-                            </span>
-                          )}
-                        </div>
-
-                        {lead.notes && (
-                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 mt-2 leading-relaxed">
-                            {lead.notes}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <a
-                        href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs flex items-center gap-1 transition"
-                      >
-                        <MessageSquare size={14} className="text-emerald-600" />
-                        <span>WhatsApp</span>
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => generateProposalFromLead(lead)}
-                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-black text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
-                      >
-                        <FileCheck size={15} />
-                        <span>1-Click Պատրաստել Գնառաջարկ</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <KanbanBoard
+              leads={filteredLeads}
+              onLeadClick={generateProposalFromLead}
+              onLeadsUpdated={loadData}
+            />
           )}
         </div>
       )}
 
-      {/* VIEW SECTION 2: POLICY RENEWALS */}
+      {/* VIEW SECTION 2: CLIENTS 360 DIRECTORY */}
+      {activeTabSection === "clients360" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+            {filteredClients.map((client) => (
+              <div
+                key={client.id}
+                onClick={() => setSelectedClientForModal(client)}
+                className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer group space-y-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white font-black text-lg flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+                      {client.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-base group-hover:text-blue-600 transition">
+                          {client.name}
+                        </h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                          ★ {client.vipTier}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono mt-0.5 flex items-center gap-3">
+                        <span>{client.phone}</span>
+                        {client.email && <span>{client.email}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block uppercase">LTV Ծավալ</span>
+                    <strong className="text-emerald-600 font-black font-mono text-sm">
+                      {client.ltvAmount.toLocaleString()} ֏
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {client.tags.map((tag, idx) => (
+                    <span key={idx} className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-medium">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-700">{client.policiesCount} պոլիս</span>
+                    <span>· Գործակալ՝ {client.assignedAgent}</span>
+                  </div>
+
+                  <span className="text-blue-600 font-bold text-xs flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                    Դիտել 360° Քարտը →
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW SECTION 3: POLICY RENEWALS */}
       {activeTabSection === "renewals" && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
             <button
               onClick={() => setActiveFilter("all")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 activeFilter === "all"
                   ? "bg-blue-600 text-white border-blue-500 shadow-md"
                   : "bg-slate-900/90 text-slate-400 border-slate-800 hover:text-white"
@@ -572,7 +600,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             </button>
             <button
               onClick={() => setActiveFilter("critical")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 activeFilter === "critical"
                   ? "bg-rose-600 text-white border-rose-500 shadow-md"
                   : "bg-slate-900/90 text-rose-400 border-rose-500/30 hover:bg-slate-800"
@@ -582,7 +610,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             </button>
             <button
               onClick={() => setActiveFilter("urgent")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 activeFilter === "urgent"
                   ? "bg-amber-600 text-white border-amber-500 shadow-md"
                   : "bg-slate-900/90 text-amber-400 border-amber-500/30 hover:bg-slate-800"
@@ -592,7 +620,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             </button>
             <button
               onClick={() => setActiveFilter("upcoming")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 activeFilter === "upcoming"
                   ? "bg-blue-600 text-white border-blue-500 shadow-md"
                   : "bg-slate-900/90 text-blue-400 border-blue-500/30 hover:bg-slate-800"
@@ -602,7 +630,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
             </button>
             <button
               onClick={() => setActiveFilter("renewed")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                 activeFilter === "renewed"
                   ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
                   : "bg-slate-900/90 text-emerald-400 border-emerald-500/30 hover:bg-slate-800"
@@ -613,10 +641,10 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredItems.map((item) => (
+            {filteredRenewals.map((item) => (
               <div
                 key={item.id}
-                className={`bg-slate-900 border rounded-2xl p-5 text-white shadow-xl flex flex-col justify-between transition-all hover:border-slate-700 ${
+                className={`bg-slate-900 border rounded-3xl p-5 text-white shadow-xl flex flex-col justify-between transition-all hover:border-slate-700 ${
                   item.status === "critical"
                     ? "border-rose-500/50 bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950/20"
                     : item.status === "urgent"
@@ -685,7 +713,7 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
                     </div>
 
                     {item.notes && (
-                      <p className="text-[11px] bg-slate-800/80 p-2 rounded-lg text-slate-300 border border-slate-700/60 mt-2">
+                      <p className="text-[11px] bg-slate-800/80 p-2.5 rounded-xl text-slate-300 border border-slate-700/60 mt-2">
                         💬 {item.notes}
                       </p>
                     )}
@@ -708,16 +736,19 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() =>
-                        setSelectedItemForSms({
+                        setSelectedItemForComm({
                           name: item.clientName,
                           phone: item.phone,
-                          text: `Հարգելի ${item.clientName}, «ՍԻԼ ԻՆՇՈՒՐԱՆՍ»-ը տեղեկացնում է, որ Ձեր № ${item.policyNumber} պայմանագրի ժամկետը ավարտվում է ${item.expiryDate}-ին։ Ձեզ համար պատրաստվել է երկարաձգման առաջարկ ${item.loyaltyDiscountPercent}% զեղչով՝ ընդամենը ${item.newCalculatedPremium.toLocaleString()} դրամ։`,
+                          email: item.email,
+                          productType: item.productType,
+                          premium: item.newCalculatedPremium,
+                          expiryDate: item.expiryDate,
                         })
                       }
                       className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2.5 rounded-xl border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      title="Ուղարկել SMS / Viber ծանուցում"
+                      title="Ուղարկել SMS / Viber / WhatsApp ծանուցում"
                     >
-                      <MessageSquare size={15} /> SMS
+                      <MessageSquare size={15} /> WhatsApp/SMS
                     </button>
 
                     <button
@@ -734,50 +765,131 @@ export const ClientRenewalCrm: React.FC<Props> = ({ onGenerateRenewalQuote }) =>
         </div>
       )}
 
-      {/* SMS Modal */}
-      {selectedItemForSms && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 text-white max-w-lg w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-base flex items-center gap-2">
-                <MessageSquare className="text-emerald-400" size={18} />
-                Ուղարկել Ծանուցում — {selectedItemForSms.name}
+      {/* VIEW SECTION 4: SALES TARGET & GAMIFICATION */}
+      {activeTabSection === "sales" && (
+        <div className="space-y-5">
+          <SalesPerformanceStats leads={clientLeads} />
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <Award className="text-amber-500" size={20} /> Գործակալների Լիդերբորդ (Leaderboard)
               </h3>
-              <button
-                onClick={() => setSelectedItemForSms(null)}
-                className="text-slate-400 hover:text-white text-sm cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="space-y-2 text-xs">
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-amber-700 text-sm">🥇 1.</span>
+                    <div>
+                      <b className="text-slate-800">Աննա Գրիգորյան</b>
+                      <span className="text-[10px] text-slate-500 block">12 կնքված պոլիս</span>
+                    </div>
+                  </div>
+                  <strong className="text-emerald-700 font-mono font-black text-sm">3,450,000 ֏</strong>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-slate-600 text-sm">🥈 2.</span>
+                    <div>
+                      <b className="text-slate-800">Դավիթ Մանուկյան</b>
+                      <span className="text-[10px] text-slate-500 block">8 կնքված պոլիս</span>
+                    </div>
+                  </div>
+                  <strong className="text-slate-800 font-mono font-black text-sm">2,180,000 ֏</strong>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-slate-600 text-sm">🥉 3.</span>
+                    <div>
+                      <b className="text-slate-800">Կարեն Ղազարյան</b>
+                      <span className="text-[10px] text-slate-500 block">5 կնքված պոլիս</span>
+                    </div>
+                  </div>
+                  <strong className="text-slate-800 font-mono font-black text-sm">1,420,000 ֏</strong>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="text-xs text-slate-400 block mb-1">Ծանուցման տեքստ (SMS / Viber / WhatsApp):</label>
-              <textarea
-                rows={5}
-                readOnly
-                value={selectedItemForSms.text}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 font-sans focus:outline-none"
-              />
-            </div>
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 space-y-4">
+              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                <Sparkles className="text-blue-500" size={20} /> Ապահովագրատեսակների Բաշխվածություն
+              </h3>
+              <div className="space-y-3 text-xs">
+                <div>
+                  <div className="flex justify-between font-bold mb-1">
+                    <span>🚗 ԿԱՍԿՈ Ապահովագրություն</span>
+                    <span className="text-blue-600 font-mono">55% (4,250,000 ֏)</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full" style={{ width: "55%" }} />
+                  </div>
+                </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setSelectedItemForSms(null)}
-                className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-700 cursor-pointer"
-              >
-                Փակել
-              </button>
-              <button
-                onClick={() => copySmsText(selectedItemForSms.text)}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-emerald-500 shadow-md cursor-pointer"
-              >
-                {copiedSms ? <Check size={16} /> : <Copy size={16} />}
-                {copiedSms ? "Պատճենված է!" : "Պատճենել տեքստը"}
-              </button>
+                <div>
+                  <div className="flex justify-between font-bold mb-1">
+                    <span>🏢 Գույք & Բիզնես</span>
+                    <span className="text-purple-600 font-mono">25% (1,920,000 ֏)</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-600 rounded-full" style={{ width: "25%" }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between font-bold mb-1">
+                    <span>📦 Բեռներ & Տրանսպորտ</span>
+                    <span className="text-amber-600 font-mono">12% (950,000 ֏)</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-amber-500 rounded-full" style={{ width: "12%" }} />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between font-bold mb-1">
+                    <span>🩺 Առողջություն & Այլ</span>
+                    <span className="text-emerald-600 font-mono">8% (620,000 ֏)</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: "8%" }} />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Customer 360 Profile Modal */}
+      {selectedClientForModal && (
+        <CustomerProfileModal
+          client={selectedClientForModal}
+          onClose={() => setSelectedClientForModal(null)}
+          on1ClickQuote={handle1ClickQuoteFromClient}
+          onClientUpdated={loadData}
+        />
+      )}
+
+      {/* Quick Communication Modal Trigger */}
+      {selectedItemForComm && (
+        <QuickCommunicationModal
+          clientName={selectedItemForComm.name}
+          phone={selectedItemForComm.phone}
+          email={selectedItemForComm.email}
+          productType={selectedItemForComm.productType}
+          premium={selectedItemForComm.premium}
+          expiryDate={selectedItemForComm.expiryDate}
+          onClose={() => setSelectedItemForComm(null)}
+        />
+      )}
+
+      {/* New Lead Modal Trigger */}
+      {showNewLeadModal && (
+        <NewLeadModal
+          onClose={() => setShowNewLeadModal(false)}
+          onLeadCreated={loadData}
+        />
       )}
     </div>
   );

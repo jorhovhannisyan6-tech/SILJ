@@ -181,8 +181,13 @@ export interface MortgageInsuranceData {
   notes: string;
 }
 
-// CASCO Insurance Types
+// CASCO Insurance Types (Grounded in knowledge-base/text/Casco.txt.txt & casco calculator 2024 - առանց ՃՈՈ.xlsx)
 export type CascoSilHistory = "none" | "1_year" | "2_plus_years";
+export type CascoSectionOption = "physical_and_theft" | "physical_only";
+export type CascoUsagePurpose = "personal" | "commercial" | "taxi_rental";
+export type CascoFranchiseDeductibleType = "unconditional" | "conditional" | "zero";
+export type CascoFranchiseBasis = "fixed_amount" | "percent_sum_insured";
+
 export interface CascoInsuranceData {
   clientName: string;
   phone: string;
@@ -201,10 +206,12 @@ export interface CascoInsuranceData {
   includeGlassNoPolice: boolean;
   includeTowingAssistance: boolean;
   bankName?: string;
+  pledgeBankName?: string;
   isPledged: boolean;
   baseTariff: number;
   discount: number;
-  // Exact inputs from the supplied CASCO Excel calculator.
+
+  // Exact inputs from the supplied CASCO Excel calculator & Casco.txt.txt
   policyholderType?: "բանկային լիզինգ" | "Իրավաբանական անձ" | "Ֆիզիկական անձ";
   warrantyService?: "ներառել" | "չներառել";
   driverCountOption?: "Անսահմանափակ" | "Սահմանափակ";
@@ -221,6 +228,72 @@ export interface CascoInsuranceData {
   electricVehicle?: boolean;
   brokerCommissionPercent?: number;
   profitPercent?: number;
+
+  // Casco.txt.txt Business Rules Fields
+  // Section A - Physical Damage & Theft Options
+  sectionOption?: CascoSectionOption;
+  sectionATariffPercent?: number;
+  sectionAPremium?: number;
+  sectionAFranchiseType?: CascoFranchiseDeductibleType;
+  sectionAFranchiseAmount?: number;
+  sectionAFranchiseBasis?: CascoFranchiseBasis;
+  sectionAFranchisePercentValue?: number;
+
+  // Section B - Personal Accident (ԴՊ) for Driver & Passengers (Կետ 4.1.2)
+  includeDriverPassengerAccident?: boolean;
+  accidentSeatsCount?: number;
+  accidentSumPerSeat?: number;
+  sectionBTariffPercent?: number;
+  sectionBPremium?: number;
+  sectionBFranchiseType?: CascoFranchiseDeductibleType;
+  sectionBFranchiseAmount?: number;
+  sectionBFranchiseBasis?: CascoFranchiseBasis;
+  accidentRisks?: {
+    death: boolean;
+    disability: boolean;
+    firstAidExpenses: boolean;
+  };
+
+  // Section C - Voluntary Third Party Liability / Կամավոր ԱՊՊԱ (Կետ 4.1.3)
+  includeVoluntaryTpl?: boolean;
+  voluntaryTplLimit?: number;
+  sectionCTariffPercent?: number;
+  sectionCPremium?: number;
+  sectionCFranchiseType?: CascoFranchiseDeductibleType;
+  sectionCFranchiseAmount?: number;
+  sectionCFranchiseBasis?: CascoFranchiseBasis;
+
+  // Additional Non-factory Equipment (Կետ 3.1)
+  includeAdditionalEquipment?: boolean;
+  additionalEquipmentDetails?: string;
+  additionalEquipmentValue?: number;
+  additionalEquipmentTariffPercent?: number;
+  additionalEquipmentPremium?: number;
+  additionalEquipmentFranchiseAmount?: number;
+
+  // Franchise / Deductible Specification (Section 7)
+  franchiseDeductibleType?: CascoFranchiseDeductibleType;
+  franchiseCalculationBasis?: CascoFranchiseBasis;
+  franchisePercentValue?: number;
+  // Driver Age & Experience Multipliers (Կետ 7.4 & 7.5: 2x if age<21 or exp 1-3y, 3x if exp<1y)
+  driverAgeExpMultiplier?: number;
+  authorizedDriversList?: string;
+
+  // Vehicle Technical & Registry Identification (Կետ 1.1, 13.1)
+  vehicleVin?: string;
+  licensePlate?: string;
+  registrationDocNumber?: string;
+  enginePowerHp?: number;
+  engineVolumeCc?: number;
+  transmissionType?: "automatic" | "manual";
+  fuelType?: "petrol" | "diesel" | "gas" | "electric" | "hybrid";
+  vehicleUsagePurpose?: CascoUsagePurpose;
+
+  // Glass & Small Details without Police Act Limit (Կետ 13.4)
+  noPoliceGlassAnnualLimit?: number;
+  officialDealerRepair?: boolean;
+  roadsideAssistanceIncluded?: boolean;
+  loanContractNumber?: string;
 }
 
 // Health / VMI Insurance Types
@@ -345,6 +418,15 @@ export type QuoteStatus =
   | "locked"
   | "policy_issued";
 
+export interface CascoSectionBreakdownItem {
+  sectionKey: "section_a" | "section_b" | "section_c" | "additional_equipment";
+  sectionName: string;
+  sumInsured: number;
+  tariff: number;
+  premium: number;
+  franchise: string;
+}
+
 export interface QuotationProposal {
   id: string;
   quotationNumber: string;
@@ -373,6 +455,7 @@ export interface QuotationProposal {
     tariff: number;
     premium: number;
   }>;
+  cascoBreakdown?: CascoSectionBreakdownItem[];
   mortgageBreakdown?: {
     packageType: MortgagePackageType;
     packageLabel: string;

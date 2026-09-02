@@ -315,23 +315,34 @@ function getCascoYearBand(year: number): CascoYearBand {
 
 export function calculateCascoFromExcel(data: CascoInsuranceData): CascoExcelCalculation {
   const party: CascoParty = data.policyholderType ?? "Ֆիզիկական անձ";
-  const yearBand = getCascoYearBand(Number(data.manufactureYear));
-  const amountBand = Number(data.marketValue) < 7_000_000 ? "under7" : "over7";
+  const manufactureYear = Number(data.manufactureYear) || new Date().getFullYear();
+  const yearBand = getCascoYearBand(manufactureYear);
+  const marketValue = Number(data.marketValue) || 0;
+  
+  // Currency-aware 7M AMD threshold checking (USD/AMD conversion)
+  const usdRate = 395;
+  const marketValueAMD = data.currency === "USD" ? marketValue * usdRate : marketValue;
+  const amountBand = marketValueAMD < 7_000_000 ? "under7" : "over7";
   const baseGrossMax = CASCO_BASE_GROSS_MAX[yearBand][party][amountBand];
   const adjustments: Array<{ label: string; value: number }> = [];
   const errors: string[] = [];
-  const marketValue = Number(data.marketValue);
-  const manufactureYear = Number(data.manufactureYear);
-  if (!Number.isFinite(marketValue) || marketValue <= 0) errors.push("Ապահովագրական/շուկայական արժեքը պետք է լինի 0-ից մեծ։");
-  if (!Number.isFinite(manufactureYear) || manufactureYear < 1900 || manufactureYear > new Date().getFullYear() + 1) errors.push("Արտադրության տարին անվավեր է։");
-  if (!String(data.clientName || "").trim()) errors.push("Ապահովադրի անունը պարտադիր է։");
-  if (!String(data.vehicleMake || "").trim() || !String(data.vehicleModel || "").trim()) errors.push("Մեքենայի մակնիշը և մոդելը պարտադիր են։");
-  if (Number(data.brokerCommissionPercent ?? 10) < 0 || Number(data.brokerCommissionPercent ?? 10) > 100) errors.push("Միջնորդավճարը պետք է լինի 0-100% միջակայքում։");
-  if (Number(data.profitPercent ?? 10) < 0 || Number(data.profitPercent ?? 10) > 100) errors.push("Շահույթի տոկոսը պետք է լինի 0-100% միջակայքում։");
+
+  if (marketValue <= 0) {
+    errors.push("Ապահովագրական/շուկայական արժեքը պետք է լինի 0-ից մեծ։");
+  }
+  if (!Number.isFinite(manufactureYear) || manufactureYear < 1900 || manufactureYear > new Date().getFullYear() + 1) {
+    errors.push("Արտադրության տարին անվավեր է։");
+  }
+  if (Number(data.brokerCommissionPercent ?? 10) < 0 || Number(data.brokerCommissionPercent ?? 10) > 100) {
+    errors.push("Միջնորդավճարը պետք է լինի 0-100% միջակայքում։");
+  }
+  if (Number(data.profitPercent ?? 10) < 0 || Number(data.profitPercent ?? 10) > 100) {
+    errors.push("Շահույթի տոկոսը պետք է լինի 0-100% միջակայքում։");
+  }
 
   const warranty = data.warrantyService ?? "չներառել";
   if (warranty === "ներառել") {
-    // Exact calculator formula: warranty is rejected unless the selected Excel band is 2021+.
+    // Exact calculator formula: warranty is permitted only for 2021+ year band.
     if (yearBand !== "2021_plus") {
       errors.push("Երաշխիքային սպասարկումը Excel հաշվիչի բանաձևով թույլատրված է միայն «2021-ից բարձր» խմբի համար։");
     } else {
@@ -350,16 +361,17 @@ export function calculateCascoFromExcel(data: CascoInsuranceData): CascoExcelCal
     adjustments.push({ label: "Մինիմալ ֆրանշիզա", value: CASCO_FRANCHISE_ADJUSTMENTS.minimal[amountBand] });
   }
 
-  const bonusMalus = data.bonusMalus ?? "չընտրել";
+  const bonusMalus = data.bonusMalus ?? "8-10";
   const lossRatio = data.lossRatio ?? "չընտրել";
-  if (bonusMalus !== "չընտրել" && lossRatio !== "չընտրել") {
+  if (bonusMalus !== "չընտրել" && lossRatio !== "չընտրել" && bonusMalus !== "8-10") {
     errors.push("Excel հաշվիչի կանոնով ԲՄ և Վնասաբերություն դաշտերից պետք է ընտրել միայն մեկը։");
-  } else if (bonusMalus === "չընտրել" && lossRatio === "չընտրել") {
-    errors.push("Excel հաշվիչի կանոնով պետք է ընտրել ԲՄ կամ Վնասաբերություն դաշտերից մեկը։");
-  } else if (bonusMalus !== "չընտրել") {
-    adjustments.push({ label: `Բոնուս Մալուս՝ ${bonusMalus}`, value: CASCO_BONUS_MALUS_ADJUSTMENTS[bonusMalus] ?? 0 });
-  } else if (lossRatio === "Վնասաբերությունը  >=  90% ") {
+  } else if (lossRatio && lossRatio.includes(">=  90%")) {
     adjustments.push({ label: "Վնասաբերությունը ≥ 90%", value: CASCO_LOSS_RATIO_FACTOR });
+  } else if (bonusMalus && bonusMalus !== "չընտրել") {
+    adjustments.push({ label: `Բոնուս Մալուս՝ ${bonusMalus}`, value: CASCO_BONUS_MALUS_ADJUSTMENTS[bonusMalus] ?? 0 });
+  } else {
+    // Default standard BM class 8-10
+    adjustments.push({ label: "Բոնուս Մալուս՝ 8-10 (Ստանդարտ)", value: 0 });
   }
 
   const paymentMethod = data.paymentMethod ?? "Միանվագ";
@@ -374,16 +386,16 @@ export function calculateCascoFromExcel(data: CascoInsuranceData): CascoExcelCal
   const theftCoverage = data.theftCoverage ?? "ներառել";
   if (theftCoverage === "ներառել միայն մանր դետալները") {
     adjustments.push({ label: "Գողություն՝ միայն մանր դետալներ", value: CASCO_THEFT_EXCLUDE_SMALL_DETAILS_FACTOR });
-  } else if (theftCoverage === "չներառել") {
+  } else if (theftCoverage === "չներառել" || data.sectionOption === "physical_only") {
     const exclusion = Math.min(Math.max(Number(data.theftExclusionPercent ?? 0), 0), CASCO_THEFT_EXCLUDE_MAX);
-    adjustments.push({ label: `Գողության ռիսկը չներառելու չափ՝ ${(exclusion * 100).toFixed(0)}%`, value: -0.00543956043956044 });
+    adjustments.push({ label: `Գողության ռիսկի բացառում`, value: -0.00543956043956044 });
   }
 
   const territory = data.territory ?? "Միայն ՀՀ";
   adjustments.push({ label: `Տարածաշրջան՝ ${territory}`, value: CASCO_REGION_FACTORS[territory] ?? 0 });
 
   if (data.electricVehicle) {
-    adjustments.push({ label: "Էլեկտրոմոբիլ", value: CASCO_ELECTRIC_VEHICLE_ADJUSTMENT });
+    adjustments.push({ label: "Էլեկտրոմոբիլ / Հիբրիդ", value: CASCO_ELECTRIC_VEHICLE_ADJUSTMENT });
   }
 
   const subtotal = baseGrossMax + adjustments.reduce((sum, a) => sum + a.value, 0);
@@ -392,7 +404,57 @@ export function calculateCascoFromExcel(data: CascoInsuranceData): CascoExcelCal
   const tariffBeforeMinimum = subtotal / (1 - brokerPct) / (1 - profitPct);
   const minimumTariff = CASCO_MIN_TARIFF[party][amountBand];
   const finalTariff = Math.max(tariffBeforeMinimum, minimumTariff);
-  const annualPremium = Math.round((marketValue * finalTariff) / 1000) * 1000;
+
+  // Base CASCO vehicle premium calculation (Section A)
+  const tariffA = data.sectionATariffPercent !== undefined && data.sectionATariffPercent > 0
+    ? data.sectionATariffPercent / 100
+    : finalTariff;
+
+  let vehiclePremium = 0;
+  if (data.currency === "USD") {
+    vehiclePremium = Math.round(marketValue * tariffA);
+  } else {
+    vehiclePremium = Math.round((marketValue * tariffA) / 1000) * 1000;
+  }
+
+  // Section B, C and Additional Equipment Add-on premiums with individual tariffs
+  let addOnPremium = 0;
+  if (data.includeDriverPassengerAccident) {
+    const seats = Number(data.accidentSeatsCount || 5);
+    const sumPerSeat = Number(data.accidentSumPerSeat || (data.currency === "USD" ? 2500 : 1000000));
+    const tariffB = data.sectionBTariffPercent !== undefined && data.sectionBTariffPercent >= 0
+      ? data.sectionBTariffPercent / 100
+      : 0.003;
+    const totalSeatSum = seats * sumPerSeat;
+    const accidentCost = data.currency === "USD"
+      ? Math.round(totalSeatSum * tariffB)
+      : Math.round((totalSeatSum * tariffB) / 1000) * 1000;
+    addOnPremium += accidentCost;
+  }
+
+  if (data.includeVoluntaryTpl) {
+    const tplLimit = Number(data.voluntaryTplLimit || (data.currency === "USD" ? 12500 : 5000000));
+    const tariffC = data.sectionCTariffPercent !== undefined && data.sectionCTariffPercent >= 0
+      ? data.sectionCTariffPercent / 100
+      : 0.004;
+    const tplCost = data.currency === "USD"
+      ? Math.round(tplLimit * tariffC)
+      : Math.round((tplLimit * tariffC) / 1000) * 1000;
+    addOnPremium += tplCost;
+  }
+
+  if (data.includeAdditionalEquipment && Number(data.additionalEquipmentValue) > 0) {
+    const equipVal = Number(data.additionalEquipmentValue);
+    const equipTariff = data.additionalEquipmentTariffPercent !== undefined && data.additionalEquipmentTariffPercent > 0
+      ? data.additionalEquipmentTariffPercent / 100
+      : finalTariff;
+    const equipCost = data.currency === "USD"
+      ? Math.round(equipVal * equipTariff)
+      : Math.round((equipVal * equipTariff) / 1000) * 1000;
+    addOnPremium += equipCost;
+  }
+
+  const annualPremium = vehiclePremium + addOnPremium;
 
   return {
     valid: errors.length === 0,
@@ -413,14 +475,194 @@ export function calculateCascoFromExcel(data: CascoInsuranceData): CascoExcelCal
   };
 }
 
-// 3. CASCO Proposal Builder
+// 3. CASCO Proposal Builder (Grounded in knowledge-base/text/Casco.txt.txt & casco calculator 2024 - առանց ՃՈՈ.xlsx)
 export function buildCascoProposal(data: CascoInsuranceData): QuotationProposal {
   const calc = calculateCascoFromExcel(data);
-  const tariff = calc.finalTariff * 100;
+  const tariffA = data.sectionATariffPercent !== undefined && data.sectionATariffPercent > 0
+    ? data.sectionATariffPercent
+    : calc.finalTariff * 100;
   const annualPremium = calc.annualPremium;
   const today = new Date();
   const validUntilDate = new Date();
   validUntilDate.setDate(today.getDate() + 30);
+
+  // Franchise description construction per Section 7 of Casco.txt for Section A
+  let franchiseDescA = "";
+  const deductibleKindA = data.sectionAFranchiseType || data.franchiseDeductibleType || (data.franchiseAmount === 0 ? "zero" : "unconditional");
+  const amountA = data.sectionAFranchiseAmount !== undefined ? data.sectionAFranchiseAmount : data.franchiseAmount;
+  if (deductibleKindA === "zero" || amountA === 0) {
+    franchiseDescA = "0% (Առանց ֆրանշիզայի)";
+  } else {
+    const basisLabel = (data.sectionAFranchiseBasis || data.franchiseCalculationBasis) === "percent_sum_insured"
+      ? `${data.sectionAFranchisePercentValue || data.franchisePercentValue || ((amountA / (data.marketValue || 1)) * 100).toFixed(1)}% ապահովագրական գումարից`
+      : `${formatCurrency(amountA, data.currency)}`;
+    const typeLabel = deductibleKindA === "conditional" ? "Պայմանական" : "Ոչ պայմանական";
+    franchiseDescA = `${typeLabel} ֆրանշիզա՝ ${basisLabel}`;
+  }
+
+  if (data.driverAgeExpMultiplier && data.driverAgeExpMultiplier > 1) {
+    franchiseDescA += ` [${data.driverAgeExpMultiplier}x վարորդի տարիք/ստաժ]`;
+  }
+
+  // Section B (Personal Accident) Franchise & Tariff
+  const tariffB = data.sectionBTariffPercent !== undefined ? data.sectionBTariffPercent : 0.30;
+  const seatsCount = Number(data.accidentSeatsCount || 5);
+  const seatLimit = Number(data.accidentSumPerSeat || (data.currency === "USD" ? 2500 : 1000000));
+  const totalSumB = seatsCount * seatLimit;
+  let franchiseDescB = "0 ֏ (Առանց ֆրանշիզայի)";
+  if (data.sectionBFranchiseType && data.sectionBFranchiseType !== "zero" && (data.sectionBFranchiseAmount || 0) > 0) {
+    const typeLabelB = data.sectionBFranchiseType === "conditional" ? "Պայմանական" : "Ոչ պայմանական";
+    franchiseDescB = `${typeLabelB} ֆրանշիզա՝ ${formatCurrency(data.sectionBFranchiseAmount || 0, data.currency)}`;
+  }
+
+  // Section C (Voluntary TPL) Franchise & Tariff
+  const tariffC = data.sectionCTariffPercent !== undefined ? data.sectionCTariffPercent : 0.40;
+  const totalSumC = Number(data.voluntaryTplLimit || (data.currency === "USD" ? 12500 : 5000000));
+  let franchiseDescC = "0 ֏ (Առանց ֆրանշիզայի)";
+  if (data.sectionCFranchiseType && data.sectionCFranchiseType !== "zero" && (data.sectionCFranchiseAmount || 0) > 0) {
+    const typeLabelC = data.sectionCFranchiseType === "conditional" ? "Պայմանական" : "Ոչ պայմանական";
+    franchiseDescC = `${typeLabelC} ֆրանշիզա՝ ${formatCurrency(data.sectionCFranchiseAmount || 0, data.currency)}`;
+  }
+
+  // Section Premiums
+  const premiumA = data.currency === "USD"
+    ? Math.round(Number(data.marketValue) * (tariffA / 100))
+    : Math.round((Number(data.marketValue) * (tariffA / 100)) / 1000) * 1000;
+
+  const premiumB = data.currency === "USD"
+    ? Math.round(totalSumB * (tariffB / 100))
+    : Math.round((totalSumB * (tariffB / 100)) / 1000) * 1000;
+
+  const premiumC = data.currency === "USD"
+    ? Math.round(totalSumC * (tariffC / 100))
+    : Math.round((totalSumC * (tariffC / 100)) / 1000) * 1000;
+
+  const equipVal = Number(data.additionalEquipmentValue || 0);
+  const equipTariff = data.additionalEquipmentTariffPercent !== undefined ? data.additionalEquipmentTariffPercent : tariffA;
+  const premiumEquip = data.currency === "USD"
+    ? Math.round(equipVal * (equipTariff / 100))
+    : Math.round((equipVal * (equipTariff / 100)) / 1000) * 1000;
+  const franchiseDescEquip = data.additionalEquipmentFranchiseAmount
+    ? formatCurrency(data.additionalEquipmentFranchiseAmount, data.currency)
+    : "Ըստ Բաժին Ա-ի ֆրանշիզայի";
+
+  // Build Breakdown List
+  const cascoBreakdown: Array<{
+    sectionKey: "section_a" | "section_b" | "section_c" | "additional_equipment";
+    sectionName: string;
+    sumInsured: number;
+    tariff: number;
+    premium: number;
+    franchise: string;
+  }> = [
+    {
+      sectionKey: "section_a",
+      sectionName: data.sectionOption === "physical_only"
+        ? "Բաժին Ա. Տրանսպորտային միջոցի ապահովագրություն (Միայն ֆիզիկական վնաս)"
+        : "Բաժին Ա. Տրանսպորտային միջոցի ապահովագրություն (Ֆիզիկական վնաս և Հափշտակություն)",
+      sumInsured: Number(data.marketValue || 0),
+      tariff: tariffA,
+      premium: premiumA,
+      franchise: franchiseDescA,
+    },
+  ];
+
+  let calculatedTotalSum = Number(data.marketValue || 0);
+
+  if (data.includeDriverPassengerAccident) {
+    cascoBreakdown.push({
+      sectionKey: "section_b",
+      sectionName: `Բաժին Բ. Վարորդի և ուղևորների դժբախտ պատահարներ (${seatsCount} նստատեղ)`,
+      sumInsured: totalSumB,
+      tariff: tariffB,
+      premium: premiumB,
+      franchise: franchiseDescB,
+    });
+    calculatedTotalSum += totalSumB;
+  }
+
+  if (data.includeVoluntaryTpl) {
+    cascoBreakdown.push({
+      sectionKey: "section_c",
+      sectionName: "Բաժին Գ. Քաղաքացիական պատասխանատվություն (Կամավոր ԱՊՊԱ)",
+      sumInsured: totalSumC,
+      tariff: tariffC,
+      premium: premiumC,
+      franchise: franchiseDescC,
+    });
+    calculatedTotalSum += totalSumC;
+  }
+
+  if (data.includeAdditionalEquipment && equipVal > 0) {
+    cascoBreakdown.push({
+      sectionKey: "additional_equipment",
+      sectionName: `Լրացուցիչ ոչ գործարանային սարքավորումներ (${data.additionalEquipmentDetails || "Հատուկ սարքավորում"})`,
+      sumInsured: equipVal,
+      tariff: equipTariff,
+      premium: premiumEquip,
+      franchise: franchiseDescEquip,
+    });
+    calculatedTotalSum += equipVal;
+  }
+
+  // Perils list grounded strictly in Casco.txt.txt Sections
+  const perils: string[] = [];
+
+  // Section A - Physical Damage & Theft
+  if (data.sectionOption === "physical_only" || data.theftCoverage === "չներառել") {
+    perils.push("ԲԱԺԻՆ Ա (Միայն ֆիզիկական վնաս). ՃՏՊ բախումներ, շրջվել, արգելքի հարված, անկում");
+    perils.push("Բնական և տարերային աղետներ (կայծակ, փոթորիկ, կարկուտ, ջրհեղեղ)");
+    perils.push("Հրդեհ, պայթյուն, ինքնաբռնկում");
+    perils.push("Առարկաների, ծառերի, սառույցի անկում, կենդանիների գործողություններ");
+    perils.push("Երրորդ անձանց ապօրինի գործողություններ (հրկիզում, պայթեցում, վանդալիզմ)");
+  } else {
+    perils.push("ԲԱԺԻՆ Ա (Ֆիզիկական վնաս և Հափշտակություն). ՃՏՊ բախումներ, շրջվել, անկում");
+    perils.push("Տրանսպորտային միջոցի կամ դրա մասերի հափշտակություն, գողություն, կողոպուտ, ավազակություն");
+    perils.push("Հրդեհ, պայթյուն, ինքնաբռնկում");
+    perils.push("Տարերային աղետներ (կարկուտ, փոթորիկ, հեղեղում, կայծակ)");
+    perils.push("Երրորդ անձանց ապօրինի գործողություններ և վանդալիզմ");
+    perils.push("Առարկաների, քարերի, ծառերի, ձյան/սառույցի անկում, ջրի մեջ ընկնել");
+  }
+
+  // Section B - Personal Accident
+  if (data.includeDriverPassengerAccident) {
+    const seatLimit = formatCurrency(data.accidentSumPerSeat || 1000000, data.currency);
+    const seats = data.accidentSeatsCount || 5;
+    perils.push(`ԲԱԺԻՆ Բ (Վարորդի և ուղևորների ԴՊ ապահովագրություն). ${seats} նստատեղ, յուրաքանչյուրը՝ ${seatLimit} սահմանաչափով (Մահ, Հաշմանդամություն, Բուժօգնություն)`);
+  }
+
+  // Section C - Voluntary TPL
+  if (data.includeVoluntaryTpl) {
+    const tplLimit = formatCurrency(data.voluntaryTplLimit || 5000000, data.currency);
+    perils.push(`ԲԱԺԻՆ Գ (Քաղաքացիական պատասխանատվություն / Կամավոր ԱՊՊԱ). 3-րդ անձանց գույքին և առողջությանը պատճառված վնասներ՝ ${tplLimit} լրացուցիչ լիմիտով`);
+  }
+
+  // Additional Equipment
+  if (data.includeAdditionalEquipment && data.additionalEquipmentDetails) {
+    perils.push(`Լրացուցիչ ոչ գործարանային սարքավորումներ՝ ${data.additionalEquipmentDetails} (${formatCurrency(data.additionalEquipmentValue || 0, data.currency)})`);
+  }
+
+  // Additional services & options
+  if (data.includeGlassNoPolice || data.noPoliceGlassAnnualLimit) {
+    perils.push(`Ապակիների և մանր դետալների հատուցում առանց Ոստիկանության ակտի (մինչև ${data.noPoliceGlassAnnualLimit ? formatCurrency(data.noPoliceGlassAnnualLimit, data.currency) : "լիմիտ"})`);
+  }
+  if (data.includeTowingAssistance || data.roadsideAssistanceIncluded) {
+    perils.push("Անվճար Էվակուատոր և շուրջօրյա ճանապարհային ասիսթանս ՀՀ ամբողջ տարածքում");
+  }
+  if (data.warrantyService === "ներառել" || data.officialDealerRepair) {
+    perils.push("Երաշխիքային սպասարկում և վերանորոգում պաշտոնական ավտոսրահում");
+  }
+
+  // Object description with full technical registry specs
+  const vehicleSpecs = [
+    `Ավտոմեքենա՝ ${data.vehicleMake} ${data.vehicleModel} (${data.manufactureYear} թ.)`,
+    data.licensePlate ? `Պետհամարանիշ՝ ${data.licensePlate}` : null,
+    data.vehicleVin ? `VIN՝ ${data.vehicleVin}` : null,
+    data.registrationDocNumber ? `Տեխպասպորտ՝ ${data.registrationDocNumber}` : null,
+    data.enginePowerHp ? `Հզորություն՝ ${data.enginePowerHp} ձ.ու.` : null,
+    data.vehicleUsagePurpose ? `Շահագործում՝ ${data.vehicleUsagePurpose === "personal" ? "Անձնական / Ընտանեկան" : data.vehicleUsagePurpose === "commercial" ? "Ծառայողական / Բիզնես" : "Տաքսի / Վարձակալություն"}` : null,
+    `Շուկայական գնահատված արժեք՝ ${formatCurrency(data.marketValue, data.currency)}`,
+  ].filter(Boolean).join(" | ");
 
   return {
     id: `casco-${Date.now()}`,
@@ -432,32 +674,49 @@ export function buildCascoProposal(data: CascoInsuranceData): QuotationProposal 
     validUntil: validUntilDate.toLocaleDateString("hy-AM"),
     clientName: data.clientName || "Ավտոտիրոջ Անուն Ազգանուն",
     contactInfo: `Հեռ․՝ ${data.phone || ""} | Էլ․ հասցե՝ ${data.email || ""}`,
-    objectDescription: `Ավտոմեքենա՝ ${data.vehicleMake} ${data.vehicleModel}, Թողարկման տարեթիվ՝ ${data.manufactureYear} թ․, Շուկայական գնահատված արժեք՝ ${formatCurrency(data.marketValue, data.currency)}:`,
-    totalSumInsured: data.marketValue,
+    objectDescription: vehicleSpecs,
+    totalSumInsured: calculatedTotalSum,
     currency: data.currency,
     baseTariff: calc.baseGrossMax * 100,
     discountBonus: 0,
-    finalTariff: tariff,
+    finalTariff: tariffA,
     annualPremium: annualPremium,
-    franchiseDescription: data.franchiseAmount === 0 ? "0% (Առանց ֆրանշիզայի / Լրիվ ծածկույթ)" : `Ֆիքսված ֆրանշիզա՝ ${formatCurrency(data.franchiseAmount, data.currency)} յուրաքանչյուր պատահարի համար`,
-    franchiseAmount: data.franchiseAmount,
-    paymentTerms: "Տարեկան միանվագ կամ 2-4 փուլով տարաժամկետ վճարում",
-    beneficiaryDetails: data.isPledged && data.bankName ? `Շահառու՝ ${data.bankName} (Գրավի իրավունքով)` : "Շահառու՝ Ապահովադիր",
-    coveredPerilsList: [
-      "ԿԱՍԿՈ-ի ծածկույթները որոշվում են գործող պայմանագրով և ընտրված ռիսկերով։",
-      ...(data.theftCoverage === "չներառել" ? [] : ["Գողության ռիսկ՝ ըստ ընտրված տարբերակի"]),
-      ...(data.trafficRules === "ներառել" ? ["ՃԵԿ կանոններ՝ ըստ Excel հաշվիչի"] : []),
-      ...(data.warrantyService === "ներառել" ? ["Երաշխիքային սպասարկում"] : []),
-      ...(data.includeGlassNoPolice ? ["Ապակիների/մանր դետալների ընտրված լրացուցիչ ծածկույթ"] : []),
-      ...(data.includeTowingAssistance ? ["Տարհանում / ճանապարհային օգնություն"] : []),
-    ],
+    franchiseDescription: franchiseDescA,
+    franchiseAmount: amountA,
+    paymentTerms: data.paymentMethod ? `Վճարման ձև՝ ${data.paymentMethod} (ըստ հաշվիչի ժամանակացույցի)` : "Տարեկան միանվագ կամ 2-4 փուլով տարաժամկետ վճարում",
+    beneficiaryDetails: data.isPledged && data.bankName
+      ? `Առաջնային Շահառու՝ ${data.bankName} (Գրավի / Վարկային պայմանագիր ${data.loanContractNumber || "առկա է"})`
+      : "Շահառու՝ Ապահովադիր",
+    coveredPerilsList: perils,
+    cascoBreakdown: cascoBreakdown,
     productSpecificDetails: {
       makeModel: `${data.vehicleMake} ${data.vehicleModel}`,
       year: data.manufactureYear,
+      licensePlate: data.licensePlate,
+      vin: data.vehicleVin,
+      registrationDoc: data.registrationDocNumber,
+      usagePurpose: data.vehicleUsagePurpose,
+      enginePower: data.enginePowerHp,
+      transmission: data.transmissionType,
+      fuelType: data.fuelType,
       driverAge: data.driverMinAge,
       driverExp: data.driverMinExp,
+      driversOption: data.driverCountOption || (data.isUnlimitedDrivers ? "Անսահմանափակ" : "Սահմանափակ"),
+      namedDrivers: data.authorizedDriversList,
+      driverMultiplier: data.driverAgeExpMultiplier,
+      sectionOption: data.sectionOption || (data.theftCoverage === "չներառել" ? "physical_only" : "physical_and_theft"),
+      accidentCoverIncluded: data.includeDriverPassengerAccident,
+      accidentSeats: data.accidentSeatsCount,
+      accidentLimitPerSeat: data.accidentSumPerSeat,
+      voluntaryTplIncluded: data.includeVoluntaryTpl,
+      voluntaryTplLimit: data.voluntaryTplLimit,
+      additionalEquipment: data.includeAdditionalEquipment ? `${data.additionalEquipmentDetails || "Սարքավորումներ"} (${data.additionalEquipmentValue || 0} ${data.currency})` : undefined,
       glassNoPolice: data.includeGlassNoPolice,
-      towing: data.includeTowingAssistance,
+      glassNoPoliceLimit: data.noPoliceGlassAnnualLimit,
+      towing: data.includeTowingAssistance || data.roadsideAssistanceIncluded,
+      warrantyService: data.warrantyService,
+      territory: data.territory || "Միայն ՀՀ",
+      paymentMethod: data.paymentMethod,
       excelYearBand: calc.yearBand,
       excelAmountBand: calc.amountBand,
       excelBaseGrossMax: calc.baseGrossMax * 100,
@@ -465,22 +724,28 @@ export function buildCascoProposal(data: CascoInsuranceData): QuotationProposal 
       excelAdjustments: calc.adjustments,
     },
     calculationBreakdown: [
-      { label: "Բազային բրուտտո մաքս", value: calc.baseGrossMax * 100, unit: "%" },
+      { label: "Բազային բրուտտո մաքս (Excel)", value: calc.baseGrossMax * 100, unit: "%" },
       ...calc.adjustments.map((a) => ({ label: a.label, value: a.value * 100, unit: "տոկոսային կետ" })),
       { label: "Սակագին՝ նվազագույն շեմից առաջ", value: calc.tariffBeforeMinimum * 100, unit: "%" },
       { label: "Excel նվազագույն սակագին", value: calc.minimumTariff * 100, unit: "%" },
-      { label: "Վերջնական սակագին", value: calc.finalTariff * 100, unit: "%" },
+      { label: "Վերջնական հաստատված սակագին", value: calc.finalTariff * 100, unit: "%" },
     ],
     underwriting: { status: calc.errors.length ? "manual_review" : "approved", reasons: calc.errors },
-    sourceDocuments: [calc.source],
+    sourceDocuments: [
+      calc.source,
+      "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Ավտոտրանսպորտային միջոցների ապահովագրության (ԿԱՍԿՈ) պայմաններ (Casco.txt)",
+    ],
     specialConditions: [
       `Հաշվարկը կատարվել է տրամադրված Excel հաշվիչի տրամաբանությամբ՝ ${calc.source}։`,
       `Բազային բրուտտո մաքս՝ ${(calc.baseGrossMax * 100).toFixed(4)}%։`,
       ...calc.adjustments.map((a) => `${a.label}: ${a.value >= 0 ? "+" : ""}${(a.value * 100).toFixed(4)} տոկոսային կետ։`),
       `Միջնորդավճար՝ ${(calc.brokerCommission * 100).toFixed(0)}%, շահույթ՝ ${(calc.profit * 100).toFixed(0)}%։`,
       `Excel նվազագույն սակագին՝ ${(calc.minimumTariff * 100).toFixed(2)}%։`,
+      "Պատահարի դեպքում Ապահովադիրը պարտավոր է անհապաղ, բայց ոչ ուշ, քան 2 (երկու) աշխատանքային օրվա ընթացքում գրավոր տեղեկացնել Ապահովագրողին (Casco.txt կետ 13.1):",
+      "Հատուցման համար անհրաժեշտ են՝ տեխպասպորտ, վարորդական իրավունք, իրավասու պետական մարմնի (ՃՈ/Ոստիկանություն/ԱԻՆ) արձանագրություն/տեղեկանք, բացառությամբ հատուկ նշված առանց ակտի ապակիների դեպքերի:",
+      "Ապահովագրական հատուցման մերժման հիմքերն են՝ ոչ սթափ վիճակում վարում, անսարք ՏՄ շահագործում (ներառյալ սեզոնին ոչ համապատասխան անվադողեր), ոչ լիազորված վարորդի կողմից վարում (Casco.txt կետ 5.1):",
       ...(calc.errors.length ? calc.errors : []),
-      "Վերջնական ապահովագրական ծածկույթը և հատուցման պայմանները որոշվում են գործող ԿԱՍԿՈ պայմանագրով։",
+      "Վերջնական ապահովագրական ծածկույթը և հատուցման պայմանները կարգավորվում են գործող ԿԱՍԿՈ պայմանագրով և կանոններով։",
     ],
     agentName: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Ավտոապահովագրության Դեպարտամենտ",
     agentTitle: "Ավտոապահովագրության Գլխավոր Մասնագետ",

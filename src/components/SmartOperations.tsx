@@ -8,6 +8,7 @@ import type { QuotationProposal } from '../types';
 import { ListAmPropertyValuationCalculator } from './Property/ListAmPropertyValuationCalculator';
 import { ListAmVehicleValuationCalculator } from './Casco/ListAmVehicleValuationCalculator';
 import { ProductTemplateMapper } from './TemplateMapper/ProductTemplateMapper';
+import { notifySuccess, notifyError, notifyWarning, notifyInfo } from '../utils/notification';
 
 type TabType = 'overview' | 'compliance' | 'vehicle-valuation' | 'property-valuation' | 'duplicates' | 'next' | 'renewals' | 'documents' | 'rules-engine' | 'bot-playground' | 'template-mapper';
 
@@ -166,14 +167,15 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
         const data = await res.json();
         if (data.status === "ok" && data.rule) {
           setInterpretedRule(data.rule);
+          notifySuccess("Կանոնը հաջողությամբ մեկնաբանվեց AI-ի կողմից։", "AI Կանոն");
         } else {
-          alert("ԱԲ-ը չկարողացավ կառուցվածքավորված կանոն ստեղծել։");
+          notifyError("ԱԲ-ը չկարողացավ կառուցվածքավորված կանոն ստեղծել։");
         }
       } else {
-        alert("Սերվերի սխալ կանոնը մեկնաբանելիս։");
+        notifyError("Սերվերի սխալ կանոնը մեկնաբանելիս։");
       }
     } catch {
-      alert("Կապի սխալ ԱԲ կանոնների թարգմանչի հետ։");
+      notifyError("Կապի սխալ ԱԲ կանոնների թարգմանչի հետ։");
     } finally {
       setIsInterpreting(false);
     }
@@ -194,17 +196,16 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
         setInterpretedRule(null);
         setRuleText('');
         fetchRules();
-        alert("Կանոնը հաջողությամբ պահպանվեց Firestore-ում և ակտիվացվեց։");
+        notifySuccess("Կանոնը հաջողությամբ պահպանվեց Firestore-ում և ակտիվացվեց։");
       } else {
-        alert("Չհաջողվեց պահպանել կանոնը։");
+        notifyError("Չհաջողվեց պահպանել կանոնը։");
       }
     } catch {
-      alert("Կապի սխալ կանոնը պահպանելիս։");
+      notifyError("Կապի սխալ կանոնը պահպանելիս։");
     }
   };
 
   const handleDeleteRule = async (id: string) => {
-    if (!window.confirm("Վստա՞հ եք, որ ցանկանում եք ջնջել այս ակտիվ կանոնը։")) return;
     try {
       const res = await fetch(`/api/admin/dynamic-rules/${id}`, {
         method: "DELETE",
@@ -214,11 +215,12 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
       });
       if (res.ok) {
         fetchRules();
+        notifySuccess("Կանոնը հաջողությամբ հեռացվեց։");
       } else {
-        alert("Չհաջողվեց ջնջել կանոնը։");
+        notifyError("Չհաջողվեց ջնջել կանոնը։");
       }
     } catch {
-      alert("Կապի սխալ կանոնը ջնջելիս։");
+      notifyError("Կապի սխալ կանոնը ջնջելիս։");
     }
   };
 
@@ -285,11 +287,12 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
       if (res.ok) {
         const data = await res.json();
         setShadowResults(data.results || []);
+        notifySuccess("Գնահատման թեստը հաջողությամբ ավարտվեց։", "Shadow Test");
       } else {
-        alert("Չհաջողվեց գործարկել ավտոմատ գնահատման թեստը։");
+        notifyError("Չհաջողվեց գործարկել ավտոմատ գնահատման թեստը։");
       }
     } catch {
-      alert("Կապի սխալ թեստավորման ժամանակ։");
+      notifyError("Կապի սխալ թեստավորման ժամանակ։");
     } finally {
       setIsTestingBot(false);
     }
@@ -310,7 +313,7 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
       : q.status === 'locked'
       ? 'Պատրաստ է ուղարկման/արխիվացման'
       : (q as any).documentsMissing?.length
-      ? 'Լրացնել բացակայող փաստาթղթերը'
+      ? 'Լրացնել բացակայող փաստաթղթերը'
       : 'Ստուգել և ուղարկել գնառաջարկը';
 
   const handleFileUpload = async (file: File) => {
@@ -318,9 +321,10 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
     try {
       const text = await file.text();
       setContractText(text);
+      notifySuccess("Ֆայլը հաջողությամբ բեռնվեց։", "Ֆայլ");
     } catch (err) {
       console.error(err);
-      alert("Ֆայլը կարդալիս սխալ է տեղի ունեցել:");
+      notifyError("Ֆայլը կարդալիս սխալ է տեղի ունեցել:");
     }
   };
 

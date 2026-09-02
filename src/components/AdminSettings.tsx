@@ -231,7 +231,102 @@ function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any
 function UsersPanel({users,onUpdate}:{users:any[];onUpdate:(id:string,p:any)=>void}){return <div className="sil-card p-6"><h2 className="text-xl font-black mb-4">Օգտատերերի կառավարում</h2><div className="overflow-auto"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th className="p-3">User</th><th className="p-3">Role</th><th className="p-3">Status</th><th className="p-3">Գործողություն</th></tr></thead><tbody>{users.map(u=><tr key={u.id} className="border-b border-slate-100"><td className="p-3"><b>{u.name}</b><div className="text-xs text-slate-500">{u.username} · {u.email}</div></td><td className="p-3"><select value={u.role} onChange={e=>onUpdate(u.id,{role:e.target.value})} className="rounded-lg border p-2">{roles.map(r=><option key={r}>{r}</option>)}</select></td><td className="p-3">{u.status}</td><td className="p-3 flex gap-2"><button onClick={()=>onUpdate(u.id,{status:u.status==='active'?'disabled':'active'})} className="px-3 py-2 rounded-lg border font-bold">{u.status==='active'?'Անջատել':'Ակտիվացնել'}</button><button onClick={()=>{const p=prompt('Նոր password');if(p)onUpdate(u.id,{password:p})}} className="px-3 py-2 rounded-lg border font-bold"><KeyRound size={15}/></button></td></tr>)}</tbody></table>{!users.length&&<p className="text-sm text-slate-500">Օգտատերեր չկան։ Admin-ի առաջին account-ը ստեղծվում է SIL_ADMIN_USERNAME/SIL_ADMIN_PASSWORD-ով։</p>}</div></div>}
 function Approvals({users,onApprove}:{users:any[];onApprove:(id:string,ok:boolean)=>void}){const p=users.filter(u=>u.status==='pending');return <div className="sil-card p-6"><h2 className="text-xl font-black mb-4">Գրանցումների հաստատում</h2>{p.map(u=><div key={u.id} className="flex flex-wrap justify-between items-center gap-3 p-4 border rounded-2xl mb-2"><div><b>{u.name}</b><div className="text-xs text-slate-500">{u.username} · {u.email}</div></div><div className="flex gap-2"><button onClick={()=>onApprove(u.id,true)} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold">Հաստատել</button><button onClick={()=>onApprove(u.id,false)} className="px-4 py-2 rounded-xl bg-red-50 text-red-700 font-bold">Մերժել</button></div></div>)}{!p.length&&<div className="p-5 rounded-2xl bg-emerald-50 text-emerald-800 font-bold">Սպասող գրանցումներ չկան։</div>}</div>}
 function Logs({logs,q,setQ}:{logs:any[];q:string;setQ:(x:string)=>void}){return <div className="sil-card p-6"><div className="flex flex-wrap justify-between gap-3 mb-4"><h2 className="text-xl font-black">Audit Logs — ով ինչ է կատարել</h2><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Որոնել user / action / quote..." className="sil-input max-w-sm"/></div><div className="max-h-[600px] overflow-auto space-y-2">{logs.map((e:any)=><div key={e.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs"><b>{new Date(e.at).toLocaleString('hy-AM')}</b> · <span className="font-black">{e.action}</span> · {e.entity||''} {e.entityId&&`· ${e.entityId}`} {e.userId&&<span className="text-slate-500">· user:{e.userId}</span>}<pre className="whitespace-pre-wrap mt-1 text-[10px] text-slate-500">{e.details?JSON.stringify(e.details):''}</pre></div>)}{!logs.length&&<p className="text-sm text-slate-500">Գրանցումներ չկան։</p>}</div></div>}
-function Security({users,logs}:{users:any[];logs:any[]}){const failed=logs.filter(x=>x.action==='auth.login.failed').length;return <div className="grid md:grid-cols-3 gap-4"><div className="sil-card p-5"><Shield className="text-emerald-600"/><b className="block mt-3">Authentication</b><span className="text-xs text-slate-500">Session + role checks ակտիվ են</span></div><div className="sil-card p-5"><Lock className="text-[#075bd5]"/><b className="block mt-3">Failed logins</b><span className="text-xs text-slate-500">{failed} event</span></div><div className="sil-card p-5"><RefreshCw className="text-amber-600"/><b className="block mt-3">Accounts</b><span className="text-xs text-slate-500">{users.filter(u=>u.status==='disabled').length} disabled / {users.length} total</span></div></div>}
+function Security({users,logs}:{users:any[];logs:any[]}){
+  const [secData, setSecData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchSec = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('sil-auth-token') || localStorage.getItem('sil-session-token');
+        const res = await fetch('/api/admin/security', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSecData(data);
+        }
+      } catch (e) {
+        console.error("Failed to load security metrics", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSec();
+  }, []);
+
+  const failed = logs.filter(x=>x.action==='auth.login.failed').length;
+  const blocked = logs.filter(x=>x.action==='auth.login.blocked_bruteforce').length;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid md:grid-cols-4 gap-4">
+        <div className="sil-card p-5 bg-gradient-to-br from-emerald-500/10 to-transparent border-emerald-200/50">
+          <div className="flex items-center justify-between">
+            <Shield className="text-emerald-600" size={24} />
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">Ակտիվ</span>
+          </div>
+          <b className="block mt-3 text-slate-800 text-base">Authentication & RBAC</b>
+          <span className="text-xs text-slate-500 block mt-1">256-bit scrypt + TimingSafeEqual</span>
+        </div>
+
+        <div className="sil-card p-5 bg-gradient-to-br from-blue-500/10 to-transparent border-blue-200/50">
+          <div className="flex items-center justify-between">
+            <Lock className="text-[#075bd5]" size={24} />
+            <span className="px-2 py-0.5 rounded-full bg-blue-100 text-[#075bd5] font-bold text-[10px]">Brute-Force Guard</span>
+          </div>
+          <b className="block mt-3 text-slate-800 text-base">Ձախողված մուտքեր</b>
+          <span className="text-xs text-slate-500 block mt-1">{failed} դեպք · {blocked} արգելափակված IP</span>
+        </div>
+
+        <div className="sil-card p-5 bg-gradient-to-br from-amber-500/10 to-transparent border-amber-200/50">
+          <div className="flex items-center justify-between">
+            <RefreshCw className="text-amber-600" size={24} />
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px]">Սեսիաներ</span>
+          </div>
+          <b className="block mt-3 text-slate-800 text-base">Ակտիվ սեսիաներ</b>
+          <span className="text-xs text-slate-500 block mt-1">{secData?.activeSessions || 1} ընթացիկ սեսիա (45ր Inactivity Auto-Logout)</span>
+        </div>
+
+        <div className="sil-card p-5 bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-200/50">
+          <div className="flex items-center justify-between">
+            <Shield className="text-indigo-600" size={24} />
+            <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold text-[10px]">Rate Limiting</span>
+          </div>
+          <b className="block mt-3 text-slate-800 text-base">API & AI Gateway</b>
+          <span className="text-xs text-slate-500 block mt-1">300 req/min API · 60 req/min AI Shield</span>
+        </div>
+      </div>
+
+      <div className="sil-card p-6">
+        <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+          <Shield className="text-[#075bd5]" size={20} />
+          Կիբեռանվտանգության Կոնֆիգուրացիա և Պաշտպանական Շերտեր
+        </h3>
+        <div className="grid md:grid-cols-2 gap-4 text-xs">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+            <div className="font-bold text-slate-700 text-sm">Գաղտնագրում և Տվյալների Անվտանգություն</div>
+            <p className="text-slate-600 leading-relaxed">
+              • <strong>Գաղտնաբառերի հեշավորում՝</strong> Scrypt + 256-bit cryptographically secure Salt<br/>
+              • <strong>Timing Attack Protection՝</strong> crypto.timingSafeEqual (Constant-time matching)<br/>
+              • <strong>Client-Side Zero-Leak՝</strong> Gemini API Key և սերվերային բոլոր գաղտնիքները մնում են սերվերում:
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+            <div className="font-bold text-slate-700 text-sm">Ցանցային և OWASP Պաշտպանություն</div>
+            <p className="text-slate-600 leading-relaxed">
+              • <strong>HTTP Security Headers՝</strong> Strict HSTS, X-Content-Type-Options: nosniff, X-Frame-Options: SAMEORIGIN<br/>
+              • <strong>Brute-Force Lockout՝</strong> 5 անհաջող փորձից հետո 15 րոպե արգելափակում<br/>
+              • <strong>Payload Restrictions՝</strong> Body Size Limit 15MB և Request Sanitization:
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 function Analytics({users,logs}:{users:any[];logs:any[]}){const byAction=logs.reduce((a:any,x:any)=>(a[x.action]=(a[x.action]||0)+1,a),{});return <div className="sil-card p-6"><h2 className="text-xl font-black mb-5">Գործունեության Analytics</h2><div className="grid md:grid-cols-3 gap-4"><Metric title="Ընդհանուր events" value={logs.length}/><Metric title="Ակտիվ users" value={users.filter(u=>u.status==='active').length}/><Metric title="Տարբեր գործողություններ" value={Object.keys(byAction).length}/></div><div className="mt-6 space-y-2">{Object.entries(byAction).sort((a:any,b:any)=>b[1]-a[1]).slice(0,15).map(([k,v]:any)=><div key={k} className="flex justify-between p-3 rounded-xl bg-slate-50"><span>{k}</span><b>{v}</b></div>)}</div></div>}
 function Metric({title,value}:{title:string;value:any}){return <div className="rounded-2xl bg-slate-50 p-5"><div className="text-2xl font-black">{value}</div><div className="text-xs text-slate-500 mt-1">{title}</div></div>}
 function Templates(){return <div className="sil-card p-6"><h2 className="text-xl font-black">Quotation Templates</h2><p className="text-sm text-slate-500 mt-2">Յուրաքանչյուր պրոդուկտի template-ը պահվում է առանձին և quotation engine-ը ընտրում է համապատասխան ձևը։</p><div className="grid md:grid-cols-3 gap-3 mt-5">{productKeys.map(k=><div key={k} className="rounded-2xl border p-4"><FileText className="text-[#075bd5]"/><b className="block mt-3">{FIXED_QUOTATION_RULES[k].nameArm}</b><span className="text-xs text-emerald-700">Product-specific template ✓</span></div>)}</div></div>}
