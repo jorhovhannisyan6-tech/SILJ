@@ -11,6 +11,35 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/png" href="/src/assets/images/sil-logo-stacked.png" />
+    <script>
+      // Gracefully catch and ignore harmless Vite/WebSocket HMR errors in development/preview environments
+      window.addEventListener('error', function(event) {
+        if (event.message && (
+          event.message.indexOf('websocket') !== -1 || 
+          event.message.indexOf('WebSocket') !== -1 || 
+          event.message.indexOf('[vite]') !== -1
+        )) {
+          console.warn('Prevented benign Vite/WebSocket error from bubbling:', event.message);
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+
+      window.addEventListener('unhandledrejection', function(event) {
+        const reason = event.reason;
+        const msg = typeof reason === 'string' ? reason : (reason && reason.message) || '';
+        if (msg && (
+          msg.indexOf('websocket') !== -1 || 
+          msg.indexOf('WebSocket') !== -1 || 
+          msg.indexOf('[vite]') !== -1 ||
+          msg.indexOf('WebSocket closed without opened') !== -1
+        )) {
+          console.warn('Prevented benign Vite/WebSocket promise rejection from bubbling:', msg);
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>

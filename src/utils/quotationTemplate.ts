@@ -218,7 +218,7 @@ function breakdownRows(proposal: QuotationProposal, lang: QuotationLanguage = "h
 }
 
 const financialTable = (proposal: QuotationProposal, title: string, lang: QuotationLanguage = "hy") => {
-  const labels = getProductLabels(proposal.type, lang);
+  const labels = lang && lang !== "hy" ? getProductLabels(proposal.type, lang) : getProductLabels(proposal.type);
   const totalText = lang === "en" ? "Total" : lang === "ru" ? "Итого" : "Ընդամենը";
   return `<h2 class="center-title financial-title">${esc(title)}</h2>
   <table class="offer-table"><thead><tr>
@@ -313,7 +313,7 @@ export function generateQuotationTemplateHtml(proposal: QuotationProposal, lang:
     clientSignature: isEn ? "CUSTOMER / POLICYHOLDER:" : isRu ? "КЛИЕНТ (СТРАХОВАТЕЛЬ):" : "ՀԱՃԱԽՈՐԴԻ (ԱՊԱՀՈՎԱԴՐԻ) ԿՈՂՄԻՑ՝",
   };
 
-  const labels = getProductLabels(proposal.type, lang);
+  const labels = lang && lang !== "hy" ? getProductLabels(proposal.type, lang) : getProductLabels(proposal.type);
   const rawTitle = proposal.productNameArm || labels.title;
   const product = isEn
     ? proposal.type.toUpperCase() + " Insurance Proposal"

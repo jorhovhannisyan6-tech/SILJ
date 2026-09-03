@@ -7,6 +7,16 @@ import crypto from "crypto";
 import { initializeApp } from "firebase/app";
 import { getFirestore, setLogLevel, collection, addDoc, getDocs, doc, setDoc, getDoc, deleteDoc, updateDoc, query, where } from "firebase/firestore";
 import mammoth from "mammoth";
+import { 
+  DEFAULT_PRODUCT_MAPPINGS, 
+  DEFAULT_CONTRACT_MAPPINGS,
+  SUPPORTED_TEMPLATE_PRODUCTS, 
+  PRODUCT_SPECIFIC_FIELDS, 
+  CORE_SYSTEM_FIELDS, 
+  CONTRACT_CORE_SYSTEM_FIELDS,
+  getProductReferenceText,
+  getProductContractReferenceText
+} from "./src/data/productTemplateDefaults";
 
 dotenv.config();
 
@@ -15,7 +25,7 @@ try {
 } catch {}
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
 const KB = path.join(ROOT, "knowledge-base");
@@ -308,6 +318,9 @@ const PRODUCT_LABELS: Record<string, string> = {
   health: "Առողջության ապահովագրություն (ԲԾԱ)",
   travel: "Ճամփորդական ապահովագրություն",
   mortgage: "Հիփոթեքային ապահովագրություն",
+  accident: "Դժբախտ պատահարների ապահովագրություն",
+  "law-insurance": "ՀՀ Օրենքը Ապահովագրության և Ապահովագրական Գործունեության Մասին",
+  legislation: "Այլ ՀՀ Օրենսդրություն և Կարգավորումներ",
 };
 
 const PRODUCT_KEYWORDS: Record<string, string[]> = {
@@ -324,6 +337,9 @@ const PRODUCT_KEYWORDS: Record<string, string[]> = {
   health: ["առողջություն", "բժշկական", "բծա", "հիվանդանոց", "դեղորայք", "ստոմատոլոգիա"],
   travel: ["ճամփորդական", "արտասահման", "շենգեն", "ուղևորություն", "ուղեբեռ"],
   mortgage: ["հիփոթեք", "հիպոթեք", "բնակարան", "վարկառու", "բանկ"],
+  accident: ["դժբախտ", "պատահար", "դժբախտ պատահար", "մահ", "վնասվածք", "կոտրվածք"],
+  "law-insurance": ["օրենք", "օրենսդրություն", "օրենքը", "հոդված", "իրավական", "ապահովագրության մասին", "կարգավորում", "լիցենզիա", "կենտրոնական բանկ", "կբ"],
+  legislation: ["քաղաքացիական օրենսգիրք", "օրենսգիրք", "օրենսդրական", "որոշում", "նորմատիվ", "իրավական ակտ", "կարգ"],
 };
 
 function ensureKnowledgeBaseTextFiles() {
@@ -410,30 +426,379 @@ function loadKnowledgeBase() {
 
 let KNOWLEDGE_BASE = loadKnowledgeBase();
 
+// -------------------- Vector Search & Semantic Chunking Engine --------------------
+interface KnowledgeChunk {
+  id: string;
+  productId: string;
+  sourceFile: string;
+  text: string;
+  vector?: number[];
+}
+
+let KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [];
+let embeddingCache: Record<string, number[]> = {};
+let isGeneratingEmbeddings = false;
+
+// Load embedding cache from local storage disk to save keys & prevent 429 rate limit issues
+const cachePath = path.join(KB, "embeddings-cache.json");
+if (fs.existsSync(cachePath)) {
+  try {
+    embeddingCache = JSON.parse(fs.readFileSync(cachePath, "utf8"));
+    console.log(`Loaded ${Object.keys(embeddingCache).length} cached vector embeddings from disk.`);
+  } catch (e) {
+    console.error("Failed to parse vector embedding cache:", e);
+  }
+}
+
+function chunkText(text: string, chunkSize = 1500, overlap = 150): string[] {
+  const chunks: string[] = [];
+  if (!text) return chunks;
+  
+  const paragraphs = text.split("\n");
+  let currentChunk = "";
+  
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+    
+    if ((currentChunk + "\n" + trimmed).length <= chunkSize) {
+      currentChunk = currentChunk ? currentChunk + "\n" + trimmed : trimmed;
+    } else {
+      if (currentChunk) {
+        chunks.push(currentChunk);
+      }
+      
+      if (trimmed.length > chunkSize) {
+        let remaining = trimmed;
+        while (remaining.length > 0) {
+          const sliceSize = Math.min(remaining.length, chunkSize);
+          chunks.push(remaining.slice(0, sliceSize));
+          remaining = remaining.slice(sliceSize - overlap > 0 ? sliceSize - overlap : sliceSize);
+        }
+        currentChunk = "";
+      } else {
+        const overlapStart = Math.max(0, currentChunk.length - overlap);
+        currentChunk = currentChunk.slice(overlapStart) + "\n" + trimmed;
+        if (currentChunk.length > chunkSize) {
+          currentChunk = trimmed;
+        }
+      }
+    }
+  }
+  
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+  
+  return chunks;
+}
+
+function getChunkHash(text: string): string {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+function buildKnowledgeChunks() {
+  const chunks: KnowledgeChunk[] = [];
+  for (const doc of KNOWLEDGE_BASE) {
+    if (!doc.text) continue;
+    const docChunks = chunkText(doc.text, 1500, 150);
+    docChunks.forEach((textChunk) => {
+      const hash = getChunkHash(textChunk);
+      chunks.push({
+        id: hash,
+        productId: doc.productId,
+        sourceFile: doc.sourceFile,
+        text: textChunk,
+        vector: embeddingCache[hash] || undefined
+      });
+    });
+  }
+  KNOWLEDGE_CHUNKS = chunks;
+  console.log(`Knowledge Base split into ${KNOWLEDGE_CHUNKS.length} semantic chunks.`);
+}
+
+async function triggerEmbeddingGeneration() {
+  if (isGeneratingEmbeddings) return;
+  isGeneratingEmbeddings = true;
+  
+  console.log("Starting background vector embedding generation...");
+  let newlyGeneratedCount = 0;
+  
+  const chunksToProcess = KNOWLEDGE_CHUNKS.filter(c => !c.vector);
+  if (chunksToProcess.length === 0) {
+    console.log("All knowledge chunks already have vectors. Embedded database is fully up to date.");
+    isGeneratingEmbeddings = false;
+    return;
+  }
+  
+  console.log(`Found ${chunksToProcess.length} chunks needing vector generation.`);
+  
+  let consecutiveErrors = 0;
+  
+  for (const chunk of chunksToProcess) {
+    // If we hit too many consecutive errors, pause the run to let quota reset
+    if (consecutiveErrors >= 5) {
+      console.warn("Too many consecutive API errors. Pausing background vectorization run to reset quota.");
+      break;
+    }
+
+    let success = false;
+    let retries = 3;
+    let backoffDelay = 10000; // start with 10s backoff on 429
+
+    while (!success && retries > 0) {
+      try {
+        const client = getGeminiClient();
+        if (!client) {
+          console.warn("Gemini client not initialized yet. Postponing embedding generation.");
+          break;
+        }
+        
+        const response = await client.models.embedContent({
+          model: "gemini-embedding-2-preview",
+          contents: chunk.text,
+        });
+        
+        const vector = response.embeddings?.[0]?.values;
+        if (vector && Array.isArray(vector)) {
+          chunk.vector = vector;
+          embeddingCache[chunk.id] = vector;
+          newlyGeneratedCount++;
+          success = true;
+          consecutiveErrors = 0;
+          
+          // Save dynamically on every 5 new generation steps so progress is never lost
+          if (newlyGeneratedCount % 5 === 0) {
+            fs.writeFileSync(cachePath, JSON.stringify(embeddingCache, null, 2), "utf8");
+          }
+          
+          // Respect free-tier API limits with 3.5s sleep spacing to stay well within limits
+          await new Promise(resolve => setTimeout(resolve, 3500));
+        } else {
+          throw new Error("Invalid response structure from embedContent");
+        }
+      } catch (err: any) {
+        retries--;
+        const isRateLimit = err?.message?.includes("exceeded your current quota") || 
+                            err?.message?.includes("429") || 
+                            err?.status === "RESOURCE_EXHAUSTED";
+        
+        console.warn(`Failed to generate embedding for chunk ${chunk.id}. Retries left: ${retries}. Error:`, err?.message || err);
+        
+        if (isRateLimit) {
+          console.log(`Rate limit detected. Backing off for ${backoffDelay / 1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          backoffDelay = Math.min(backoffDelay * 2, 45000); // exponential increase up to 45s
+        } else {
+          // General errors (e.g. 503 Service Unavailable)
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      }
+    }
+
+    if (!success) {
+      consecutiveErrors++;
+    }
+  }
+  
+  if (newlyGeneratedCount > 0) {
+    try {
+      fs.writeFileSync(cachePath, JSON.stringify(embeddingCache, null, 2), "utf8");
+      console.log(`Vector embedding generation complete! Generated and saved ${newlyGeneratedCount} new embeddings.`);
+    } catch (e) {
+      console.error("Failed to save final embeddings cache to disk:", e);
+    }
+  } else {
+    console.log("Finished background embedding pass. No new embeddings saved.");
+  }
+  
+  isGeneratingEmbeddings = false;
+}
+
+// Perform initial build
+buildKnowledgeChunks();
+
+// Warm background vectorizer shortly after startup
+setTimeout(() => {
+  triggerEmbeddingGeneration().catch(e => console.error("Error in background embedding generation:", e));
+}, 5000);
+
 function reloadKnowledgeBase() {
   KNOWLEDGE_BASE = loadKnowledgeBase();
+  buildKnowledgeChunks();
+  triggerEmbeddingGeneration().catch(e => console.error("Error in triggerEmbeddingGeneration:", e));
   return KNOWLEDGE_BASE.length;
+}
+
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+async function getQueryEmbedding(queryText: string): Promise<number[] | null> {
+  try {
+    const client = getGeminiClient();
+    if (!client) return null;
+    const response = await client.models.embedContent({
+      model: "gemini-embedding-2-preview",
+      contents: queryText,
+    });
+    return response.embeddings?.[0]?.values || null;
+  } catch (err) {
+    console.warn("Failed to generate embedding for query:", err);
+    return null;
+  }
 }
 
 function selectKnowledge(query: string, context = "") {
   const q = `${query || ""} ${context || ""}`.toLowerCase();
+  
+  // 1. Keyword-based matching
   const matched = new Set<string>();
   for (const [pid, words] of Object.entries(PRODUCT_KEYWORDS)) {
     if (words.some((w) => q.includes(w))) matched.add(pid);
   }
-  if (!matched.size) return [];
-  return KNOWLEDGE_BASE.filter((x: any) => matched.has(x.productId));
+  
+  // 2. Full-text search matching (word overlap with TF-IDF style frequency boost)
+  const queryWords = q.split(/[\s,.:;?!\(\)\[\]"\-\n\r]+/).filter(w => w.length > 2);
+  
+  const scoredDocs = KNOWLEDGE_BASE.map((doc: any) => {
+    let score = 0;
+    
+    // Major boost if matches keyword rules
+    if (matched.has(doc.productId)) {
+      score += 500;
+    }
+    
+    const textLower = String(doc.text || "").toLowerCase();
+    
+    // Count specific word matches and frequency
+    for (const word of queryWords) {
+      if (textLower.includes(word)) {
+        score += 10;
+        try {
+          const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+          const regex = new RegExp(escapedWord, 'g');
+          const count = (textLower.match(regex) || []).length;
+          score += Math.min(count, 15) * 2; // boost for high frequency
+        } catch (e) {
+          // Fallback if regex creation fails
+          score += 5;
+        }
+      }
+    }
+    
+    return { doc, score };
+  });
+  
+  // Keep only docs with positive match score
+  let filtered = scoredDocs.filter(x => x.score > 0);
+  
+  // Fallback: If no document matches the keywords or words of the query,
+  // return ALL documents in the knowledge base so the AI advisor always has access to the full knowledge repository
+  if (filtered.length === 0) {
+    return [...KNOWLEDGE_BASE];
+  }
+  
+  // Sort by match score descending
+  filtered.sort((a, b) => b.score - a.score);
+  
+  return filtered.map(x => x.doc);
 }
 
-function buildKnowledgePrompt(query: string, context = "") {
-  const docs = selectKnowledge(query, context).slice(0, 5);
-  if (!docs.length) return "";
-  const MAX_CHARS_PER_DOC = 18000;
-  return docs.map((d: any) => {
-    const label = PRODUCT_LABELS[d.productId] || d.productId;
-    const text = String(d.text || "").slice(0, MAX_CHARS_PER_DOC);
-    return `\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${d.sourceFile} =====\n${text}`;
-  }).join("\n");
+async function buildKnowledgePrompt(query: string, context = "") {
+  const queryText = `${query || ""} ${context || ""}`.trim();
+  if (!queryText) return "";
+
+  console.log(`RAG Retrieval: processing query "${queryText.slice(0, 60)}..."`);
+  
+  const MAX_TOTAL_KNOWLEDGE_CHARS = 80000;
+  let totalChars = 0;
+  const promptParts: string[] = [];
+
+  // 1. Attempt Semantic Vector Retrieval
+  const queryVec = await getQueryEmbedding(queryText);
+  if (queryVec) {
+    console.log("Vector Semantic Retrieval active! Computing cosine similarities...");
+    
+    const scoredChunks = KNOWLEDGE_CHUNKS.map(chunk => {
+      let sim = 0;
+      if (chunk.vector) {
+        sim = cosineSimilarity(queryVec, chunk.vector);
+      } else {
+        // Fallback for chunks with missing vectors
+        const textLower = String(chunk.text || "").toLowerCase();
+        const queryWords = queryText.toLowerCase().split(/[\s,.:;?!\(\)\[\]"\-\n\r]+/).filter(w => w.length > 2);
+        let matchCount = 0;
+        for (const word of queryWords) {
+          if (textLower.includes(word)) matchCount++;
+        }
+        sim = matchCount * 0.05;
+      }
+      return { chunk, sim };
+    });
+
+    // Sort by cosine similarity descending
+    scoredChunks.sort((a, b) => b.sim - a.sim);
+
+    // Take top matching chunks
+    const topScored = scoredChunks.slice(0, 15);
+    console.log(`Top match chunk similarities: ${topScored.slice(0, 3).map(t => `${t.chunk.productId} (${t.sim.toFixed(3)})`).join(", ")}`);
+
+    for (const item of topScored) {
+      if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
+      const c = item.chunk;
+      const label = PRODUCT_LABELS[c.productId] || c.productId;
+      const header = `\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${c.sourceFile} (Սեմանտիկ հատված) =====\n`;
+      const text = c.text;
+      
+      if (totalChars + header.length + text.length > MAX_TOTAL_KNOWLEDGE_CHARS) {
+        const allowedLen = MAX_TOTAL_KNOWLEDGE_CHARS - totalChars - header.length;
+        if (allowedLen > 200) {
+          promptParts.push(header + text.slice(0, allowedLen));
+          totalChars = MAX_TOTAL_KNOWLEDGE_CHARS;
+        }
+        break;
+      }
+
+      promptParts.push(header + text);
+      totalChars += header.length + text.length;
+    }
+  }
+
+  // 2. High-fidelity Hybrid Fallback: Use standard word match / overlap if vector was unavailable or empty
+  if (promptParts.length === 0) {
+    console.log("Vector embedding unavailable or yielded zero results. Falling back to high-fidelity TF-IDF document retrieval...");
+    const docs = selectKnowledge(query, context).slice(0, 8);
+    const MAX_CHARS_PER_DOC = 35000;
+    
+    for (const d of docs) {
+      if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
+      
+      const label = PRODUCT_LABELS[d.productId] || d.productId;
+      const remainingBudget = MAX_TOTAL_KNOWLEDGE_CHARS - totalChars;
+      const sliceLen = Math.min(MAX_CHARS_PER_DOC, remainingBudget);
+      
+      if (sliceLen < 500 && promptParts.length > 0) {
+        break;
+      }
+      
+      const text = String(d.text || "").slice(0, sliceLen);
+      promptParts.push(`\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${d.sourceFile} =====\n${text}`);
+      totalChars += text.length;
+    }
+  }
+
+  return promptParts.join("\n");
 }
 
 // -------------------- Gemini --------------------
@@ -638,7 +1003,7 @@ app.get("/api/health", (_req, res) => {
 const handleChatRequest = async (req: any, res: any) => {
   const { messages = [], context = "", products = [], underwritingRules = [], engine = "auto" } = req.body || {};
   const lastUserMsg = messages.filter((m: any) => m.role === "user").pop()?.content || "";
-  const knowledge = buildKnowledgePrompt(lastUserMsg, context);
+  const knowledge = await buildKnowledgePrompt(lastUserMsg, context);
 
   let activeInstruction = SYSTEM_INSTRUCTION;
   if (db) {
@@ -878,7 +1243,14 @@ app.get("/api/admin/kb", auth, (req, res) => {
     return res.status(403).json({ error: "Access denied" });
   }
   const kbData = loadKnowledgeBase();
-  res.json({ status: "ok", products: kbData });
+  res.json({
+    status: "ok",
+    products: kbData,
+    vectorSearchActive: true,
+    totalChunks: KNOWLEDGE_CHUNKS.length,
+    vectorizedChunks: KNOWLEDGE_CHUNKS.filter(c => !!c.vector).length,
+    isGenerating: isGeneratingEmbeddings
+  });
 });
 
 app.post("/api/admin/kb", auth, async (req, res) => {
@@ -1048,7 +1420,7 @@ app.post("/api/gemini/generate-proposal-analysis", auth, async (req, res) => {
   const { quotationData = {}, type = "" } = req.body || {};
   const productId = type || quotationData.type || "";
   const docs = KNOWLEDGE_BASE.filter((d: any) => d.productId === productId);
-  const knowledge = docs.map((d: any) => `===== ${PRODUCT_LABELS[d.productId] || d.productId} | ${d.sourceFile} =====\n${String(d.text || "").slice(0, 18000)}`).join("\n\n");
+  const knowledge = docs.map((d: any) => `===== ${PRODUCT_LABELS[d.productId] || d.productId} | ${d.sourceFile} =====\n${String(d.text || "").slice(0, 60000)}`).join("\n\n");
 
   if (quotationData.requestType === "contract_legal_clauses") {
     const topic = quotationData.topic || "standard_terms";
@@ -1164,7 +1536,7 @@ app.post("/api/ai/check-compliance", auth, async (req, res) => {
   }
 
   const docs = KNOWLEDGE_BASE.filter((d: any) => d.productId === productId);
-  const knowledge = docs.map((d: any) => `===== ${PRODUCT_LABELS[d.productId] || d.productId} | ԱՂԲՅՈՒՐ՝ ${d.sourceFile} =====\n${String(d.text || "").slice(0, 15000)}`).join("\n\n");
+  const knowledge = docs.map((d: any) => `===== ${PRODUCT_LABELS[d.productId] || d.productId} | ԱՂԲՅՈՒՐ՝ ${d.sourceFile} =====\n${String(d.text || "").slice(0, 60000)}`).join("\n\n");
 
   const prompt = `Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ռիսկերի underwriting-ի և համապատասխանության (Compliance) ավագ վերլուծաբանն ես։
 Քո խնդիրն է ստուգել ներկայացված գնառաջարկը կամ կազմված պայմանագրի տեքստը և պարզել, թե արդյոք այն լիովին համապատասխանում է մեր պաշտոնական Ապահովագրական Պայմաններին (Knowledge Base)։
@@ -1678,7 +2050,7 @@ app.post("/api/ai/test-bot-behavior", auth, requireRole("admin"), async (req: an
 
   for (const tc of testCases) {
     try {
-      const knowledge = buildKnowledgePrompt(tc, "");
+      const knowledge = await buildKnowledgePrompt(tc, "");
       const fullPromptActive = `${SYSTEM_INSTRUCTION}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
       const fullPromptDraft = `${systemInstruction}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
 
@@ -1738,17 +2110,6 @@ Return ONLY a JSON object:
 });
 
 // 5. Template Mappings Configuration Endpoints (Multi-Product & Quotation/Contract Supported)
-import { 
-  DEFAULT_PRODUCT_MAPPINGS, 
-  DEFAULT_CONTRACT_MAPPINGS,
-  SUPPORTED_TEMPLATE_PRODUCTS, 
-  PRODUCT_SPECIFIC_FIELDS, 
-  CORE_SYSTEM_FIELDS, 
-  CONTRACT_CORE_SYSTEM_FIELDS,
-  getProductReferenceText,
-  getProductContractReferenceText
-} from "./src/data/productTemplateDefaults";
-
 app.get("/api/admin/template-list", auth, async (req: any, res: any) => {
   const templateType = (req.query.type as string) === "contract" ? "contract" : "quotation";
   const templatesDir = path.join(process.cwd(), "templates");
@@ -2117,22 +2478,6 @@ ${excerpt}
   }
 });
 
-// -------------------- Static frontend: production runtime --------------------
-// The frontend MUST be built during the image/build step. The runtime server
-// never starts Vite and never opens a HMR/WebSocket connection.
-function start() {
-  const indexPath = path.join(DIST, "index.html");
-  if (!fs.existsSync(indexPath)) {
-    console.error(`Frontend build not found: ${indexPath}`);
-    console.error("Run `npm run build` before starting the production server.");
-    process.exit(1);
-  }
-
-  app.use(express.static(DIST, {
-    index: "index.html",
-    maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
-  }));
-
 app.post("/api/email/send", auth, async (req: any, res: any) => {
   const { to, subject, body, attachmentName } = req.body || {};
   
@@ -2150,13 +2495,52 @@ app.post("/api/email/send", auth, async (req: any, res: any) => {
   res.json({ status: "ok", message: "Email sent successfully" });
 });
 
-  // SPA fallback: never route /api/* to index.html.
-  app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => {
-    res.sendFile(indexPath);
-  });
+// -------------------- Static frontend & dev middleware --------------------
+async function start() {
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true, hmr: false },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+      console.log("Vite development middleware mounted successfully.");
+    } catch (err) {
+      console.error("Failed to start Vite middleware, falling back to static files:", err);
+      const indexPath = path.join(DIST, "index.html");
+      if (fs.existsSync(indexPath)) {
+        app.use(express.static(DIST, { index: "index.html" }));
+        app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => res.sendFile(indexPath));
+      }
+    }
+  } else {
+    const indexPath = path.join(DIST, "index.html");
+    if (fs.existsSync(indexPath)) {
+      app.use(express.static(DIST, {
+        index: "index.html",
+        maxAge: "1h",
+      }));
+      app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => {
+        res.sendFile(indexPath);
+      });
+    } else {
+      console.warn("dist/index.html not found in production mode, falling back to Vite middleware");
+      try {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          server: { middlewareMode: true, hmr: false },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } catch (e) {
+        console.error("Failed to start fallback Vite middleware in production:", e);
+      }
+    }
+  }
 
   const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`SIL Insurance Portal listening on 0.0.0.0:${PORT}`);
+    console.log(`SIL Insurance Portal listening on http://0.0.0.0:${PORT}`);
   });
 
   const shutdown = (signal: string) => {

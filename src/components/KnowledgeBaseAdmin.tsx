@@ -24,6 +24,8 @@ const PRODUCT_NAMES: Record<string, string> = {
   "machinery-breakdown": "Մեքենաների խափանում",
   "warehouse-liability": "Պահեստների պատասխանատվություն",
   accident: "Դժբախտ պատահարների ապահովագրություն",
+  "law-insurance": "ՀՀ Օրենքը Ապահովագրության և Ապահովագրական Գործունեության Մասին",
+  legislation: "Այլ ՀՀ Օրենսդրություն և Կարգավորումներ",
 };
 
 export function KnowledgeBaseAdmin() {
@@ -40,6 +42,12 @@ export function KnowledgeBaseAdmin() {
   const [deleteConfirmDoc, setDeleteConfirmDoc] = useState<{ idx: number; name: string } | null>(null);
   const [validationError, setValidationError] = useState('');
 
+  // Vector search server status variables
+  const [vectorSearchActive, setVectorSearchActive] = useState(false);
+  const [totalChunks, setTotalChunks] = useState(0);
+  const [vectorizedChunks, setVectorizedChunks] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const token = localStorage.getItem('sil-auth-token');
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
@@ -51,6 +59,10 @@ export function KnowledgeBaseAdmin() {
       if (!res.ok) throw new Error('Չհաջողվեց բեռնել AI Knowledge Base-ը');
       const data = await res.json();
       setDocs(data.products || []);
+      setVectorSearchActive(!!data.vectorSearchActive);
+      setTotalChunks(data.totalChunks || 0);
+      setVectorizedChunks(data.vectorizedChunks || 0);
+      setIsGenerating(!!data.isGenerating);
     } catch (err: any) {
       setError(err.message || 'Սխալ կապի ընթացքում');
     } finally {
@@ -199,6 +211,50 @@ export function KnowledgeBaseAdmin() {
           նիշ
         </div>
       </div>
+
+      {/* Vector Embeddings Status Card */}
+      {vectorSearchActive && (
+        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+              ⚡
+            </div>
+            <div>
+              <div className="text-xs font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
+                Վեկտորային և Սեմանտիկ Որոնում (Semantic Vector Search)
+                <span className="inline-block bg-emerald-500 text-white text-[9px] px-2.5 py-0.5 rounded-full font-extrabold border border-emerald-600">
+                  ԱԿՏԻՎ Է
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1 max-w-xl">
+                Հարցումները որոնվում են ըստ իմաստի: Փաստաթղթերը տրոհված են {totalChunks} հատվածների (chunks): AI-ին փոխանցվում են միայն ամենահամապատասխան հատվածները՝ զերծ պահելով լիմիտների սպառումից (429 Rate Limits)։
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0 flex-wrap md:flex-nowrap">
+            <div className="text-right">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                Վեկտորիզացված
+              </div>
+              <div className="text-xs font-black text-indigo-700 mt-0.5">
+                {vectorizedChunks} / {totalChunks} ({totalChunks > 0 ? Math.round((vectorizedChunks / totalChunks) * 100) : 0}%)
+              </div>
+            </div>
+            <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div 
+                className={`h-full bg-indigo-600 rounded-full ${isGenerating ? 'animate-pulse' : ''}`}
+                style={{ width: `${totalChunks > 0 ? (vectorizedChunks / totalChunks) * 100 : 0}%` }}
+              />
+            </div>
+            {isGenerating && (
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-indigo-700 animate-pulse bg-indigo-100 px-2.5 py-1 rounded-xl border border-indigo-200">
+                <RefreshCw size={10} className="animate-spin" />
+                Գեներացվում է...
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Document Grid / Table */}
       {loading ? (
