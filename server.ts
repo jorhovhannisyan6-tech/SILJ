@@ -566,15 +566,16 @@ async function triggerEmbeddingGeneration() {
         
         const vector = response.embeddings?.[0]?.values;
         if (vector && Array.isArray(vector)) {
-          chunk.vector = vector;
-          embeddingCache[chunk.id] = vector;
+          const optimizedVector = vector.map(v => Math.round(v * 10000) / 10000);
+          chunk.vector = optimizedVector;
+          embeddingCache[chunk.id] = optimizedVector;
           newlyGeneratedCount++;
           success = true;
           consecutiveErrors = 0;
           
           // Save dynamically on every 5 new generation steps so progress is never lost
           if (newlyGeneratedCount % 5 === 0) {
-            fs.writeFileSync(cachePath, JSON.stringify(embeddingCache, null, 2), "utf8");
+            fs.writeFileSync(cachePath, JSON.stringify(embeddingCache), "utf8");
           }
           
           // Respect free-tier API limits with 3.5s sleep spacing to stay well within limits
@@ -661,7 +662,7 @@ async function triggerEmbeddingGeneration() {
   
   if (newlyGeneratedCount > 0) {
     try {
-      fs.writeFileSync(cachePath, JSON.stringify(embeddingCache, null, 2), "utf8");
+      fs.writeFileSync(cachePath, JSON.stringify(embeddingCache), "utf8");
       console.log(`Vector embedding generation complete! Generated and saved ${newlyGeneratedCount} new embeddings.`);
     } catch (e) {
       console.error("Failed to save final embeddings cache to disk:", e);
