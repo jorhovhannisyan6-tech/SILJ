@@ -438,6 +438,7 @@ interface KnowledgeChunk {
 let KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [];
 let embeddingCache: Record<string, number[]> = {};
 let isGeneratingEmbeddings = false;
+let lastEmbeddingError: string | null = null;
 
 // Load embedding cache from local storage disk to save keys & prevent 429 rate limit issues
 const cachePath = path.join(KB, "embeddings-cache.json");
@@ -534,8 +535,12 @@ async function triggerEmbeddingGeneration() {
   console.log(`Found ${chunksToProcess.length} chunks needing vector generation.`);
   
   let consecutiveErrors = 0;
+  let dailyLimitReached = false;
   
   for (const chunk of chunksToProcess) {
+    if (dailyLimitReached) {
+      break;
+    }
     // If we hit too many consecutive errors, pause the run to let quota reset
     if (consecutiveErrors >= 5) {
       console.warn("Too many consecutive API errors. Pausing background vectorization run to reset quota.");
@@ -578,25 +583,78 @@ async function triggerEmbeddingGeneration() {
           throw new Error("Invalid response structure from embedContent");
         }
       } catch (err: any) {
+        let errMessage = "";
+        let isRateLimit = false;
+        let dynamicRetryDelay = 0;
+
+        if (typeof err === "string") {
+          errMessage = err;
+        } else if (err && typeof err === "object") {
+          errMessage = err.message || "";
+          if (errMessage.trim().startsWith("{")) {
+            try {
+              const parsed = JSON.parse(errMessage);
+              if (parsed.error) {
+                errMessage = parsed.error.message || errMessage;
+                if (parsed.error.status === "RESOURCE_EXHAUSTED" || parsed.error.code === 429) {
+                  isRateLimit = true;
+                }
+                if (Array.isArray(parsed.error.details)) {
+                  for (const detail of parsed.error.details) {
+                    if (detail["@type"]?.includes("RetryInfo") && detail.retryDelay) {
+                      const sec = parseFloat(detail.retryDelay);
+                      if (!isNaN(sec)) {
+                        dynamicRetryDelay = sec * 1000;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore json parse error
+            }
+          }
+          if (err.status === "RESOURCE_EXHAUSTED" || err.status === 429) {
+            isRateLimit = true;
+          }
+        }
+
+        if (!isRateLimit) {
+          isRateLimit = errMessage.includes("exceeded your current quota") || 
+                      errMessage.includes("429") || 
+                      errMessage.includes("RESOURCE_EXHAUSTED") ||
+                      JSON.stringify(err).includes("RESOURCE_EXHAUSTED") ||
+                      JSON.stringify(err).includes("429");
+        }
+
+        lastEmbeddingError = errMessage;
         retries--;
-        const isRateLimit = err?.message?.includes("exceeded your current quota") || 
-                            err?.message?.includes("429") || 
-                            err?.status === "RESOURCE_EXHAUSTED";
         
-        console.warn(`Failed to generate embedding for chunk ${chunk.id}. Retries left: ${retries}. Error:`, err?.message || err);
+        console.warn(`Failed to generate embedding for chunk ${chunk.id}. Retries left: ${retries}. Error:`, errMessage);
         
+        const isDailyLimit = errMessage.includes("embed_content_free_tier_requests") || 
+                             errMessage.includes("RequestsPerDay");
+                             
+        if (isDailyLimit) {
+          console.warn("Daily Gemini Embedding API limit reached. Postponing remaining vectorizations until quota resets.");
+          dailyLimitReached = true;
+          break;
+        }
+
         if (isRateLimit) {
-          console.log(`Rate limit detected. Backing off for ${backoffDelay / 1000} seconds...`);
-          await new Promise(resolve => setTimeout(resolve, backoffDelay));
-          backoffDelay = Math.min(backoffDelay * 2, 45000); // exponential increase up to 45s
+          const waitTime = dynamicRetryDelay ? (dynamicRetryDelay + 2000) : backoffDelay;
+          console.log(`Rate limit detected. Backing off for ${waitTime / 1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          if (!dynamicRetryDelay) {
+            backoffDelay = Math.min(backoffDelay * 2, 45000);
+          }
         } else {
-          // General errors (e.g. 503 Service Unavailable)
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
     }
 
-    if (!success) {
+    if (!success && !dailyLimitReached) {
       consecutiveErrors++;
     }
   }
@@ -725,53 +783,72 @@ async function buildKnowledgePrompt(query: string, context = "") {
   let totalChars = 0;
   const promptParts: string[] = [];
 
-  // 1. Attempt Semantic Vector Retrieval
+  // 1. Chunk Retrieval (Semantic + Keyword Hybrid)
   const queryVec = await getQueryEmbedding(queryText);
-  if (queryVec) {
-    console.log("Vector Semantic Retrieval active! Computing cosine similarities...");
+  const queryWords = queryText.toLowerCase().split(/[\s,.:;?!\(\)\[\]"\-\n\r]+/).filter(w => w.length > 2);
+  
+  if (queryVec || queryWords.length > 0) {
+    if (queryVec) {
+      console.log("Vector Semantic Retrieval active! Computing cosine similarities...");
+    } else {
+      console.log("Vector embedding generation rate-limited or failed. Utilizing high-fidelity chunk keyword overlap for retrieval...");
+    }
     
     const scoredChunks = KNOWLEDGE_CHUNKS.map(chunk => {
       let sim = 0;
-      if (chunk.vector) {
+      if (queryVec && chunk.vector) {
         sim = cosineSimilarity(queryVec, chunk.vector);
-      } else {
-        // Fallback for chunks with missing vectors
-        const textLower = String(chunk.text || "").toLowerCase();
-        const queryWords = queryText.toLowerCase().split(/[\s,.:;?!\(\)\[\]"\-\n\r]+/).filter(w => w.length > 2);
-        let matchCount = 0;
-        for (const word of queryWords) {
-          if (textLower.includes(word)) matchCount++;
-        }
-        sim = matchCount * 0.05;
       }
-      return { chunk, sim };
+      
+      // Calculate keyword overlap score
+      const textLower = String(chunk.text || "").toLowerCase();
+      let matchCount = 0;
+      for (const word of queryWords) {
+        if (textLower.includes(word)) matchCount++;
+      }
+      const keywordScore = queryWords.length > 0 ? (matchCount / queryWords.length) : 0;
+      
+      // Hybrid scoring: if vector is present, combine them.
+      // If vector is missing, use the keyword score scaled to 0.9 to align with cosine similarity scales.
+      const combinedScore = (queryVec && chunk.vector)
+        ? (0.7 * sim + 0.3 * keywordScore) 
+        : (0.9 * keywordScore);
+        
+      return { chunk, sim: combinedScore };
     });
 
-    // Sort by cosine similarity descending
-    scoredChunks.sort((a, b) => b.sim - a.sim);
+    // If queryVec is null, filter out chunks that have zero keyword match
+    const validScoredChunks = queryVec 
+      ? scoredChunks 
+      : scoredChunks.filter(x => x.sim > 0);
+
+    // Sort descending
+    validScoredChunks.sort((a, b) => b.sim - a.sim);
 
     // Take top matching chunks
-    const topScored = scoredChunks.slice(0, 15);
-    console.log(`Top match chunk similarities: ${topScored.slice(0, 3).map(t => `${t.chunk.productId} (${t.sim.toFixed(3)})`).join(", ")}`);
+    const topScored = validScoredChunks.slice(0, 25);
+    if (topScored.length > 0) {
+      console.log(`Top match chunk similarities: ${topScored.slice(0, 3).map(t => `${t.chunk.productId} (${t.sim.toFixed(3)})`).join(", ")}`);
 
-    for (const item of topScored) {
-      if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
-      const c = item.chunk;
-      const label = PRODUCT_LABELS[c.productId] || c.productId;
-      const header = `\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${c.sourceFile} (Սեմանտիկ հատված) =====\n`;
-      const text = c.text;
-      
-      if (totalChars + header.length + text.length > MAX_TOTAL_KNOWLEDGE_CHARS) {
-        const allowedLen = MAX_TOTAL_KNOWLEDGE_CHARS - totalChars - header.length;
-        if (allowedLen > 200) {
-          promptParts.push(header + text.slice(0, allowedLen));
-          totalChars = MAX_TOTAL_KNOWLEDGE_CHARS;
+      for (const item of topScored) {
+        if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
+        const c = item.chunk;
+        const label = PRODUCT_LABELS[c.productId] || c.productId;
+        const header = `\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${c.sourceFile} (Սեմանտիկ հատված) =====\n`;
+        const text = c.text;
+        
+        if (totalChars + header.length + text.length > MAX_TOTAL_KNOWLEDGE_CHARS) {
+          const allowedLen = MAX_TOTAL_KNOWLEDGE_CHARS - totalChars - header.length;
+          if (allowedLen > 200) {
+            promptParts.push(header + text.slice(0, allowedLen));
+            totalChars = MAX_TOTAL_KNOWLEDGE_CHARS;
+          }
+          break;
         }
-        break;
-      }
 
-      promptParts.push(header + text);
-      totalChars += header.length + text.length;
+        promptParts.push(header + text);
+        totalChars += header.length + text.length;
+      }
     }
   }
 
@@ -997,6 +1074,12 @@ app.get("/api/health", (_req, res) => {
     defaultEngine: process.env.OPENAI_API_KEY ? "ChatGPT (gpt-4o-mini)" : (process.env.GEMINI_API_KEY ? "Gemini 3.5 Flash Lite" : "SIL Knowledge Base Engine"),
     chatGptAvailable: !!process.env.OPENAI_API_KEY,
     geminiModels: GEMINI_MODELS,
+    vectorSearchStats: {
+      totalChunks: KNOWLEDGE_CHUNKS.length,
+      vectorizedChunks: KNOWLEDGE_CHUNKS.filter(c => !!c.vector).length,
+      isGenerating: isGeneratingEmbeddings,
+      lastError: lastEmbeddingError
+    }
   });
 });
 

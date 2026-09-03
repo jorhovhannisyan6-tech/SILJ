@@ -60,7 +60,19 @@
       "productId": "accident",
       "sourceFile": "Դժբախտ Պատահարներ Պայմաններ.docx",
       "textFile": "text/djbakht_pataharner.docx.txt",
-      "characters": 375
+      "characters": 404
+    },
+    {
+      "productId": "casco",
+      "sourceFile": "Casco.txt",
+      "textFile": "text/Casco.txt.txt",
+      "characters": 81870
+    },
+    {
+      "productId": "law-insurance",
+      "sourceFile": "HO-177-N.txt",
+      "textFile": "text/HO-177-N.txt.txt",
+      "characters": 271432
     }
   ]
 }
