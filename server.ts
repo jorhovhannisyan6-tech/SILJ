@@ -505,61 +505,19 @@ function chunkDocument(doc: { productId: string; sourceFile: string; text: strin
   const docLabel = PRODUCT_LABELS[doc.productId] || doc.productId;
   const rawText = doc.text;
 
-  // Check if document is structured by articles (e.g., "Հոդված 1.", "Հոդված 44.")
-  const articleRegex = /(?:^|\n)\s*(Հոդված\s+\d+[\.\s\t]+[^\n]*)/gi;
-  const matches = [...rawText.matchAll(articleRegex)];
-
-  if (matches.length >= 3) {
-    for (let i = 0; i < matches.length; i++) {
-      const match = matches[i];
-      const startIdx = match.index || 0;
-      const endIdx = (i < matches.length - 1 && matches[i + 1].index !== undefined)
-        ? matches[i + 1].index!
-        : rawText.length;
-
-      const fullArticle = rawText.slice(startIdx, endIdx).trim();
-      const headerLine = match[1].trim();
-
-      if (fullArticle.length <= 2800) {
-        const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel}]\n[${headerLine}]\n${fullArticle}`;
-        const hash = getChunkHash(chunkTextWithHeader);
-        chunks.push({
-          id: hash,
-          productId: doc.productId,
-          sourceFile: doc.sourceFile,
-          text: chunkTextWithHeader,
-          vector: embeddingCache[hash] || undefined
-        });
-      } else {
-        // Sub-chunk long articles with 1800 char limits and keep header attached
-        const subChunks = chunkText(fullArticle, 1800, 200);
-        subChunks.forEach((sub, subIdx) => {
-          const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel}]\n[${headerLine} (Մաս ${subIdx + 1}/${subChunks.length})]\n${sub}`;
-          const hash = getChunkHash(chunkTextWithHeader);
-          chunks.push({
-            id: hash,
-            productId: doc.productId,
-            sourceFile: doc.sourceFile,
-            text: chunkTextWithHeader,
-            vector: embeddingCache[hash] || undefined
-          });
-        });
-      }
-    }
-    return chunks;
-  }
-
-  // Standard paragraph/section chunking for general documents
-  const docChunks = chunkText(rawText, 1600, 200);
-  docChunks.forEach((textChunk, idx) => {
-    const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel} (Հատված ${idx + 1})]\n${textChunk}`;
-    const hash = getChunkHash(chunkTextWithHeader);
+  const docChunks = chunkText(rawText, 1500, 150);
+  docChunks.forEach((rawChunk, idx) => {
+    const rawHash = getChunkHash(rawChunk);
+    const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel} (Հատված ${idx + 1})]\n${rawChunk}`;
+    const fullHash = getChunkHash(chunkTextWithHeader);
+    const vector = embeddingCache[rawHash] || embeddingCache[fullHash] || undefined;
+    
     chunks.push({
-      id: hash,
+      id: rawHash,
       productId: doc.productId,
       sourceFile: doc.sourceFile,
       text: chunkTextWithHeader,
-      vector: embeddingCache[hash] || undefined
+      vector
     });
   });
 
@@ -574,7 +532,8 @@ function buildKnowledgeChunks() {
     chunks.push(...docChunks);
   }
   KNOWLEDGE_CHUNKS = chunks;
-  console.log(`Knowledge Base split into ${KNOWLEDGE_CHUNKS.length} semantic chunks.`);
+  const withVectors = KNOWLEDGE_CHUNKS.filter(c => !!c.vector).length;
+  console.log(`Knowledge Base split into ${KNOWLEDGE_CHUNKS.length} semantic chunks (${withVectors} with cached vectors).`);
 }
 
 function cleanApiErrorMessage(err: any): { message: string; isRateLimit: boolean; dynamicRetryDelay?: number } {
@@ -1310,8 +1269,12 @@ app.get("/api/health", (_req, res) => {
 });
 
 const handleChatRequest = async (req: any, res: any) => {
-  const { messages = [], context = "", products = [], underwritingRules = [], engine = "auto" } = req.body || {};
-  const lastUserMsg = messages.filter((m: any) => m.role === "user").pop()?.content || "";
+  const { messages: rawMessages = [], message, prompt, context = "", products = [], underwritingRules = [], engine = "auto" } = req.body || {};
+  let messages = Array.isArray(rawMessages) ? [...rawMessages] : [];
+  if (messages.length === 0 && (message || prompt)) {
+    messages = [{ role: "user", content: String(message || prompt) }];
+  }
+  const lastUserMsg = messages.filter((m: any) => m.role === "user").pop()?.content || message || prompt || "";
   const knowledge = await buildKnowledgePrompt(lastUserMsg, context);
 
   let activeInstruction = SYSTEM_INSTRUCTION;
