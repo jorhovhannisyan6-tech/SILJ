@@ -25,7 +25,7 @@ try {
 } catch {}
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
 const KB = path.join(ROOT, "knowledge-base");
