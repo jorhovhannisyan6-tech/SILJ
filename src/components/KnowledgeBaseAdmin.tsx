@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Plus, Search, Edit3, Trash2, Save, X, RefreshCw, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { BookOpen, Plus, Search, Edit3, Trash2, Save, X, RefreshCw, FileText, CheckCircle2, AlertCircle, Zap, Sparkles, Database } from 'lucide-react';
 
 interface KbDocument {
   productId: string;
@@ -47,6 +47,7 @@ export function KnowledgeBaseAdmin() {
   const [totalChunks, setTotalChunks] = useState(0);
   const [vectorizedChunks, setVectorizedChunks] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [vectorizing, setVectorizing] = useState(false);
 
   const token = localStorage.getItem('sil-auth-token');
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -70,9 +71,57 @@ export function KnowledgeBaseAdmin() {
     }
   };
 
+  const handleTriggerVectorize = async (forceAll: boolean = false) => {
+    setVectorizing(true);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/kb/vectorize', {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reloadDocs: true, forceAll }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Չհաջողվեց մեկնարկել վեկտորիզացումը');
+      }
+      const data = await res.json();
+      setSuccessMsg(data.message || 'Վեկտորային ինդեքսավորումը և սեմանտիկ որոնման թարմացումը մեկնարկված է:');
+      setTimeout(() => setSuccessMsg(''), 4000);
+      setIsGenerating(true);
+      await loadKb();
+    } catch (err: any) {
+      setError(err.message || 'Սխալ վեկտորիզացման մեկնարկի ընթացքում');
+    } finally {
+      setVectorizing(false);
+    }
+  };
+
   useEffect(() => {
     loadKb();
   }, []);
+
+  // Poll vectorization status when generating in background
+  useEffect(() => {
+    let interval: any = null;
+    if (isGenerating) {
+      interval = setInterval(() => {
+        fetch('/api/admin/kb', { headers })
+          .then(res => res.json())
+          .then(data => {
+            setTotalChunks(data.totalChunks || 0);
+            setVectorizedChunks(data.vectorizedChunks || 0);
+            setIsGenerating(!!data.isGenerating);
+          })
+          .catch(() => {});
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isGenerating]);
 
   const handleOpenNew = () => {
     setIsNew(true);
@@ -161,6 +210,15 @@ export function KnowledgeBaseAdmin() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => handleTriggerVectorize(false)}
+            disabled={vectorizing || isGenerating}
+            className="px-3.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-xs font-black flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-xs"
+            title="Թարմացնել վեկտորիզացումը (Semantic Vector Search)"
+          >
+            <Zap size={15} className={vectorizing || isGenerating ? 'animate-bounce text-amber-500' : 'text-indigo-600'} />
+            <span>⚡ Վեկտորային Որոնում</span>
+          </button>
+          <button
             onClick={loadKb}
             disabled={loading}
             className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 transition cursor-pointer"
@@ -214,9 +272,9 @@ export function KnowledgeBaseAdmin() {
 
       {/* Vector Embeddings Status Card */}
       {vectorSearchActive && (
-        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+        <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xs">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0 shadow-xs">
               ⚡
             </div>
             <div>
@@ -227,31 +285,48 @@ export function KnowledgeBaseAdmin() {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-1 max-w-xl">
-                Հարցումները որոնվում են ըստ իմաստի: Փաստաթղթերը տրոհված են {totalChunks} հատվածների (chunks): AI-ին փոխանցվում են միայն ամենահամապատասխան հատվածները՝ զերծ պահելով լիմիտների սպառումից (429 Rate Limits)։
+                Հարցումները որոնվում են ըստ իմաստի և սեմանտիկ նմանության: Փաստաթղթերը տրոհված են {totalChunks} հատվածների (chunks): Դուք կարող եք ցանկացած պահի թարմացնել վեկտորային բազան՝ սեղմելով ներքևի կոճակը:
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0 flex-wrap md:flex-nowrap">
-            <div className="text-right">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                Վեկտորիզացված
+          
+          <div className="flex items-center gap-3 shrink-0 flex-wrap sm:flex-nowrap justify-between lg:justify-end">
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Վեկտորիզացված
+                </div>
+                <div className="text-xs font-black text-indigo-700 mt-0.5">
+                  {vectorizedChunks} / {totalChunks} ({totalChunks > 0 ? Math.round((vectorizedChunks / totalChunks) * 100) : 0}%)
+                </div>
               </div>
-              <div className="text-xs font-black text-indigo-700 mt-0.5">
-                {vectorizedChunks} / {totalChunks} ({totalChunks > 0 ? Math.round((vectorizedChunks / totalChunks) * 100) : 0}%)
+              <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full bg-indigo-600 rounded-full ${isGenerating ? 'animate-pulse' : ''}`}
+                  style={{ width: `${totalChunks > 0 ? (vectorizedChunks / totalChunks) * 100 : 0}%` }}
+                />
               </div>
             </div>
-            <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
-              <div 
-                className={`h-full bg-indigo-600 rounded-full ${isGenerating ? 'animate-pulse' : ''}`}
-                style={{ width: `${totalChunks > 0 ? (vectorizedChunks / totalChunks) * 100 : 0}%` }}
-              />
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleTriggerVectorize(false)}
+                disabled={vectorizing || isGenerating}
+                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-black flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-60"
+                title="Թարմացնել վեկտորիզացումը (Sync & Vectorize)"
+              >
+                <Zap size={14} className={vectorizing || isGenerating ? 'animate-spin' : ''} />
+                <span>{vectorizing || isGenerating ? 'Ինդեքսավորվում է...' : '⚡ Թարմացնել Վեկտորիզացումը'}</span>
+              </button>
+              <button
+                onClick={() => handleTriggerVectorize(true)}
+                disabled={vectorizing || isGenerating}
+                className="p-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                title="Վերաինդեքսավորել ամբողջ բազան (Force Full Re-vectorize)"
+              >
+                <RefreshCw size={14} className={vectorizing || isGenerating ? 'animate-spin text-indigo-600' : 'text-slate-600'} />
+              </button>
             </div>
-            {isGenerating && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-indigo-700 animate-pulse bg-indigo-100 px-2.5 py-1 rounded-xl border border-indigo-200">
-                <RefreshCw size={10} className="animate-spin" />
-                Գեներացվում է...
-              </span>
-            )}
           </div>
         </div>
       )}

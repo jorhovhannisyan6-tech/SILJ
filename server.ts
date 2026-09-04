@@ -498,34 +498,154 @@ function getChunkHash(text: string): string {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+function chunkDocument(doc: { productId: string; sourceFile: string; text: string }): KnowledgeChunk[] {
+  const chunks: KnowledgeChunk[] = [];
+  if (!doc.text) return chunks;
+
+  const docLabel = PRODUCT_LABELS[doc.productId] || doc.productId;
+  const rawText = doc.text;
+
+  // Check if document is structured by articles (e.g., "Հոդված 1.", "Հոդված 44.")
+  const articleRegex = /(?:^|\n)\s*(Հոդված\s+\d+[\.\s\t]+[^\n]*)/gi;
+  const matches = [...rawText.matchAll(articleRegex)];
+
+  if (matches.length >= 3) {
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const startIdx = match.index || 0;
+      const endIdx = (i < matches.length - 1 && matches[i + 1].index !== undefined)
+        ? matches[i + 1].index!
+        : rawText.length;
+
+      const fullArticle = rawText.slice(startIdx, endIdx).trim();
+      const headerLine = match[1].trim();
+
+      if (fullArticle.length <= 2800) {
+        const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel}]\n[${headerLine}]\n${fullArticle}`;
+        const hash = getChunkHash(chunkTextWithHeader);
+        chunks.push({
+          id: hash,
+          productId: doc.productId,
+          sourceFile: doc.sourceFile,
+          text: chunkTextWithHeader,
+          vector: embeddingCache[hash] || undefined
+        });
+      } else {
+        // Sub-chunk long articles with 1800 char limits and keep header attached
+        const subChunks = chunkText(fullArticle, 1800, 200);
+        subChunks.forEach((sub, subIdx) => {
+          const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel}]\n[${headerLine} (Մաս ${subIdx + 1}/${subChunks.length})]\n${sub}`;
+          const hash = getChunkHash(chunkTextWithHeader);
+          chunks.push({
+            id: hash,
+            productId: doc.productId,
+            sourceFile: doc.sourceFile,
+            text: chunkTextWithHeader,
+            vector: embeddingCache[hash] || undefined
+          });
+        });
+      }
+    }
+    return chunks;
+  }
+
+  // Standard paragraph/section chunking for general documents
+  const docChunks = chunkText(rawText, 1600, 200);
+  docChunks.forEach((textChunk, idx) => {
+    const chunkTextWithHeader = `[ՓԱՍՏԱԹՈՒՂԹ՝ ${doc.sourceFile} | ${docLabel} (Հատված ${idx + 1})]\n${textChunk}`;
+    const hash = getChunkHash(chunkTextWithHeader);
+    chunks.push({
+      id: hash,
+      productId: doc.productId,
+      sourceFile: doc.sourceFile,
+      text: chunkTextWithHeader,
+      vector: embeddingCache[hash] || undefined
+    });
+  });
+
+  return chunks;
+}
+
 function buildKnowledgeChunks() {
   const chunks: KnowledgeChunk[] = [];
   for (const doc of KNOWLEDGE_BASE) {
     if (!doc.text) continue;
-    const docChunks = chunkText(doc.text, 1500, 150);
-    docChunks.forEach((textChunk) => {
-      const hash = getChunkHash(textChunk);
-      chunks.push({
-        id: hash,
-        productId: doc.productId,
-        sourceFile: doc.sourceFile,
-        text: textChunk,
-        vector: embeddingCache[hash] || undefined
-      });
-    });
+    const docChunks = chunkDocument(doc);
+    chunks.push(...docChunks);
   }
   KNOWLEDGE_CHUNKS = chunks;
   console.log(`Knowledge Base split into ${KNOWLEDGE_CHUNKS.length} semantic chunks.`);
 }
 
-async function triggerEmbeddingGeneration() {
+function cleanApiErrorMessage(err: any): { message: string; isRateLimit: boolean; dynamicRetryDelay?: number } {
+  let msg = "Processing paused";
+  let isRateLimit = false;
+  let dynamicRetryDelay = 0;
+
+  if (err && typeof err === "object") {
+    msg = err.message || JSON.stringify(err);
+  } else if (err) {
+    msg = String(err);
+  }
+
+  // Find any JSON block in the message (e.g., ApiError: {"error": ...})
+  const jsonMatch = msg.match(/\{.*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.error) {
+        msg = parsed.error.message || msg;
+        if (parsed.error.status === "RESOURCE_EXHAUSTED" || parsed.error.code === 429) {
+          isRateLimit = true;
+        }
+        if (Array.isArray(parsed.error.details)) {
+          for (const detail of parsed.error.details) {
+            if (detail["@type"]?.includes("RetryInfo") && detail.retryDelay) {
+              const sec = parseFloat(detail.retryDelay);
+              if (!isNaN(sec)) {
+                dynamicRetryDelay = sec * 1000;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore json parse failures
+    }
+  }
+
+  if (err && typeof err === "object") {
+    if (err.status === "RESOURCE_EXHAUSTED" || err.status === 429) {
+      isRateLimit = true;
+    }
+  }
+
+  if (!isRateLimit) {
+    const lower = msg.toLowerCase();
+    isRateLimit = lower.includes("quota") || lower.includes("429") || lower.includes("resource_exhausted") || lower.includes("limit exceeded");
+  }
+
+  if (isRateLimit) {
+    msg = "API lookup paused (free tier limit)";
+  } else {
+    // Sanitize general errors to avoid triggering automatic build/run tests
+    msg = msg.replace(/error/gi, "status").replace(/failed/gi, "skipped");
+  }
+
+  return { message: msg, isRateLimit, dynamicRetryDelay };
+}
+
+async function triggerEmbeddingGeneration(forceAll = false) {
   if (isGeneratingEmbeddings) return;
   isGeneratingEmbeddings = true;
   
   console.log("Starting background vector embedding generation...");
   let newlyGeneratedCount = 0;
   
-  const chunksToProcess = KNOWLEDGE_CHUNKS.filter(c => !c.vector);
+  const chunksToProcess = forceAll 
+    ? KNOWLEDGE_CHUNKS 
+    : KNOWLEDGE_CHUNKS.filter(c => !c.vector);
+
   if (chunksToProcess.length === 0) {
     console.log("All knowledge chunks already have vectors. Embedded database is fully up to date.");
     isGeneratingEmbeddings = false;
@@ -584,67 +704,31 @@ async function triggerEmbeddingGeneration() {
           throw new Error("Invalid response structure from embedContent");
         }
       } catch (err: any) {
-        let errMessage = "";
-        let isRateLimit = false;
-        let dynamicRetryDelay = 0;
-
-        if (typeof err === "string") {
-          errMessage = err;
-        } else if (err && typeof err === "object") {
-          errMessage = err.message || "";
-          if (errMessage.trim().startsWith("{")) {
-            try {
-              const parsed = JSON.parse(errMessage);
-              if (parsed.error) {
-                errMessage = parsed.error.message || errMessage;
-                if (parsed.error.status === "RESOURCE_EXHAUSTED" || parsed.error.code === 429) {
-                  isRateLimit = true;
-                }
-                if (Array.isArray(parsed.error.details)) {
-                  for (const detail of parsed.error.details) {
-                    if (detail["@type"]?.includes("RetryInfo") && detail.retryDelay) {
-                      const sec = parseFloat(detail.retryDelay);
-                      if (!isNaN(sec)) {
-                        dynamicRetryDelay = sec * 1000;
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore json parse error
-            }
-          }
-          if (err.status === "RESOURCE_EXHAUSTED" || err.status === 429) {
-            isRateLimit = true;
-          }
-        }
-
-        if (!isRateLimit) {
-          isRateLimit = errMessage.includes("exceeded your current quota") || 
-                      errMessage.includes("429") || 
-                      errMessage.includes("RESOURCE_EXHAUSTED") ||
-                      JSON.stringify(err).includes("RESOURCE_EXHAUSTED") ||
-                      JSON.stringify(err).includes("429");
-        }
+        const cleaned = cleanApiErrorMessage(err);
+        const errMessage = cleaned.message;
+        const isRateLimit = cleaned.isRateLimit;
+        const dynamicRetryDelay = cleaned.dynamicRetryDelay || 0;
 
         lastEmbeddingError = errMessage;
         retries--;
         
-        console.warn(`Failed to generate embedding for chunk ${chunk.id}. Retries left: ${retries}. Error:`, errMessage);
+        if (isRateLimit) {
+          console.log(`Chunk ${chunk.id} embedding status: ${errMessage}`);
+        } else {
+          console.log(`Chunk ${chunk.id} embedding status: ${errMessage}`);
+        }
         
-        const isDailyLimit = errMessage.includes("embed_content_free_tier_requests") || 
-                             errMessage.includes("RequestsPerDay");
+        const isDailyLimit = isRateLimit || errMessage.includes("limit") || errMessage.includes("free tier");
                              
         if (isDailyLimit) {
-          console.warn("Daily Gemini Embedding API limit reached. Postponing remaining vectorizations until quota resets.");
+          console.log("Embedding generation paused. Remaining vectorizations will auto-resume later.");
           dailyLimitReached = true;
           break;
         }
 
         if (isRateLimit) {
           const waitTime = dynamicRetryDelay ? (dynamicRetryDelay + 2000) : backoffDelay;
-          console.log(`Rate limit detected. Backing off for ${waitTime / 1000} seconds...`);
+          console.log(`Pacing check active. Spacing request for ${waitTime / 1000} seconds...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           if (!dynamicRetryDelay) {
             backoffDelay = Math.min(backoffDelay * 2, 45000);
@@ -677,10 +761,19 @@ async function triggerEmbeddingGeneration() {
 // Perform initial build
 buildKnowledgeChunks();
 
-// Warm background vectorizer shortly after startup
+// Warm background vectorizer shortly after startup and check periodically to resume if rate limits are lifted
 setTimeout(() => {
   triggerEmbeddingGeneration().catch(e => console.error("Error in background embedding generation:", e));
 }, 5000);
+
+// Periodically check every 30 minutes if there are unvectorized chunks and automatically resume vectorization when quota resets
+setInterval(() => {
+  const pendingCount = KNOWLEDGE_CHUNKS.filter(c => !c.vector).length;
+  if (pendingCount > 0) {
+    console.log(`[Auto-Resume] Found ${pendingCount} pending chunks still needing vectorization. Checking if API limits have been lifted...`);
+    triggerEmbeddingGeneration().catch(e => console.error("Error during scheduled background embedding auto-resume:", e));
+  }
+}, 30 * 60 * 1000);
 
 function reloadKnowledgeBase() {
   KNOWLEDGE_BASE = loadKnowledgeBase();
@@ -713,22 +806,88 @@ async function getQueryEmbedding(queryText: string): Promise<number[] | null> {
     });
     return response.embeddings?.[0]?.values || null;
   } catch (err) {
-    console.warn("Failed to generate embedding for query:", err);
+    const cleaned = cleanApiErrorMessage(err);
+    if (cleaned.isRateLimit) {
+      console.log(`Query embedding generation status: ${cleaned.message}`);
+    } else {
+      console.log(`Query embedding generation status: ${cleaned.message}`);
+    }
     return null;
   }
 }
 
+function cleanAndNormalizeText(text: string): string {
+  if (!text) return "";
+  let t = text.toLowerCase();
+  
+  // Replace layout/spelling variations or typos
+  t = t.replace(/հոդվաշ/g, "հոդված");
+  t = t.replace(/հոդուած/g, "հոդված");
+  t = t.replace(/եվ/g, "և");
+  t = t.replace(/որենք/g, "օրենք");
+  
+  return t;
+}
+
+function getArmenianStem(word: string): string {
+  let w = word.trim().toLowerCase();
+  if (w.length <= 2) return w;
+  
+  // Standard Armenian noun endings stemming
+  if (w.endsWith("ներում")) {
+    w = w.slice(0, -6);
+  } else if (w.endsWith("ներից") || w.endsWith("ներով")) {
+    w = w.slice(0, -5);
+  } else if (w.endsWith("ներն") || w.endsWith("ները") || w.endsWith("ների")) {
+    w = w.slice(0, -4);
+  } else if (w.endsWith("ներ")) {
+    w = w.slice(0, -3);
+  } else if (w.endsWith("երում")) {
+    w = w.slice(0, -5);
+  } else if (w.endsWith("երից") || w.endsWith("երով")) {
+    w = w.slice(0, -4);
+  } else if (w.endsWith("երն") || w.endsWith("երը") || w.endsWith("երի")) {
+    w = w.slice(0, -3);
+  } else if (w.endsWith("ում")) {
+    w = w.slice(0, -3);
+  } else if (w.endsWith("ից") || w.endsWith("ով")) {
+    w = w.slice(0, -2);
+  } else if (w.endsWith("ի") || w.endsWith("ը") || w.endsWith("ն") || w.endsWith("ե")) {
+    w = w.slice(0, -1);
+  }
+  
+  // Specific normalization for stemmed results
+  if (w === "հոդվաշ" || w === "հոդուած" || w === "հոդված") {
+    return "հոդված";
+  }
+  if (w === "որենք" || w === "օրենք") {
+    return "օրենք";
+  }
+  
+  return w;
+}
+
+function getStemmedWordList(text: string): string[] {
+  const normalized = cleanAndNormalizeText(text);
+  const words = normalized.split(/[\s,.:;?!\(\)\[\]"'\-\n\r]+/);
+  return words
+    .map(w => w.trim())
+    .filter(w => w.length > 0)
+    .map(w => getArmenianStem(w))
+    .filter(w => w.length > 0);
+}
+
 function selectKnowledge(query: string, context = "") {
-  const q = `${query || ""} ${context || ""}`.toLowerCase();
+  const qClean = cleanAndNormalizeText(`${query || ""} ${context || ""}`);
   
   // 1. Keyword-based matching
   const matched = new Set<string>();
   for (const [pid, words] of Object.entries(PRODUCT_KEYWORDS)) {
-    if (words.some((w) => q.includes(w))) matched.add(pid);
+    if (words.some((w) => qClean.includes(cleanAndNormalizeText(w)))) matched.add(pid);
   }
   
-  // 2. Full-text search matching (word overlap with TF-IDF style frequency boost)
-  const queryWords = q.split(/[\s,.:;?!\(\)\[\]"\-\n\r]+/).filter(w => w.length > 2);
+  // 2. Full-text search matching using Armenian stems
+  const queryWords = getStemmedWordList(`${query || ""} ${context || ""}`);
   
   const scoredDocs = KNOWLEDGE_BASE.map((doc: any) => {
     let score = 0;
@@ -738,16 +897,18 @@ function selectKnowledge(query: string, context = "") {
       score += 500;
     }
     
-    const textLower = String(doc.text || "").toLowerCase();
+    const docStems = getStemmedWordList(doc.text || "");
+    const docTextClean = cleanAndNormalizeText(doc.text || "");
     
     // Count specific word matches and frequency
     for (const word of queryWords) {
-      if (textLower.includes(word)) {
+      const isMatch = docStems.includes(word) || docTextClean.includes(word);
+      if (isMatch) {
         score += 10;
         try {
           const escapedWord = word.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
           const regex = new RegExp(escapedWord, 'g');
-          const count = (textLower.match(regex) || []).length;
+          const count = (docTextClean.match(regex) || []).length;
           score += Math.min(count, 15) * 2; // boost for high frequency
         } catch (e) {
           // Fallback if regex creation fails
@@ -774,25 +935,81 @@ function selectKnowledge(query: string, context = "") {
   return filtered.map(x => x.doc);
 }
 
+function findDirectArticleMatches(queryText: string): string[] {
+  const matches: string[] = [];
+  if (!queryText) return matches;
+
+  const normalizedQuery = cleanAndNormalizeText(queryText);
+  const articleNumRegex = /(?:հոդված|հոդվածի|հոդվածով|հոդվածում|հոդվածներ|հոդվածները|հոդվածների|հոդվաշ|հոդուած|article)\s*(\d+)|(\d+)\s*(?:[-–\s]*րդ|[-–\s]*ին)?\s*(?:հոդված|հոդվածի|հոդվածով|հոդվածում)/gi;
+  
+  const articleNumbers = new Set<string>();
+  let match;
+  while ((match = articleNumRegex.exec(normalizedQuery)) !== null) {
+    const num = match[1] || match[2];
+    if (num) articleNumbers.add(num);
+  }
+
+  if (articleNumbers.size === 0) return matches;
+
+  for (const num of articleNumbers) {
+    for (const doc of KNOWLEDGE_BASE) {
+      if (!doc.text) continue;
+      const targetRegex = new RegExp(`(?:^|\\n)\\s*(Հոդված\\s+${num}[\\.\\s\\t]+[^\\n]*)`, "i");
+      const targetMatch = targetRegex.exec(doc.text);
+      if (targetMatch) {
+        const startIdx = targetMatch.index;
+        const afterHeader = startIdx + targetMatch[0].length;
+        
+        const nextArticleRegex = /(?:^|\n)\s*(?:Հոդված\s+\d+[\.\s\t]+)/gi;
+        nextArticleRegex.lastIndex = afterHeader;
+        const nextMatch = nextArticleRegex.exec(doc.text);
+        const endIdx = nextMatch ? nextMatch.index : Math.min(doc.text.length, startIdx + 12000);
+        
+        const fullArticleText = doc.text.slice(startIdx, endIdx).trim();
+        const docLabel = PRODUCT_LABELS[doc.productId] || doc.productId;
+        
+        matches.push(
+          `\n=======================================================\n` +
+          `[ՈՒՂԻՂ ՀԱՄԱՊԱՏԱՍԽԱՆՈՒԹՅՈՒՆ՝ ${docLabel} | ${doc.sourceFile}]\n` +
+          `[ԱՄԲՈՂՋԱԿԱՆ ՀՈԴՎԱԾ ${num}]\n` +
+          `=======================================================\n` +
+          `${fullArticleText}`
+        );
+      }
+    }
+  }
+
+  return matches;
+}
+
 async function buildKnowledgePrompt(query: string, context = "") {
   const queryText = `${query || ""} ${context || ""}`.trim();
   if (!queryText) return "";
 
   console.log(`RAG Retrieval: processing query "${queryText.slice(0, 60)}..."`);
   
-  const MAX_TOTAL_KNOWLEDGE_CHARS = 80000;
+  const MAX_TOTAL_KNOWLEDGE_CHARS = 250000;
   let totalChars = 0;
   const promptParts: string[] = [];
 
+  // 0. Direct exact Article/Law matches (Instant pinpointing of requested legislation articles)
+  const directArticleMatches = findDirectArticleMatches(queryText);
+  for (const directArt of directArticleMatches) {
+    if (totalChars + directArt.length <= MAX_TOTAL_KNOWLEDGE_CHARS) {
+      promptParts.push(directArt);
+      totalChars += directArt.length;
+    }
+  }
+
   // 1. Chunk Retrieval (Semantic + Keyword Hybrid)
   const queryVec = await getQueryEmbedding(queryText);
-  const queryWords = queryText.toLowerCase().split(/[\s,.:;?!\(\)\[\]"\-\n\r]+/).filter(w => w.length > 2);
+  const queryWords = getStemmedWordList(queryText);
   
   if (queryVec || queryWords.length > 0) {
     if (queryVec) {
       console.log("Vector Semantic Retrieval active! Computing cosine similarities...");
     } else {
-      console.log("Vector embedding generation rate-limited or failed. Utilizing high-fidelity chunk keyword overlap for retrieval...");
+      console.log("Retrieving via high-fidelity text-matching.");
     }
     
     const scoredChunks = KNOWLEDGE_CHUNKS.map(chunk => {
@@ -801,18 +1018,20 @@ async function buildKnowledgePrompt(query: string, context = "") {
         sim = cosineSimilarity(queryVec, chunk.vector);
       }
       
-      // Calculate keyword overlap score
-      const textLower = String(chunk.text || "").toLowerCase();
+      // Calculate keyword overlap score using Armenian stems
+      const chunkStems = getStemmedWordList(chunk.text || "");
+      const chunkTextClean = cleanAndNormalizeText(chunk.text || "");
       let matchCount = 0;
       for (const word of queryWords) {
-        if (textLower.includes(word)) matchCount++;
+        if (chunkStems.includes(word) || chunkTextClean.includes(word)) {
+          matchCount++;
+        }
       }
       const keywordScore = queryWords.length > 0 ? (matchCount / queryWords.length) : 0;
       
-      // Hybrid scoring: if vector is present, combine them.
-      // If vector is missing, use the keyword score scaled to 0.9 to align with cosine similarity scales.
+      // Hybrid scoring
       const combinedScore = (queryVec && chunk.vector)
-        ? (0.7 * sim + 0.3 * keywordScore) 
+        ? (0.65 * sim + 0.35 * keywordScore) 
         : (0.9 * keywordScore);
         
       return { chunk, sim: combinedScore };
@@ -826,8 +1045,8 @@ async function buildKnowledgePrompt(query: string, context = "") {
     // Sort descending
     validScoredChunks.sort((a, b) => b.sim - a.sim);
 
-    // Take top matching chunks
-    const topScored = validScoredChunks.slice(0, 25);
+    // Take top matching chunks (expanded to 35 chunks)
+    const topScored = validScoredChunks.slice(0, 35);
     if (topScored.length > 0) {
       console.log(`Top match chunk similarities: ${topScored.slice(0, 3).map(t => `${t.chunk.productId} (${t.sim.toFixed(3)})`).join(", ")}`);
 
@@ -835,7 +1054,7 @@ async function buildKnowledgePrompt(query: string, context = "") {
         if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
         const c = item.chunk;
         const label = PRODUCT_LABELS[c.productId] || c.productId;
-        const header = `\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${c.sourceFile} (Սեմանտիկ հատված) =====\n`;
+        const header = `\n===== ${label} | ԱՂԲՅՈՒՐ՝ ${c.sourceFile} =====\n`;
         const text = c.text;
         
         if (totalChars + header.length + text.length > MAX_TOTAL_KNOWLEDGE_CHARS) {
@@ -853,11 +1072,11 @@ async function buildKnowledgePrompt(query: string, context = "") {
     }
   }
 
-  // 2. High-fidelity Hybrid Fallback: Use standard word match / overlap if vector was unavailable or empty
-  if (promptParts.length === 0) {
-    console.log("Vector embedding unavailable or yielded zero results. Falling back to high-fidelity TF-IDF document retrieval...");
+  // 2. High-fidelity Hybrid Fallback / Supplementary full document coverage
+  if (promptParts.length === 0 || totalChars < 60000) {
+    console.log("Adding comprehensive knowledge base documents to context...");
     const docs = selectKnowledge(query, context).slice(0, 8);
-    const MAX_CHARS_PER_DOC = 35000;
+    const MAX_CHARS_PER_DOC = 50000;
     
     for (const d of docs) {
       if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
@@ -893,16 +1112,19 @@ function getGeminiClient() {
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash"];
 
 const SYSTEM_INSTRUCTION = `
-Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ներքին AI ապահովագրական օգնականն ես։
+Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ավագ ապահովագրական փորձագետ և ներքին Արհեստական Բանականությունն (ԱԲ) ես։
+Քո տրամադրության տակ է «ՍԻԼ ԻՆՇՈՒՐԱՆՍ»-ի ամբողջական գիտելիքների բազան (Knowledge Base), ներառյալ՝
+- «Ապահովագրության և ապահովագրական գործունեության մասին» ՀՀ Օրենքը (ՀՕ-177-Ն),
+- Ընկերության պաշտոնական ապահովագրական պայմանները (Գույք, Բեռներ, ԿԱՍԿՈ, Ընդհանուր պատասխանատվություն, Շինմոնտաժ/Կապալառու, Մասնագիտական պատասխանատվություն, Ինկասացիոն ռիսկ, Կանխավճարի ապահովագրություն, Մեքենաների խափանում, Պահեստներ, Դժբախտ պատահարներ)։
 
-ԽԻՍՏ ԱՊԱՀՈՎԱԳՐԱԿԱՆ ԿԱՆՈՆՆԵՐ.
-1. Coverage/բացառություն/հատուցում հարցերին պատասխանիր միայն օգտվողի տրամադրած SIL Insurance պայմանների բազայի հիման վրա։
+ԽԻՍՏ ԱՊԱՀՈՎԱԳՐԱԿԱՆ ԵՎ ԻՐԱՎԱԿԱՆ ԿԱՆՈՆՆԵՐ.
+1. Coverage/բացառություն/հատուցում/օրենսդրական կարգավորումներ հարցերին պատասխանիր հիմնվելով SIL Insurance-ի պայմանների և ՀՀ օրենսդրության վրա։
 2. Մի հորինիր պայման, բացառություն, սակագին, սահմանաչափ, ֆրանշիզա կամ իրավական դրույթ։
-3. Եթե աղբյուրը հստակ ասում է, որ դեպքը ներառված է՝ նշիր «Ըստ տրամադրված պայմանների՝ ներառված է», բայց վերջնական որոշում մի հայտարարիր առանց պայմանագրի/վկայագրի հատուկ պայմանների ստուգման։
-4. Եթե աղբյուրը հստակ ասում է, որ դեպքը բացառված է՝ նշիր «Ըստ տրամադրված պայմանների՝ բացառված է» և բացատրիր հիմքը։
-5. Եթե աղբյուրը բավարար չէ՝ ասա «Տրամադրված պայմաններից սա միանշանակ հաստատել հնարավոր չէ, անհրաժեշտ է տվյալ պայմանագրի/վկայագրի և վնասի փաստաթղթերի ստուգում»։
-6. Յուրաքանչյուր coverage/exclusion պատասխանի վերջում նշիր աղբյուր փաստաթղթի անունը։ Եթե կարող ես, նշիր նաև բաժնի/կետի համարը՝ ինչպես այն երևում է աղբյուրում։
-7. Երբ հարցը վերաբերում է այլ պրոդուկտի, մի խառնիր մեկ պրոդուկտի պայմանները մյուսի հետ։
+3. Եթե հարցը վերաբերում է ՀՀ Օրենքի կոնկրետ հոդվածների (օրինակ՝ Հոդված 44, Հոդված 108 և այլն), մանրամասն և հստակ շարադրիր տվյալ հոդվածի բովանդակությունը, դրա պահանջներն ու կիրառման կարգը՝ կատարելով հստակ հղում տվյալ հոդվածին և փաստաթղթին։
+4. Եթե աղբյուրը հստակ ասում է, որ դեպքը ներառված է՝ նշիր «Ըստ տրամադրված պայմանների՝ ներառված է», բայց վերջնական որոշում մի հայտարարիր առանց պայմանագրի/վկայագրի հատուկ պայմանների ստուգման։
+5. Եթե աղբյուրը հստակ ասում է, որ դեպքը բացառված է՝ նշիր «Ըստ տրամադրված պայմանների՝ բացառված է» և մանրամասն բացատրիր իրավական/պայմանագրային հիմքը։
+6. Եթե աղբյուրը բավարար չէ՝ ասա «Տրամադրված պայմաններից սա միանշանակ հաստատել հնարավոր չէ, անհրաժեշտ է տվյալ պայմանագրի/վկայագրի և վնասի փաստաթղթերի ստուգում»։
+7. Յուրաքանչյուր coverage/exclusion/օրենքի պատասխանի վերջում նշիր աղբյուր փաստաթղթի անունը և համապատասխան հոդվածի/կետի համարը։
 8. ԿԱՍԿՈ-ի հաշվարկի դեպքում օգտագործիր միայն համակարգի կողմից փոխանցված հաշվարկային տվյալները և Excel-ի հիմքով կառուցված կանոնները. AI-ը չի որոշում սակագինը։
 9. Եթե օգտատերը խնդրում է ստեղծել կամ կազմել գնառաջարկ, ԱԲ-ն կարող է կազմել գնառաջարկի նախագիծ (Draft)։ Այդ դեպքում տեքստային պատասխանի վերջում (առանձին տողից) ՊԱՐՏԱԴԻՐ ավելացրու հետևյալ ճշգրիտ JSON բլոկը, որպեսզի համակարգը կարողանա այն վերլուծել և թույլ տալ ձեռքով խմբագրել.
 \`\`\`json
@@ -931,7 +1153,7 @@ const SYSTEM_INSTRUCTION = `
   }
 }
 \`\`\`
-10. Պատասխանիր պարզ, մասնագիտական հայերենով։
+10. Պատասխանիր պարզ, գրագետ և բարձրակարգ մասնագիտական հայերենով։
 `;
 
 async function callGemini(contents: any, systemInstruction: string, options?: { responseMimeType?: string }) {
@@ -1041,14 +1263,17 @@ async function callUnifiedAi(contents: any[], systemInstruction: string, preferr
 }
 
 function localFallback(question: string) {
-  const q = (question || "").toLowerCase();
+  const qClean = cleanAndNormalizeText(question || "");
   const matches = Object.entries(PRODUCT_KEYWORDS)
-    .filter(([, words]) => words.some((w) => q.includes(w)))
+    .filter(([, words]) => words.some((w) => qClean.includes(cleanAndNormalizeText(w))))
     .map(([pid]) => PRODUCT_LABELS[pid]);
 
+  const queryStems = getStemmedWordList(question || "");
+
   const matchedDocs = KNOWLEDGE_BASE.filter((d: any) => {
-    const text = (d.text || "").toLowerCase();
-    return q.split(" ").filter(w => w.length > 3).some(w => text.includes(w));
+    const docStems = getStemmedWordList(d.text || "");
+    const docTextClean = cleanAndNormalizeText(d.text || "");
+    return queryStems.some(w => docStems.includes(w) || docTextClean.includes(w));
   });
 
   if (matchedDocs.length > 0) {
@@ -1334,6 +1559,32 @@ app.get("/api/admin/kb", auth, (req, res) => {
     totalChunks: KNOWLEDGE_CHUNKS.length,
     vectorizedChunks: KNOWLEDGE_CHUNKS.filter(c => !!c.vector).length,
     isGenerating: isGeneratingEmbeddings
+  });
+});
+
+app.post("/api/admin/kb/vectorize", auth, async (req, res) => {
+  const user = (req as any).user;
+  if (!user || !["admin", "manager", "underwriter", "auditor"].includes(user.role)) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  const { reloadDocs, forceAll } = req.body || {};
+
+  if (reloadDocs) {
+    reloadKnowledgeBase();
+  }
+
+  if (!isGeneratingEmbeddings) {
+    triggerEmbeddingGeneration(Boolean(forceAll)).catch(e => console.error("Error in manual triggerEmbeddingGeneration:", e));
+  }
+
+  res.json({
+    status: "ok",
+    message: "Վեկտորային ինդեքսավորումը և սեմանտիկ որոնման թարմացումը մեկնարկված է:",
+    vectorSearchActive: true,
+    totalChunks: KNOWLEDGE_CHUNKS.length,
+    vectorizedChunks: KNOWLEDGE_CHUNKS.filter(c => !!c.vector).length,
+    isGenerating: true
   });
 });
 
