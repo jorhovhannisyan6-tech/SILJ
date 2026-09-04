@@ -21,8 +21,23 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // DOCX template mappings
+    // DOCX quotation template mappings
     match /docx_template_mappings/{mappingId} {
+      allow read, write: if true;
+    }
+
+    // DOCX contract template mappings
+    match /docx_contract_mappings/{mappingId} {
+      allow read, write: if true;
+    }
+
+    // DOCX quotation templates metadata
+    match /docx_templates_meta/{metaId} {
+      allow read, write: if true;
+    }
+
+    // DOCX contract templates metadata
+    match /docx_contract_templates_meta/{metaId} {
       allow read, write: if true;
     }
 

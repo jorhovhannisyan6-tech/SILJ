@@ -1332,9 +1332,11 @@ async function callGeminiOcr(imageBase64: string, mimeType: string, docType: str
 
   const effectiveMime = mimeType || "image/jpeg";
   const isTech = docType === "tech_passport";
+  const isDriverLicense = docType === "driver_license";
 
-  const prompt = isTech
-    ? `You are an expert Armenian OCR parser for Vehicle Registration Certificates (Տեխնիկական Անձնագիր / Տեխպասպորտ) and vehicle documents.
+  let prompt = "";
+  if (isTech) {
+    prompt = `You are an expert Armenian OCR parser for Vehicle Registration Certificates (Տեխնիկական Անձնագիր / Տեխպասպորտ) and vehicle documents.
 Examine the attached image or document very carefully and extract all actual, visible information into a valid raw JSON object.
 Format requirements: Return ONLY a valid JSON object without any additional markdown text or explanations.
 JSON schema:
@@ -1342,17 +1344,34 @@ JSON schema:
   "documentType": "tech_passport",
   "vehicleMake": "Extracted vehicle make in English/Armenian (e.g., Toyota, Mercedes-Benz, BMW, Hyundai)",
   "vehicleModel": "Extracted vehicle model (e.g., Camry, E 200, X5, Elantra)",
-  "manufactureYear": 2020 (integer year if found, else null),
+  "manufactureYear": 2020,
   "vinCode": "Extracted VIN or chassis number",
   "plateNumber": "Extracted registration plate number",
   "ownerName": "Extracted owner full name in Armenian or English",
-  "enginePowerHp": 150 (integer horsepower if found, else null),
-  "fuelType": "gasoline" | "diesel" | "hybrid" | "electric" | "gas_lpg" (extracted or inferred engine/fuel type),
+  "enginePowerHp": 150,
+  "fuelType": "gasoline" | "diesel" | "hybrid" | "electric" | "gas_lpg",
   "color": "Extracted vehicle color in Armenian",
   "techPassportNumber": "Extracted certificate number e.g. TP123456",
   "confidenceScore": 95
-}`
-    : `You are an expert Armenian OCR parser for Passports and ID Cards (Անձնագիր / Նույնականացման քարտ).
+}`;
+  } else if (isDriverLicense) {
+    prompt = `You are an expert Armenian OCR parser for Driver's Licenses (Վարորդական Վկայական / Վարորդական Իրավունք).
+Examine the attached image or document very carefully and extract all driver and license information into a valid raw JSON object.
+Format requirements: Return ONLY a valid JSON object without any additional markdown text or explanations.
+JSON schema:
+{
+  "documentType": "driver_license",
+  "driverName": "Extracted driver full name in Armenian/English",
+  "licenseNumber": "Extracted driver license number (e.g. DL123456)",
+  "birthDate": "YYYY-MM-DD",
+  "driverAge": 32,
+  "issueYear": 2016,
+  "experienceYears": 10,
+  "categories": ["B", "C"],
+  "confidenceScore": 96
+}`;
+  } else {
+    prompt = `You are an expert Armenian OCR parser for Passports and ID Cards (Անձնագիր / Նույնականացման քարտ).
 Examine the attached image or document very carefully and extract all actual, visible information into a valid raw JSON object.
 Format requirements: Return ONLY a valid JSON object without any additional markdown text or explanations.
 JSON schema:
@@ -1364,6 +1383,7 @@ JSON schema:
   "address": "Extracted registered residential address in Armenian",
   "confidenceScore": 95
 }`;
+  }
 
   if (process.env.GEMINI_API_KEY) {
     for (const model of GEMINI_MODELS) {
@@ -1486,6 +1506,21 @@ app.post("/api/ai/ocr-scan", optionalAuth, async (req: any, res: any) => {
           fuelType: model.toLowerCase().includes("ev") || model.toLowerCase().includes("leaf") ? "electric" : model.toLowerCase().includes("hybrid") ? "hybrid" : "gasoline",
           color: "Սպիտակ մետալիկ",
           techPassportNumber: `TP-${Math.floor(100000 + Math.random() * 899999)}`,
+          confidenceScore: 98,
+        },
+      });
+    } else if (docType === "driver_license") {
+      return res.json({
+        status: "ok",
+        data: {
+          documentType: "driver_license",
+          driverName: "Արմեն Կարապետյան",
+          licenseNumber: `DL${Math.floor(100000 + Math.random() * 899999)}`,
+          birthDate: "1992-05-14",
+          driverAge: 32,
+          issueYear: 2014,
+          experienceYears: 10,
+          categories: ["B", "BC"],
           confidenceScore: 98,
         },
       });
@@ -2791,6 +2826,11 @@ app.post("/api/email/send", auth, async (req: any, res: any) => {
   addServerAudit("email.sent", req.user.id, { to, subject });
 
   res.json({ status: "ok", message: "Email sent successfully" });
+});
+
+// JSON fallback for unknown API endpoints - prevents serving HTML index.html to fetch calls
+app.use("/api", (req: any, res: any) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
 });
 
 // -------------------- Static frontend & dev middleware --------------------

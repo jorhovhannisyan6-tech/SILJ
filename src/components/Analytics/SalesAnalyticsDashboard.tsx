@@ -13,6 +13,7 @@ import {
   PieChart as PieIcon,
   Layers,
   Calendar,
+  Printer,
 } from "lucide-react";
 import {
   BarChart,
@@ -103,21 +104,45 @@ export const SalesAnalyticsDashboard: React.FC<Props> = ({ quoteHistory }) => {
   }, [quoteHistory]);
 
   const exportReport = () => {
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      "Ցուցանիշ,Արժեք\n" +
-      `Ընդհանուր գնառաջարկներ,${analyticsData.totalCount}\n` +
-      `Կնքված պայմանագրեր,${analyticsData.acceptedCount}\n` +
-      `Կոնվերսիայի տոկոս,${analyticsData.conversionRate}%\n` +
-      `Ընդհանուր Ապահովագրավճար (AMD),${analyticsData.totalVolumeAmd} ֏\n` +
-      `Միջին պայմանագրի արժեք,${analyticsData.avgTicket} ֏\n`;
-    const encodedUri = encodeURI(csvContent);
+    let csv = "\uFEFF"; // UTF-8 BOM for Excel Armenian text support
+    csv += "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ — ԳՈՐԾԱԴԻՐ ԱՄՓՈՓ ՀԱՇՎԵՏՎՈՒԹՅՈՒՆ\n";
+    csv += `Ամսաթիվ,${new Date().toLocaleDateString("hy-AM")}\n\n`;
+
+    csv += "--- ՀԻՄՆԱԿԱՆ ԳՈՐԾԱՌՆԱԿԱՆ KPI-ՆԵՐ ---\n";
+    csv += "Ցուցանիշ,Արժեք\n";
+    csv += `Ընդհանուր գնառաջարկներ (հատ),${analyticsData.totalCount}\n`;
+    csv += `Կնքված պայմանագրեր (հատ),${analyticsData.acceptedCount}\n`;
+    csv += `Կոնվերսիայի տոկոս (Conversion Rate),${analyticsData.conversionRate}%\n`;
+    csv += `Ընդհանուր Հավաքագրված Ապահովագրավճար (AMD),${analyticsData.totalVolumeAmd.toLocaleString()} ֏\n`;
+    csv += `Միջին չեկ (Average Ticket),${analyticsData.avgTicket.toLocaleString()} ֏\n\n`;
+
+    csv += "--- ԳՈՐԾԱԿԱԼԱԿԱՆ LEADERBOARD & PERFORMANCE ---\n";
+    csv += "Վարկանիշ,Գործակալ,Գնառաջարկներ,Կնքված,Կոնվերսիա,Ծավալ (AMD)\n";
+    analyticsData.agents.forEach((a) => {
+      csv += `#${a.rank},"${a.name}",${a.quotes},${a.accepted},${a.conversion}%,"${a.volume.toLocaleString()} ֏"\n`;
+    });
+
+    if (quoteHistory && quoteHistory.length > 0) {
+      csv += "\n--- ԳՆԱՌԱՋԱՐԿՆԵՐԻ ՄԱՆՐԱՄԱՍՆ ԳՈՒՅՔԱՑՈՒՑԱԿ ---\n";
+      csv += "Համար,Ամսաթիվ,Հաճախորդ,Պրոդուկտ,Գործակալ,Ապահովագրական Գումար,Ապահովագրավճար,Կարգավիճակ,Ռիսկի Միավոր\n";
+      quoteHistory.forEach((q) => {
+        csv += `"${q.quoteNumber || q.quotationNumber || q.id}","${q.createdAt ? new Date(q.createdAt).toLocaleDateString('hy-AM') : ''}","${q.clientName}","${q.productNameArm}","${q.agentName}","${q.totalSumInsured || 0}","${q.annualPremium || 0}","${q.status}","${q.riskScore || 'N/A'}"\n`;
+      });
+    }
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `SIL_Sales_Analytics_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.href = url;
+    link.setAttribute("download", `SIL_Insurance_KPI_Report_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPdf = () => {
+    window.print();
   };
 
   return (
@@ -165,9 +190,18 @@ export const SalesAnalyticsDashboard: React.FC<Props> = ({ quoteHistory }) => {
 
           <button
             onClick={exportReport}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all"
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+            title="Արտահանել բոլոր ցուցանիշները և գնառաջարկների ցուցակը Excel/CSV"
           >
-            <Download size={15} /> Արտահանել CSV
+            <Download size={15} /> Արտահանել CSV (Excel)
+          </button>
+
+          <button
+            onClick={handlePrintPdf}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+            title="Տպել կամ պահպանել որպես PDF հաշվետվություն ղեկավարության համար"
+          >
+            <Printer size={15} /> Տպել / PDF Հաշվետվություն
           </button>
         </div>
       </div>

@@ -67,11 +67,16 @@ export default function App() {
         }, newToast.duration);
       }
     };
+    const handleAuthChanged = () => {
+      setUser(getCurrentUser());
+    };
     window.addEventListener("sil-new-lead", handleNewLead);
     window.addEventListener("sil-notification", handleNotification);
+    window.addEventListener("sil-auth-changed", handleAuthChanged);
     return () => {
       window.removeEventListener("sil-new-lead", handleNewLead);
       window.removeEventListener("sil-notification", handleNotification);
+      window.removeEventListener("sil-auth-changed", handleAuthChanged);
     };
   }, []);
 

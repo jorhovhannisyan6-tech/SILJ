@@ -261,7 +261,7 @@ export function SmartOperations({ quotes, forcedTab }: { quotes: QuotationPropos
         const data = await res.json();
         setBotMessage("✅ " + (data.message || "Պահպանվեց։"));
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         setBotMessage("❌ " + (err.error || "Չհաջողվեց պահպանել։"));
       }
     } catch {

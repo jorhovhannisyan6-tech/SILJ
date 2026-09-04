@@ -3,7 +3,7 @@ import { Camera, Upload, FileText, CheckCircle2, AlertCircle, RefreshCw, Car, Us
 import { inferFuelTypeFromModel, type FuelType } from "../utils/cascoValuationEngine";
 
 export interface ExtractedTechPassportData {
-  documentType: "tech_passport" | "passport_id" | "property_certificate" | "general_contract";
+  documentType: "tech_passport" | "passport_id" | "driver_license" | "property_certificate" | "general_contract";
   vehicleMake?: string;
   vehicleModel?: string;
   manufactureYear?: number;
@@ -15,6 +15,9 @@ export interface ExtractedTechPassportData {
   color?: string;
   techPassportNumber?: string;
   passportNumber?: string;
+  licenseNumber?: string;
+  driverAge?: number;
+  experienceYears?: number;
   ssn?: string;
   address?: string;
   propertyAreaSqm?: number;
@@ -33,7 +36,7 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedTechPassportData | null>(null);
-  const [docType, setDocType] = useState<"tech_passport" | "passport_id" | "property_certificate" | "general_contract">("tech_passport");
+  const [docType, setDocType] = useState<"tech_passport" | "passport_id" | "driver_license" | "property_certificate" | "general_contract">("tech_passport");
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,7 +110,7 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
     }
   };
 
-  const generateSmartOcrResult = (type: "tech_passport" | "passport_id" | "property_certificate" | "general_contract"): ExtractedTechPassportData => {
+  const generateSmartOcrResult = (type: "tech_passport" | "passport_id" | "property_certificate" | "driver_license" | "general_contract"): ExtractedTechPassportData => {
     if (type === "tech_passport") {
       const makes = ["Toyota", "Mercedes-Benz", "BMW", "Hyundai", "Kia", "Nissan"];
       const models: Record<string, string[]> = {
@@ -154,6 +157,16 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
         ssn: `2805${Math.floor(10000 + Math.random() * 89999)}`,
         passportNumber: `AN${Math.floor(100000 + Math.random() * 899999)}`,
         confidenceScore: 99,
+      };
+    } else if (type === "driver_license") {
+      return {
+        documentType: "driver_license",
+        ownerName: "Արմեն Կարապետյան",
+        licenseNumber: `DL${Math.floor(100000 + Math.random() * 899999)}`,
+        driverAge: 34,
+        experienceYears: 12,
+        address: "ք. Երևան, Ավան, Խուդյակովի փ. 45",
+        confidenceScore: 98,
       };
     } else if (type === "general_contract") {
       return {
@@ -223,22 +236,33 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
       </div>
 
       {/* Doc type selector grid for ALL products */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
         <button
           type="button"
           onClick={() => { setDocType("tech_passport"); setExtractedData(null); }}
-          className={`flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
             docType === "tech_passport"
               ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20"
               : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800"
           }`}
         >
-          <Car size={16} /> <span>Տեխանձնագիր (CASCO)</span>
+          <Car size={16} /> <span>Տեխպասպորտ</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setDocType("driver_license"); setExtractedData(null); }}
+          className={`flex flex-col items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
+            docType === "driver_license"
+              ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20"
+              : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800"
+          }`}
+        >
+          <UserCheck size={16} /> <span>Վարորդական</span>
         </button>
         <button
           type="button"
           onClick={() => { setDocType("passport_id"); setExtractedData(null); }}
-          className={`flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
             docType === "passport_id"
               ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20"
               : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800"
@@ -249,7 +273,7 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
         <button
           type="button"
           onClick={() => { setDocType("property_certificate"); setExtractedData(null); }}
-          className={`flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
             docType === "property_certificate"
               ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20"
               : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800"
@@ -260,13 +284,13 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
         <button
           type="button"
           onClick={() => { setDocType("general_contract"); setExtractedData(null); }}
-          className={`flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center gap-1 py-2 px-1.5 rounded-xl border text-[10px] font-bold transition-all cursor-pointer ${
             docType === "general_contract"
               ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20"
               : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-800"
           }`}
         >
-          <Shield size={16} /> <span>Բիզնես / Բեռ / Այլ</span>
+          <Shield size={16} /> <span>Բիզնես / Բեռ</span>
         </button>
       </div>
 
@@ -356,6 +380,25 @@ export const AiDocumentScanner: React.FC<Props> = ({ onAutoFill, onDataExtracted
               <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700">
                 <span className="text-slate-400 block text-[10px]">Շարժիչի հզորություն</span>
                 <strong className="text-slate-200">{extractedData.enginePowerHp} ձ․ու․</strong>
+              </div>
+            </div>
+          ) : extractedData.documentType === "driver_license" ? (
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700 col-span-2">
+                <span className="text-slate-400 block text-[10px]">Վարորդի Անուն Ազգանուն</span>
+                <strong className="text-white text-sm">{extractedData.ownerName}</strong>
+              </div>
+              <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700">
+                <span className="text-slate-400 block text-[10px]">Վկայականի Համար</span>
+                <strong className="text-blue-300 font-mono text-sm">{extractedData.licenseNumber || "DL982341"}</strong>
+              </div>
+              <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700">
+                <span className="text-slate-400 block text-[10px]">Վարորդական Փորձ / Տարիք</span>
+                <strong className="text-emerald-300">{extractedData.experienceYears || 10} տարի ({extractedData.driverAge || 32} տ․)</strong>
+              </div>
+              <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700 col-span-2">
+                <span className="text-slate-400 block text-[10px]">Գրանցման Հասցե</span>
+                <strong className="text-slate-200">{extractedData.address || "ք. Երևան"}</strong>
               </div>
             </div>
           ) : extractedData.documentType === "property_certificate" ? (

@@ -13,7 +13,10 @@ import { validateQuotationProposal } from "../../utils/quoteValidation";
 import { TierComparisonModal } from "./TierComparisonModal";
 import { RiskScoringPanel } from "./RiskScoringPanel";
 import { ContractGenerationModal } from "./ContractGenerationModal";
-import { notifySuccess, notifyError, notifyWarning } from "../../utils/notification";
+import { CompetitorBenchmarkingModal } from "./CompetitorBenchmarkingModal";
+import { ClientApprovalModal } from "./ClientApprovalModal";
+import { notifySuccess, notifyError, notifyWarning, notifyInfo } from "../../utils/notification";
+import { getCurrentUser, can } from "../../utils/authStore";
 import {
   Copy,
   Download,
@@ -80,6 +83,8 @@ function FilledQuotationView({
   const [pdfError, setPdfError] = useState("");
   const [tierModalOpen, setTierModalOpen] = useState(false);
   const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [benchmarkingModalOpen, setBenchmarkingModalOpen] = useState(false);
+  const [clientApprovalModalOpen, setClientApprovalModalOpen] = useState(false);
   const [policyIssuedMessage, setPolicyIssuedMessage] = useState("");
   const [scenarios, setScenarios] = useState<QuoteScenario[]>(() => getScenarios().filter(s => s.proposalId === proposal.id));
   const locked = proposal.status === "locked" || proposal.status === "policy_issued";
@@ -95,6 +100,12 @@ function FilledQuotationView({
   const [translating, setTranslating] = useState(false);
   const [translationError, setTranslationError] = useState("");
   const [isManualEditing, setIsManualEditing] = useState(false);
+
+  const currentUser = getCurrentUser();
+  const canApprove = can(currentUser, "approvals");
+  const isHighRisk = (proposal.riskScore && proposal.riskScore >= 65) || proposal.totalSumInsured >= 25000000;
+  const isPendingUnderwriter = proposal.status === "pending_underwriter";
+  const requiresUnderwriterApproval = isHighRisk && !canApprove;
 
   const currentProposal = translatedProposals[selectedLang] || proposal;
 
@@ -317,6 +328,24 @@ function FilledQuotationView({
             </button>
           )}
 
+          {/* 🔗 INTERACTIVE CLIENT APPROVAL LINK */}
+          <button
+            onClick={() => setClientApprovalModalOpen(true)}
+            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg transition cursor-pointer active:scale-95 ring-2 ring-blue-400/40"
+          >
+            <Send className="w-4 h-4 text-cyan-200" />
+            🔗 Հաճախորդի Հղում / Հաստատում
+          </button>
+
+          {/* ⚖️ COMPETITOR BENCHMARKING */}
+          <button
+            onClick={() => setBenchmarkingModalOpen(true)}
+            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg transition cursor-pointer active:scale-95 ring-2 ring-amber-400/40"
+          >
+            <Scale className="w-4 h-4 text-amber-100" />
+            ⚖️ Մրցակիցների Համեմատություն
+          </button>
+
           {/* 📜 CONTRACT GENERATION BUTTON */}
           <button
             onClick={() => setContractModalOpen(true)}
@@ -396,14 +425,67 @@ function FilledQuotationView({
           </button>
 
           {!locked && (
-            <button
-              disabled={validationErrors.length > 0}
-              onClick={() => onUpdateProposal({ ...proposal, status: "locked", lockedAt: new Date().toISOString(), lockedBy: proposal.agentName })}
-              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold px-3 py-2 rounded-xl transition"
-            >
-              <Check className="w-4 h-4" />
-              Հաստատել և փակել
-            </button>
+            <>
+              {isPendingUnderwriter ? (
+                canApprove ? (
+                  <button
+                    disabled={validationErrors.length > 0}
+                    onClick={() => {
+                      onUpdateProposal({
+                        ...proposal,
+                        status: "locked",
+                        lockedAt: new Date().toISOString(),
+                        lockedBy: `${currentUser.name} (Անդեռռայթեր)`,
+                        internalNotes: `${proposal.internalNotes || ""}\n[Անդեռռայթինգի Հաստատում]: Հաստատված է ${currentUser.name}-ի կողմից ${new Date().toLocaleDateString("hy-AM")}-ին:`,
+                      });
+                      notifySuccess("Գնառաջարկը հաջողությամբ հաստատվեց անդեռռայթերի կողմից:");
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-lg ring-2 ring-emerald-400/50 transition cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 text-emerald-200" />
+                    ✓ Հաստատել որպես Անդեռռայթեր
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl">
+                    <ShieldAlert className="w-4 h-4 text-amber-400 animate-pulse" />
+                    Սպասում է Անդեռռայթերի Հաստատմանը
+                  </div>
+                )
+              ) : requiresUnderwriterApproval ? (
+                <button
+                  onClick={() => {
+                    onUpdateProposal({
+                      ...proposal,
+                      status: "pending_underwriter",
+                      internalNotes: `${proposal.internalNotes || ""}\n[Անդեռռայթինգի Հարցում]: Գործակալ ${currentUser.name}-ը ուղարկել է հաստատման (Ռիսկը՝ ${proposal.riskScore || 'բարձր'}, գումարը՝ ${proposal.totalSumInsured.toLocaleString()} ֏):`,
+                    });
+                    notifyWarning("Բարձր ռիսկային հայտ: Հայտն ուղարկվեց գլխավոր անդեռռայթերի հաստատմանը:");
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-md ring-2 ring-amber-400/40 transition cursor-pointer"
+                  title="Բարձր ռիսկի դեպքում գործակալը չի կարող ինքնուրույն հաստատել"
+                >
+                  <ShieldAlert className="w-4 h-4 text-amber-200" />
+                  Ուղարկել Անդեռռայթերին (RBAC)
+                </button>
+              ) : (
+                <button
+                  disabled={validationErrors.length > 0}
+                  onClick={() => {
+                    onUpdateProposal({
+                      ...proposal,
+                      status: "locked",
+                      lockedAt: new Date().toISOString(),
+                      lockedBy: proposal.agentName || currentUser.name,
+                    });
+                    notifySuccess("Գնառաջարկը հաստատվեց և փակվեց:");
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold px-3 py-2 rounded-xl transition cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  Հաստատել և փակել
+                </button>
+              )}
+            </>
           )}
 
           <button onClick={handleSaveScenario} className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-xl border border-white/20">
@@ -873,6 +955,22 @@ function FilledQuotationView({
           };
           onUpdateProposal(updated);
           setPolicyIssuedMessage(`🎉 Պայմանագիր N ${contractData.contractNumber} հաջողությամբ կազմվեց և ապահովագրական վկայագիրը տրամադրվեց:`);
+        }}
+      />
+
+      <CompetitorBenchmarkingModal
+        isOpen={benchmarkingModalOpen}
+        onClose={() => setBenchmarkingModalOpen(false)}
+        proposal={proposal}
+      />
+
+      <ClientApprovalModal
+        isOpen={clientApprovalModalOpen}
+        onClose={() => setClientApprovalModalOpen(false)}
+        proposal={proposal}
+        onProposalAccepted={(updatedProposal) => {
+          onUpdateProposal(updatedProposal);
+          notifySuccess("Գնառաջարկը հաստատվել է հաճախորդի կողմից");
         }}
       />
 

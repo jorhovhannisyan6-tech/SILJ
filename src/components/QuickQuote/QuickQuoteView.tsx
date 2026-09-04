@@ -26,6 +26,7 @@ import { getQuotationRules } from "../../utils/rulesStore";
 import { evaluateQuoteInput } from "../../utils/quotationEngine";
 import { formatCurrency } from "../../utils/insuranceCalculator";
 import { CascoCalculator } from "./CascoCalculator";
+import { BundleCrossSellCalculator } from "./BundleCrossSellCalculator";
 import { ListAmPropertyValuationCalculator } from "../Property/ListAmPropertyValuationCalculator";
 import { ProductSpecificStep2Form } from "./ProductForms";
 import { AiDocumentScanner } from "../AiDocumentScanner";
@@ -36,7 +37,9 @@ interface Props {
 }
 
 export function QuickQuoteView({ onGenerateQuotation, initialProduct }: Props) {
-  const [mode, setMode] = useState<"generic" | "casco">(initialProduct === "casco" ? "casco" : "generic");
+  const [mode, setMode] = useState<"generic" | "casco" | "bundle">(
+    initialProduct === "casco" ? "casco" : initialProduct === "bundle" ? "bundle" : "generic"
+  );
 
   if (mode === "casco") {
     return (
@@ -47,10 +50,20 @@ export function QuickQuoteView({ onGenerateQuotation, initialProduct }: Props) {
     );
   }
 
+  if (mode === "bundle") {
+    return (
+      <BundleCrossSellCalculator
+        onGenerateQuotation={onGenerateQuotation}
+        onBackToSingle={() => setMode("generic")}
+      />
+    );
+  }
+
   return (
     <GenericQuickQuoteView
       onGenerateQuotation={onGenerateQuotation}
       onChooseCasco={() => setMode("casco")}
+      onChooseBundle={() => setMode("bundle")}
       initialProduct={initialProduct}
     />
   );
@@ -59,8 +72,9 @@ export function QuickQuoteView({ onGenerateQuotation, initialProduct }: Props) {
 function GenericQuickQuoteView({
   onGenerateQuotation,
   onChooseCasco,
+  onChooseBundle,
   initialProduct,
-}: Props & { onChooseCasco: () => void }) {
+}: Props & { onChooseCasco: () => void; onChooseBundle: () => void }) {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [stepErrors, setStepErrors] = useState<string[]>([]);
   const [attemptedNext, setAttemptedNext] = useState(false);
@@ -663,14 +677,24 @@ function GenericQuickQuoteView({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowOcrModal(true)}
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer self-start sm:self-auto"
-                >
-                  <Camera size={16} />
-                  <span>AI Scanner / OCR (Ավտոմատ լրացում)</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={onChooseBundle}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    <Zap size={16} />
+                    <span>Փաթեթային Խաչաձև Վաճառք (Cross-Sell)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrModal(true)}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition cursor-pointer"
+                  >
+                    <Camera size={16} />
+                    <span>AI Scanner / OCR</span>
+                  </button>
+                </div>
               </div>
 
               {showOcrModal && (
@@ -751,6 +775,10 @@ function GenericQuickQuoteView({
                         const product = e.target.value as InsuranceProductType;
                         if (product === "casco") {
                           onChooseCasco();
+                          return;
+                        }
+                        if (product === "bundle") {
+                          onChooseBundle();
                           return;
                         }
                         const nextRule = getQuotationRules()[product] || getQuotationRules().property;

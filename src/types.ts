@@ -430,6 +430,8 @@ export interface CascoSectionBreakdownItem {
 export interface QuotationProposal {
   id: string;
   quotationNumber: string;
+  quoteNumber?: string;
+  riskScore?: number;
   type: InsuranceProductType;
   productNameArm: string;
   categoryNameArm: string;

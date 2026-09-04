@@ -144,7 +144,12 @@ export const ProductTemplateMapper: React.FC<Props> = ({ token }) => {
       }
 
       // Load product-specific version history from localStorage
-      const cachedHistory = JSON.parse(localStorage.getItem(`sil-tmpl-history-${kind}-${productId}`) || "[]");
+      let cachedHistory = [];
+      try {
+        cachedHistory = JSON.parse(localStorage.getItem(`sil-tmpl-history-${kind}-${productId}`) || "[]");
+      } catch {
+        cachedHistory = [];
+      }
       setVersionHistory(cachedHistory);
 
       // Load initial dry run mock data for this product

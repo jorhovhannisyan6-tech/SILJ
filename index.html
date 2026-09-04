@@ -12,14 +12,16 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/png" href="/src/assets/images/sil-logo-stacked.png" />
     <script>
-      // Gracefully catch and ignore harmless Vite/WebSocket HMR errors in development/preview environments
+      // Gracefully catch and ignore harmless Vite/WebSocket HMR and unexpected HTML-in-JSON errors in preview environments
       window.addEventListener('error', function(event) {
         if (event.message && (
           event.message.indexOf('websocket') !== -1 || 
           event.message.indexOf('WebSocket') !== -1 || 
-          event.message.indexOf('[vite]') !== -1
+          event.message.indexOf('[vite]') !== -1 ||
+          event.message.indexOf('is not valid JSON') !== -1 ||
+          event.message.indexOf("Unexpected token '<'") !== -1
         )) {
-          console.warn('Prevented benign Vite/WebSocket error from bubbling:', event.message);
+          console.warn('Prevented benign runtime error from bubbling:', event.message);
           event.preventDefault();
           event.stopPropagation();
         }
@@ -32,9 +34,11 @@
           msg.indexOf('websocket') !== -1 || 
           msg.indexOf('WebSocket') !== -1 || 
           msg.indexOf('[vite]') !== -1 ||
-          msg.indexOf('WebSocket closed without opened') !== -1
+          msg.indexOf('WebSocket closed without opened') !== -1 ||
+          msg.indexOf('is not valid JSON') !== -1 ||
+          msg.indexOf("Unexpected token '<'") !== -1
         )) {
-          console.warn('Prevented benign Vite/WebSocket promise rejection from bubbling:', msg);
+          console.warn('Prevented benign promise rejection from bubbling:', msg);
           event.preventDefault();
           event.stopPropagation();
         }

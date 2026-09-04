@@ -50,6 +50,20 @@
       },
       "required": ["productId"]
     },
+    "DocxTemplateMeta": {
+      "title": "DocxTemplateMeta",
+      "description": "DOCX template metadata for quotations and contracts",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "templateType": { "type": "string" },
+        "fileName": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "fileSizeBytes": { "type": "number" }
+      },
+      "required": ["productId", "fileName"]
+    },
     "KnowledgeBaseDoc": {
       "title": "KnowledgeBaseDoc",
       "description": "Synchronized insurance knowledge base documents",
@@ -77,7 +91,19 @@
     },
     "/docx_template_mappings/{mappingId}": {
       "schema": "DocxMapping",
-      "description": "DOCX template mappings collection"
+      "description": "DOCX quotation template mappings collection"
+    },
+    "/docx_contract_mappings/{mappingId}": {
+      "schema": "DocxMapping",
+      "description": "DOCX contract template mappings collection"
+    },
+    "/docx_templates_meta/{metaId}": {
+      "schema": "DocxTemplateMeta",
+      "description": "DOCX quotation templates metadata collection"
+    },
+    "/docx_contract_templates_meta/{metaId}": {
+      "schema": "DocxTemplateMeta",
+      "description": "DOCX contract templates metadata collection"
     },
     "/knowledge_base_docs/{docId}": {
       "schema": "KnowledgeBaseDoc",

@@ -4,6 +4,7 @@ import { SilLogo } from './SilLogo';
 import { setCurrentUser, type PortalUser, type UserRole } from '../utils/authStore';
 import { signInWithGoogle, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { safeFetchJson } from '../utils/apiClient';
 
 export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => void }) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -91,7 +92,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
     setSuccessMsg('');
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const { ok, data, error: apiError } = await safeFetchJson('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,9 +101,8 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Մուտքի սխալ');
+      if (!ok || !data) {
+        throw new Error(apiError || 'Մուտքի սխալ');
       }
 
       if (data.token) {
@@ -142,7 +142,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
     setSuccessMsg('');
 
     try {
-      const res = await fetch('/api/auth/register', {
+      const { ok, data, error: apiError } = await safeFetchJson('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -154,9 +154,8 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Գրանցման սխալ');
+      if (!ok || !data) {
+        throw new Error(apiError || 'Գրանցման սխալ');
       }
 
       if (data.token && data.user) {
