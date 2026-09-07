@@ -136,6 +136,109 @@ export interface BeneficiaryData {
   notes: string;
 }
 
+export interface CopeAnalysis {
+  construction: {
+    materials: string;
+    loadBearing: string;
+    roofCondition: string;
+    seismicResilience: string;
+    evaluation: string;
+  };
+  occupancy: {
+    purpose: string;
+    fireLoadDensity: "Ցածր" | "Միջին" | "Բարձր";
+    housekeepingRating: string;
+    hazardousMaterials: string;
+    evaluation: string;
+  };
+  protection: {
+    fireDetectionAlarm: string;
+    fireExtinguishers: string;
+    waterLeakSensors: string;
+    intruderSecurity: string;
+    nearestFireStationEta: string;
+    evaluation: string;
+  };
+  exposure: {
+    adjoiningBuildings: string;
+    floodWaterRisk: string;
+    accessForEmergencyVehicles: string;
+    environmentalFactors: string;
+    evaluation: string;
+  };
+}
+
+export interface SurveyLossExpectancy {
+  pmlPercent: number; // Probable Maximum Loss %
+  pmlSummary: string;
+  mflPercent: number; // Maximum Foreseeable Loss %
+  nlePercent: number; // Normal Loss Expectancy %
+}
+
+export interface SurveyCategoryScores {
+  structuralScore: number; // 0-100
+  fireProtectionScore: number; // 0-100
+  utilitiesWaterScore: number; // 0-100
+  securityTheftScore: number; // 0-100
+  exposureNaturalHazardsScore: number; // 0-100
+}
+
+export interface SurveyPhotoEvidenceItem {
+  dataUrl: string;
+  tag: string;
+  observation?: string;
+  riskRating?: "low" | "medium" | "attention" | "excellent";
+}
+
+export interface PropertySurveyReport {
+  id: string;
+  createdAt: string;
+  propertyType: string;
+  detectedPropertyType?: string;
+  detectedPropertyTypeId?: "apartment" | "private_house" | "office" | "retail_store" | "restaurant_cafe" | "warehouse" | "factory_workshop" | "hotel" | "medical_clinic" | "auto_service" | "other_commercial";
+  propertyCategory?: "residential" | "commercial" | "industrial_logistics" | "special";
+  propertyCategoryArm?: string;
+  propertyPurposeConfidence?: number;
+  purposeVisualClues?: string[];
+  functionalSubtype?: string;
+  floorLevelEstimate?: string;
+  buildingStructure: string;
+  buildingStructureId?: string;
+  renovationCondition: string;
+  renovationConditionId: string;
+  qualityScore: number;
+  underwritingScore: number;
+  underwritingRiskLevel: "Ցածր ռիսկ" | "Միջին ռիսկ" | "Բարձր ռիսկ";
+  acceptanceStatus: "ընդունելի" | "պայմանական" | "բարձրացված ռիսկ";
+  recommendedTariffMultiplier: number;
+  recommendedFranchisePercent: number;
+  materialsObserved: string;
+  structuralIntegritySummary: string;
+  utilitiesRiskSummary: string;
+  fireSafetyObserved: string;
+  securityObserved: string;
+  visibleDefects: string;
+  positiveFactors: string[];
+  riskFactors: string[];
+  recommendations: string[];
+  fullNarrativeReport: string;
+  photoThumbnails?: { dataUrl: string; tag?: string }[];
+  photoEvidence?: SurveyPhotoEvidenceItem[];
+  copeAnalysis?: CopeAnalysis;
+  lossExpectancy?: SurveyLossExpectancy;
+  categoryScores?: SurveyCategoryScores;
+  warranties?: {
+    mandatoryPreInception: string[];
+    advisoryImprovement: string[];
+  };
+  signOff?: {
+    surveyorName: string;
+    surveyorTitle: string;
+    chiefUnderwriter: string;
+    inspectionDate: string;
+  };
+}
+
 export interface PropertyInsuranceFormState {
   company: CompanyInfo;
   objectData: ObjectData;
@@ -153,6 +256,7 @@ export interface PropertyInsuranceFormState {
   customTariff?: number;
   customFranchise?: number;
   paymentSchedule?: "single" | "biannual" | "quarterly";
+  surveyReport?: PropertySurveyReport;
 }
 
 // Mortgage Insurance Types

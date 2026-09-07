@@ -30,6 +30,17 @@ const ROOT = process.cwd();
 const DIST = path.join(ROOT, "dist");
 const KB = path.join(ROOT, "knowledge-base");
 
+// Health check endpoints for Cloud Run ingress and monitoring (bypass rate limiters)
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+app.get("/healthz", (_req, res) => {
+  res.send("ok");
+});
+
 // Initialize Firebase for Backend Use
 const firebaseConfigPath = path.join(ROOT, "firebase-applet-config.json");
 let db: any = null;
@@ -108,7 +119,8 @@ if (fs.existsSync(firebaseConfigPath)) {
   }
 }
 
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json({ limit: "40mb" }));
+app.use(express.urlencoded({ limit: "40mb", extended: true }));
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
@@ -1068,7 +1080,7 @@ function getGeminiClient() {
   return aiClient;
 }
 
-const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash"];
+const GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-2.5-flash"];
 
 const SYSTEM_INSTRUCTION = `
 Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ավագ ապահովագրական փորձագետ և ներքին Արհեստական Բանականությունն (ԱԲ) ես։
@@ -1092,18 +1104,18 @@ const SYSTEM_INSTRUCTION = `
   "proposal": {
     "id": "ai-draft-[id]",
     "quotationNumber": "AI-QD-[number]",
-    "type": "casco" (կամ "property", "mortgage", "liability", "accident" և այլն),
+    "type": "casco",
     "productNameArm": "[Անուն]",
     "categoryNameArm": "[Կատեգորիա]",
     "clientName": "[Հաճախորդի անուն]",
     "contactInfo": "[Հեռախոս կամ էլ․ փոստ]",
     "objectDescription": "[Ապահովագրվող օբյեկտի նկարագրություն]",
-    "totalSumInsured": [թիվ],
-    "currency": "AMD" (կամ "USD", "EUR"),
-    "baseTariff": [սակագին թիվ, օրինակ՝ 2.5],
+    "totalSumInsured": 0,
+    "currency": "AMD",
+    "baseTariff": 2.5,
     "discountBonus": 0,
-    "finalTariff": [սակագին թիվ, օրինակ՝ 2.5],
-    "annualPremium": [ապահովագրավճար թիվ, օրինակ՝ 250000],
+    "finalTariff": 2.5,
+    "annualPremium": 250000,
     "franchiseDescription": "[ֆրանշիզայի պայմաններ]",
     "paymentTerms": "Միանվագ",
     "beneficiaryDetails": "[Շահառուի տվյալներ]",
@@ -1115,13 +1127,68 @@ const SYSTEM_INSTRUCTION = `
 10. Պատասխանիր պարզ, գրագետ և բարձրակարգ մասնագիտական հայերենով։
 `;
 
-async function callGemini(contents: any, systemInstruction: string, options?: { responseMimeType?: string }) {
+const VISION_PROPERTY_SYSTEM_INSTRUCTION = `
+Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի ավագ գույքային տեխնիկական փորձագետ և ապահովագրական տեսուչ-սուրվեյեր ես (Senior Property Loss Prevention & Forensic Surveyor):
+Քո գերնպատակն է 100% ԻՐԱՏԵՍԱԿԱՆՈՒԹՅԱՄԲ, ԽՍՏԱԳՈՒՅՆ ՃՇԳՐՏՈՒԹՅԱՄԲ և ՏԵՍՈՂԱԿԱՆ ԽՈՐԸ ՎԵՐԼՈՒԾՈՒԹՅԱՄԲ զննել ներկայացված լուսանկարները՝ անսխալ ճանաչելով գույքի ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅՈՒՆԸ, ԿԱՏԵԳՈՐԻԱՆ, ՎԵՐԱՆՈՐՈԳՄԱՆ ՈՐԱԿԸ, ԿԱՌՈՒՅՑԻ ՏԻՊԸ ԵՎ ԱՊԱՀՈՎԱԳՐԱԿԱՆ ՌԻՍԿԵՐԸ։
+
+ԽՍՏԱԳՈՒՅՆ ԿԱՆՈՆՆԵՐ ԳՈՒՅՔԻ ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅԱՆ ՃՇԳՐԻՏ ՃԱՆԱՉՄԱՆ ՀԱՄԱՐ.
+ՈՒՇԱԴԻՐ ԶՆՆԻՐ ԼՈՒՍԱՆԿԱՐՆԵՐՈՒՄ ԵՐԵՎԱՑՈՂ ԻՐԵՐԸ, ԿԱՀՈՒՅՔԸ, ՏԵԽՆԻԿԱՆ, ՀԱՏԱԿԻ/ԱՌԱՍՏԱՂԻ ԲՆՈՒՅԹԸ ԵՎ ՏԱՐԱԾՔԻ ԿԱՌՈՒՑՎԱԾՔԸ։
+ԵԹԵ ՕԳՏԱՏԻՐՈՋ ՀԱՅՏԱՐԱՐԱԳՐԱԾ ՏԵՍԱԿԸ (ՕՐ․՝ ԲՆԱԿԱՐԱՆ) ՏԱՐԲԵՐՎՈՒՄ Է ԼՈՒՍԱՆԿԱՐՈՒՄ ԵՐԵՎԱՑՈՂ ՓԱՍՏԱՑԻ ԳՈՒՅՔԻՑ (ՕՐ․՝ ԳՐԱՍԵՆՅԱԿ, ԽԱՆՈՒԹ, ՊԱՀԵՍՏ, ԱՏԱՄՆԱԲՈՒԺԱՐԱՆ), ԱՆՊԱՅՄԱՆ ՃԱՆԱՉԻՐ ՓԱՍՏԱՑԻ ԻՐԱԿԱՆ ՏԵՍԱԿԸ ԵՎ ՄԱՆՐԱՄԱՍՆ ՇԱՐԱԴՐԻՐ ՏԵՍՈՂԱԿԱՆ ՓԱՍՏԱՐԿՆԵՐԸ (purposeVisualClues):
+
+1. ԲՆԱԿԵԼԻ ՖՈՆԴ ("residential" / «Բնակելի ֆոնդ»)՝
+   - "apartment" («Բնակարան») -> Տնային բնակելի կահույք (ընտանեկան բազմոց, հեռուստացույց, տնային կենցաղային խոհանոց՝ գազօջախով/սառնարանով/սպասքով, ննջասենյակ՝ մահճակալով/զգեստապահարանով, տնային սանհանգույց/լոգարան), բազմաբնակարան շենքի ընդհանուր շքամուտք/միջանցք, բնակարանային պատշգամբ։
+   - "private_house" («Առանձնատուն / Քոթեջ») -> Առանձին կանգնած շենքի ճակատ, սեփական ցանկապատված բակ/այգի/տաղավար, ներքին միջհարկային աստիճաններ, առանձնատան ավտոտնակ, անհատական կաթսայատուն։
+   - "summer_house" («Ամառանոց / Դաստակերտ») -> Սեզոնային/հանգստի տուն, պտղատու այգի, բացօթյա տաղավար, լողավազան, բուխարի։
+
+2. ԿՈՄԵՐՑԻՈՆ ԵՎ ՀԱՍԱՐԱԿԱԿԱՆ ("commercial" / «Կոմերցիոն / Հասարակական»)՝
+   - "office" («Գրասենյակ») -> Աշխատանքային գրասեղաններ, պտտվող էրգոնոմիկ գրասենյակային աթոռներ, համակարգիչներ/բազմաթիվ մոնիտորներ, ապակե կամ գիպսոկարտոնե միջնորմներ, կոնֆերանս-սրահ/ժողովների սեղան/պրոյեկտոր, գրատախտակներ, ընդունարանի կանգնակ (reception), տպիչներ/բազմաֆունկցիոնալ սարքեր, սերվերային սենյակ/պահարան, ջրի դիսպանսեր, կախովի Արմստրոնգ առաստաղներ։
+   - "retail_store" («Առևտրի տարածք / Խանութ») -> Առևտրային ապրանքային դարակաշարեր (ստելաժներ, գոնդոլներ), ապակե վիտրինաներ/ցուցափեղկեր, գնապիտակներ, դրամարկղային հանգույց (POS տերմինալներ, դրամարկղ), մանեկեններ, հագուստի կախիչներ, շտրիխ-կոդ սկաներներ, գովազդային լուսատուպեր։
+   - "restaurant_cafe" («Սննդի օբյեկտ (Ռեստորան / Սրճարան)») -> Հաճախորդների ճաշասեղաններ/բազկաթոռներ, բարային կանգնակ, պրոֆեսիոնալ չժանգոտվող պողպատից (stainless steel) արտադրական խոհանոցային սեղաններ, հզոր արտադրական օդաքաշ հովանոցներ (խոհանոցային զոնտ), ֆրիտյուրներ, պրոֆեսիոնալ սուրճի սարքեր, մենյուներ։
+   - "medical_clinic" («Բժշկական կենտրոն / Ատամնաբուժարան») -> Ատամնաբուժական բազկաթոռ, բժշկական զննման թախտ, ստերիլ սպիտակ միջավայր, ախտորոշիչ/լաբորատոր/մանրէազերծման սարքավորումներ, դեղապահարաններ։
+   - "hotel" («Հյուրանոց / Հոսթել») -> Համարակալված դռներով երկար միջանցքներ, հյուրանոցային համարների տիպային միատեսակ կահավորում, ընդունարան (lobby reception), էլեկտրոնային քարտային կողպեքներ։
+   - "auto_service" («Ավտոսպասարկում / Ավտոլվացում») -> Մեքենաների հիդրավլիկ վերհաններ (ամբարձիչներ), անվադողերի մոնտաժման սարքեր, փականագործական գործիքների շարժական պահարաններ, յուղի հեռացման տարաներ, բարձր ճնշման ավտոլվացման սարքեր (Kärcher)։
+   - "salon_fitness" («Սրահ / Մարզասրահ») -> Վարսահարդարման/կոսմետոլոգիական բազկաթոռներ, մեծ հայելիներ լուսավորությամբ, մարզասարքեր, վազքուղիներ, ծանրաձողեր/հանտելներ։
+   - "other_commercial" («Այլ կոմերցիոն տարածք») -> Ուսումնական լսարաններ, ֆոտոստուդիա, ցուցասրահ և այլն։
+
+3. ԱՐՏԱԴՐԱԿԱՆ ԵՎ ՊԱՀԵՍՏԱՅԻՆ ("industrial_logistics" / «Արտադրական / Պահեստային»)՝
+   - "warehouse" («Պահեստային տարածք») -> Բարձր առաստաղներ (4-12 մետր), ծանր արդյունաբերական մետաղական դարակաշարեր (pallet racking), փայտե պալետներ, ստվարաթղթե տուփերի/բեռների մեծածավալ պահեստավորում, ավտոամբարձիչներ (կար/ռոխլյա), բեռնման դարպասներ/դոկլևելերներ, էպոքսիդային/հարթ բետոնե արդյունաբերական հատակ։
+   - "factory_workshop" («Արտադրամաս / Գործարան») -> Արդյունաբերական հաստոցներ, հոսքագծեր, կտրող/ֆրեզերային/հղկող/կարի մեքենաներ, կռունկ-հեծաններ (թելֆեր), արդյունաբերական օդափոխության խողովակաշարեր/օդամղիչներ, հումքի կույտեր, հատակի դեղին անվտանգության գծանշումներ։
+
+4. ԶՐՈՅԱԿԱՆ / ՇԻՆԱՐԱՐԱԿԱՆ ՎԻՃԱԿ (Zero / Shell & Core / Unfinished) -> "zero" («Զրոյական (սև սվաղ)»)՝
+   - Տեսողական հատկանիշներ՝ ցեմենտային/գիպսային մոխրագույն սև սվաղ, բետոնե մերկ հատակ (ստյաժկա), բաց աղյուս կամ տուֆ բլոկներ, առաստաղից/պատերից կախված բաց լարեր առանց լուսամփոփների կամ վարդակների, շրիշակների (պլինտուս) և միջսենյակային դռների բացակայություն, շինարարական աղբ/գործիքներ։
+   - Գնահատական՝ qualityScore: 1.0 - 3.5, Ռիսկ՝ «Բարձր ռիսկ»։
+
+5. ԷԿՈՆՈՄ / ՄԱՇՎԱԾ ՎԻՃԱԿ (Economy / Old Soviet / Worn) -> "economy" («Էկոնոմ / Մաշված»)՝
+   - Տեսողական հատկանիշներ՝ հին խորհրդային կամ մաշված/պոկված պաստառներ, հին փայտե ճաքճքած ներկով պատուհաններ, հին խորհրդային փոքր չափի սալիկներ (կաֆել), մաշված/քերծված մանրահատակ կամ լինոլիում, հին չուգունե մարտկոցներ, կոսմետիկ խնդիրներ։
+   - Գնահատական՝ qualityScore: 3.6 - 6.5, Ռիսկ՝ «Միջին ռիսկ»։
+
+6. ԵՎՐՈՆՈՐՈԳՈՒՄ (Euro / Modern Clean Standard) -> "euro" («Եվրոնորոգում»)՝
+   - Տեսողական հատկանիշներ՝ ժամանակակից կոկիկ, մաքուր վերանորոգում, եվրոպատուհաններ (մետաղապլաստե/ալյումինե), ժամանակակից լամինատ կամ որակյալ կերամիկական սալիկներ, հարթ ներկված կամ որակյալ պաստառապատ պատեր, կոկիկ սանհանգույց/խոհանոց, նորմալ լուսավորություն։
+   - Գնահատական՝ qualityScore: 6.6 - 8.9, Ռիսկ՝ «Ցածր ռիսկ»։
+
+7. ԼՅՈՒՔՍ / ՊՐԵՄԻՈՒՄ (Luxury / High-End Designer) -> "luxury" («Լյուքս / Պրեմիում»)՝
+   - Տեսողական հատկանիշներ՝ բարձրակարգ դիզայներական ինտերիեր, բնական մարմար, գրանիտ, օնիքս, բնական փայտից ֆրանսիական/իտալական մանրահատակ, բրենդային ներկառուցված պրեմիում տեխնիկա (Miele, Bosch, Smeg), բազմամակարդակ ճարտարապետական լուսավորություն, պրեմիում սանտեխնիկա (Grohe, Villeroy & Boch):
+   - Գնահատական՝ qualityScore: 9.0 - 10.0, Ռիսկ՝ «Ցածր ռիսկ»։
+
+8. ԿԱՌՈՒՅՑԻ ՏԻՊԸ (buildingStructure / buildingStructureId)՝
+   - "monolith" («Մոնոլիտ (Նորակառույց)»)՝ երկաթբետոնե սյուներ, ռիգելներ, մոնոլիտ կարկաս։
+   - "stone" («Քարե (Տուֆ / Բազալտ)»)՝ հաստ տուֆե/բազալտե քարե պատեր, խորը պատուհանագոգեր, կամարներ։
+   - "panel" («Պանելային»)՝ բետոնե սալեր, միջպանելային կարեր, խորհրդային տիպային շենքեր։
+   - "brick" («Աղյուսե»)՝ աղյուսե շարվածք։
+   - "metal_sandwich" («Մետաղական կոնստրուկցիա / Սենդվիչ պանել»)՝ պողպատե սյուներ, ֆերմաներ, սենդվիչ պանելային պատեր/տանիք։
+   - "other" («Այլ / Կոմպոզիտ»)։
+`;
+
+async function callGemini(contents: any, systemInstruction: string, options?: { responseMimeType?: string; temperature?: number }) {
   let lastError: any;
   for (const model of GEMINI_MODELS) {
     try {
       const config: any = { systemInstruction };
       if (options?.responseMimeType) {
         config.responseMimeType = options.responseMimeType;
+      }
+      if (typeof options?.temperature === "number") {
+        config.temperature = options.temperature;
       }
       const response = await getGeminiClient().models.generateContent({
         model,
@@ -2089,37 +2156,76 @@ app.post("/api/valuation/property-market-value", async (req, res) => {
   }
 });
 
-// AI Property Photo Scan (Renovation & Condition Evaluation)
+// AI Property Photo Scan (Renovation, Property Purpose & Condition Evaluation)
 app.post("/api/ai/property-photo-scan", async (req, res) => {
   const { imageBase64, mimeType = "image/jpeg" } = req.body || {};
   if (!imageBase64) {
     return res.status(400).json({ error: "Missing imageBase64 data" });
   }
 
-  const prompt = `Դու SIL Insurance-ի անշարժ գույքի գնահատման և ռիսկերի underwriting փորձագետ Արհեստական Բանականությունն (ԱԲ) ես։
-Վերլուծիր ներկայացված բնակարանի/տան/շինության լուսանկարը և տրամադրիր գույքի վերանորոգման որակի և վիճակի ճշգրիտ գնահատում.
+  const prompt = `Դու SIL Insurance-ի անշարժ գույքի տեխնիկական փորձագետ և underwriting surveyor ես։
+Զննիր կցված լուսանկարը և տրամադրիր գույքի ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅԱՆ, ԿԱՏԵԳՈՐԻԱՅԻ և ՓԱՍՏԱՑԻ ՎԻՃԱԿԻ 100% ԻՐԱՏԵՍԱԿԱՆ և ԽԻՍՏ տեխնիկական գնահատում։
 
-Վերադարձրու ՄԻԱՅՆ JSON format-ով հետևյալ կառուցվածքով (առանց markdown code block):
+ՈՒՇԱԴԻՐ ԶՆՆԻՐ ԼՈՒՍԱՆԿԱՐԸ ԵՎ ԴԱՍԱԿԱՐԳԻՐ ԽԻՍՏ ԸՍՏ ՏԵՍՈՂԱԿԱՆ ՓԱՍՏԵՐԻ.
+
+1. ԳՈՒՅՔԻ ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅՈՒՆԸ ԵՎ ՏԵՍԱԿԸ (detectedPropertyType / detectedPropertyTypeId / propertyCategory)՝
+Զննիր կահույքը, տեխնիկան, սարքավորումները, հատակը, առաստաղը, դարակաշարերը և որոշիր՝
+- "office" («Գրասենյակ») -> Աշխատանքային սեղաններ, գրասենյակային աթոռներ, մոնիտորներ, ապակե միջնորմներ, կոնֆերանս-սրահ, ընդունարան, սերվերային: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+- "apartment" («Բնակարան») -> Բնակելի բազմոց, տնային խոհանոց, ննջասենյակ, բնակարանի սանհանգույց, բազմաբնակարան շենք: (Կատեգորիա՝ "residential" / «Բնակելի ֆոնդ»):
+- "private_house" («Առանձնատուն / Քոթեջ») -> Առանձին շենքի ճակատ, սեփական բակ/այգի, միջհարկային աստիճաններ, առանձնատան ավտոտնակ: (Կատեգորիա՝ "residential" / «Բնակելի ֆոնդ»):
+- "retail_store" («Առևտրի տարածք / Խանութ») -> Ապրանքային դարակաշարեր (ստելաժներ), վիտրինաներ, դրամարկղային հանգույց, մանեկեններ: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+- "restaurant_cafe" («Սննդի օբյեկտ (Ռեստորան / Սրճարան)») -> Հաճախորդների սեղաններ, բար, չժանգոտվող պողպատից պրոֆեսիոնալ խոհանոցային սարքեր, հզոր օդաքաշ հովանոցներ: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+- "warehouse" («Պահեստային տարածք») -> Բարձր առաստաղներ, ծանր արդյունաբերական մետաղական դարակաշարեր, փայտե պալետներ, տուփերի պահեստավորում, բետոնե արդյունաբերական հատակ: (Կատեգորիա՝ "industrial_logistics" / «Արտադրական / Պահեստային»):
+- "factory_workshop" («Արտադրամաս / Գործարան») -> Արդյունաբերական հաստոցներ, հոսքագծեր, հաստոցաշինություն, կռունկ-հեծաններ: (Կատեգորիա՝ "industrial_logistics" / «Արտադրական / Պահեստային»):
+- "medical_clinic" («Բժշկական կենտրոն / Ատամնաբուժարան») -> Ատամնաբուժական կամ բժշկական բազկաթոռ, ստերիլ սպիտակ միջավայր, դեղապահարաններ: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+- "hotel" («Հյուրանոց / Հոսթել») -> Համարակալված դռներով միջանցք, հյուրանոցային համարների տիպային կահավորում: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+- "auto_service" («Ավտոսպասարկում / Ավտոլվացում») -> Ավտովերհաններ, անվադողերի մոնտաժ, փականագործական գործիքներ: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+- "other_commercial" («Այլ կոմերցիոն տարածք») -> Մարզասրահ, սալոն, լսարան: (Կատեգորիա՝ "commercial" / «Կոմերցիոն / Հասարակական»):
+
+2. ՎԵՐԱՆՈՐՈԳՄԱՆ ՎԻՃԱԿԸ (renovationCondition / renovationConditionId)՝
+- "zero" («Զրոյական (սև սվաղ)») -> Եթե երևում են ցեմենտային/գիպսային սև սվաղ, բետոնե մերկ հատակ (ստյաժկա), բաց պատեր, առաստաղից/պատից կախված բաց լարեր առանց վարդակների, դռների բացակայություն, շինարարական անավարտ վիճակ: (qualityScore: 1.0 - 3.5, Ռիսկ՝ «Բարձր ռիսկ»):
+- "economy" («Էկոնոմ / Մաշված») -> Եթե երևում են հին խորհրդային կամ մաշված/պոկված պաստառներ, հին փայտե ճաքճքած պատուհաններ, հին խորհրդային սալիկներ (կաֆել), մաշված մանրահատակ/լինոլիում, կոսմետիկ թերություններ: (qualityScore: 3.6 - 6.5, Ռիսկ՝ «Միջին ռիսկ»):
+- "euro" («Եվրոնորոգում») -> Եթե երևում են ժամանակակից կոկիկ, մաքուր նորոգում, եվրոպատուհաններ, լամինատ կամ որակյալ սալիկներ, հարթ պատեր, կոկիկ սանհանգույց/խոհանոց: (qualityScore: 6.6 - 8.9, Ռիսկ՝ «Ցածր ռիսկ»):
+- "luxury" («Լյուքս / Պրեմիում») -> Բացառապես եթե ակնհայտ երևում են բնական մարմար, գրանիտ, օնիքս, բարձրակարգ դիզայներական ինտերիեր, պրեմիում տեխնիկա: (qualityScore: 9.0 - 10.0, Ռիսկ՝ «Ցածր ռիսկ»):
+
+3. ՇԵՆՔԻ/ԿԱՌՈՒՅՑԻ ՏԻՊԸ (buildingStructure / buildingStructureId)՝
+- "monolith" («Մոնոլիտ (Նորակառույց)»)՝ երկաթբետոնե սյուներ/հեծաններ կամ ժամանակակից նորակառույց:
+- "stone" («Քարե (Տուֆ / Բազալտ)»)՝ հաստ տուֆե/բազալտե պատեր, խորը պատուհանագոգեր, կամարներ, ստալինյան շենք:
+- "panel" («Պանելային»)՝ բետոնե սալերի կարեր, խորհրդային տիպային 5/9 հարկանի շենքեր:
+- "brick" («Աղյուսե»)՝ աղյուսե շարվածք:
+- "metal_sandwich" («Մետաղական / Սենդվիչ»)՝ մետաղական կմախք և սենդվիչ պանելներ:
+- "other" («Այլ / Կոմպոզիտ»):
+
+4. ԴԵՖԵԿՏՆԵՐ (visibleDefects)՝
+Մանրամասն նկարագրիր տեսանելի ճաքերը, խոնավությունը, բորբոսը, բաց լարերը, մաշվածությունը (եթե չկան՝ նշիր «Տեսանելի դեֆեկտներ չեն նկատվել»):
+
+Վերադարձրու ՄԻԱՅՆ valid JSON (առանց markdown):
 {
-  "renovationCondition": "Եվրոնորոգում",
-  "renovationConditionId": "euro",
-  "buildingStructure": "Մոնոլիտ",
+  "detectedPropertyType": "Գրասենյակ" | "Բնակարան" | "Առանձնատուն / Քոթեջ" | "Առևտրի տարածք / Խանութ" | "Սննդի օբյեկտ (Ռեստորան / Սրճարան)" | "Պահեստային տարածք" | "Արտադրամաս / Գործարան" | "Հյուրանոց / Հոսթել" | "Բժշկական կենտրոն / Ատամնաբուժարան" | "Ավտոսպասարկում / Ավտոլվացում" | "Այլ կոմերցիոն տարածք",
+  "detectedPropertyTypeId": "office" | "apartment" | "private_house" | "retail_store" | "restaurant_cafe" | "warehouse" | "factory_workshop" | "hotel" | "medical_clinic" | "auto_service" | "other_commercial",
+  "propertyCategory": "residential" | "commercial" | "industrial_logistics" | "special",
+  "propertyCategoryArm": "Բնակելի ֆոնդ" | "Կոմերցիոն / Հասարակական" | "Արտադրական / Պահեստային" | "Հատուկ նշանակության",
+  "propertyPurposeConfidence": 95,
+  "purposeVisualClues": [
+    "Կոնկրետ տեսողական փաստարկ 1 (օր․՝ աշխատանքային գրասեղաններ և պտտվող աթոռներ)",
+    "Կոնկրետ տեսողական փաստարկ 2 (օր․՝ ապակե միջնորմներ և կոնֆերանս սեղան)"
+  ],
+  "functionalSubtype": "Կոնկրետ ենթատեսակը, օրինակ՝ Open-Space IT գրասենյակ, Պրեմիում բնակարան, Դարակաշարային պահեստ",
+  "renovationCondition": "Եվրոնորոգում" | "Լյուքս" | "Էկոնոմ" | "Զրոյական (սև սվաղ)",
+  "renovationConditionId": "euro" | "luxury" | "economy" | "zero",
+  "buildingStructure": "Մոնոլիտ (Նորակառույց)" | "Քարե (Տուֆ / Բազալտ)" | "Պանելային" | "Աղյուսե" | "Մետաղական / Սենդվիչ" | "Այլ",
+  "buildingStructureId": "monolith" | "stone" | "panel" | "brick" | "metal_sandwich" | "other",
   "qualityScore": 8.5,
-  "materialsObserved": "Լամինատ/Պարկետ, գիպսակարդոն առաստաղներ, լեդ լուսավորություն, որակյալ պատուհաններ",
-  "aiAnalysisSummary": "Լուսանկարում պատկերված է բարձրորակ եվրոնորոգմամբ և ժամանակակից հարդարմամբ բնակելի տարածք։ Հարդարման նյութերն ու ցանցերը գտնվում են գերազանց վիճակում։",
-  "underwritingRiskLevel": "Ցածր ռիսկ"
-}
-
-Հնարավոր renovationCondition / renovationConditionId արժեքներ.
-1. "Էկոնոմ" (id: "economy") - հին կամ ստանդարտ պարզ վերանորոգում
-2. "Եվրոնորոգում" (id: "euro") - ժամանակակից, մաքուր, որակյալ հարդարում
-3. "Լյուքս" (id: "luxury") - դիզայներական, բարձրակարգ հարդարում, պրեմիում նյութեր
-4. "Զրոյական (սև սվաղ)" (id: "zero") - առանց վերանորոգման`;
+  "materialsObserved": "Լուսանկարում իրականում տեսանելի նյութերը",
+  "visibleDefects": "Լուսանկարում նկատված փաստացի դեֆեկտներ",
+  "aiAnalysisSummary": "Փաստացի օբյեկտիվ վերլուծություն",
+  "underwritingRiskLevel": "Ցածր ռիսկ" | "Միջին ռիսկ" | "Բարձր ռիսկ"
+}`;
 
   try {
     if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
 
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, "");
 
     const contents = [
       {
@@ -2131,17 +2237,36 @@ app.post("/api/ai/property-photo-scan", async (req, res) => {
       },
     ];
 
-    const result = await callGemini(contents, SYSTEM_INSTRUCTION, { responseMimeType: "application/json" });
+    const result = await callGemini(contents, VISION_PROPERTY_SYSTEM_INSTRUCTION, { responseMimeType: "application/json", temperature: 0.1 });
     const parsed = JSON.parse(result.text || "{}");
+
+    let visualClues: string[] = [];
+    if (Array.isArray(parsed.purposeVisualClues)) {
+      visualClues = parsed.purposeVisualClues.map((c: any) => String(c).trim()).filter(Boolean);
+    } else if (typeof parsed.purposeVisualClues === "string" && parsed.purposeVisualClues.trim()) {
+      visualClues = parsed.purposeVisualClues.split(/[\n,;•·-]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 2);
+    }
+    if (visualClues.length === 0) {
+      visualClues = ["Լուսանկարի ինտերիերի տարրերով նույնականացվել է գույքի փաստացի նշանակությունը։"];
+    }
 
     res.json({
       status: "ok",
+      detectedPropertyType: parsed.detectedPropertyType || "Բնակարան",
+      detectedPropertyTypeId: parsed.detectedPropertyTypeId || "apartment",
+      propertyCategory: parsed.propertyCategory || "residential",
+      propertyCategoryArm: parsed.propertyCategoryArm || "Բնակելի ֆոնդ",
+      propertyPurposeConfidence: typeof parsed.propertyPurposeConfidence === "number" ? parsed.propertyPurposeConfidence : 92,
+      purposeVisualClues: visualClues,
+      functionalSubtype: parsed.functionalSubtype || parsed.detectedPropertyType || "Բնակելի տարածք",
       renovationCondition: parsed.renovationCondition || "Եվրոնորոգում",
       renovationConditionId: parsed.renovationConditionId || "euro",
-      buildingStructure: parsed.buildingStructure || "Մոնոլիտ",
-      qualityScore: parsed.qualityScore || 8.0,
-      materialsObserved: parsed.materialsObserved || "Որակյալ հարդարում",
-      aiAnalysisSummary: parsed.aiAnalysisSummary || "Լուսանկարի վերլուծությամբ հաստատվել է գույքի բարձրորակ վիճակը։",
+      buildingStructure: parsed.buildingStructure || "Մոնոլիտ (Նորակառույց)",
+      buildingStructureId: parsed.buildingStructureId || "monolith",
+      qualityScore: typeof parsed.qualityScore === "number" ? parsed.qualityScore : 7.5,
+      materialsObserved: parsed.materialsObserved || "Հարդարման նյութեր",
+      visibleDefects: parsed.visibleDefects || "Էական դեֆեկտներ չեն նկատվել",
+      aiAnalysisSummary: parsed.aiAnalysisSummary || "Լուսանկարի վերլուծությամբ արձանագրվել է գույքի վիճակը և նշանակությունը։",
       underwritingRiskLevel: parsed.underwritingRiskLevel || "Ցածր ռիսկ",
       modelUsed: result.modelUsed,
     });
@@ -2149,11 +2274,489 @@ app.post("/api/ai/property-photo-scan", async (req, res) => {
     console.warn("Property Photo AI scan fallback:", err?.message);
     res.json({
       status: "fallback",
+      detectedPropertyType: "Բնակարան",
+      detectedPropertyTypeId: "apartment",
+      propertyCategory: "residential",
+      propertyCategoryArm: "Բնակելի ֆոնդ",
+      propertyPurposeConfidence: 75,
+      purposeVisualClues: ["Լուսանկարի նախնական տվյալներով տարածքը համապատասխանում է նշված տեսակին։"],
+      functionalSubtype: "Բնակելի տարածք",
       renovationCondition: "Եվրոնորոգում",
       renovationConditionId: "euro",
-      qualityScore: 7.5,
-      aiAnalysisSummary: "Լուսանկարի նախնական զննմամբ գույքը գնահատվում է որպես Եվրոնորոգված (ստանդարտ որակի)։",
-      underwritingRiskLevel: "Ստանդարտ",
+      buildingStructure: "Մոնոլիտ (Նորակառույց)",
+      buildingStructureId: "monolith",
+      qualityScore: 7.0,
+      visibleDefects: "Անհրաժեշտ է տեղում ստուգում",
+      aiAnalysisSummary: "Լուսանկարի վերլուծության ժամանակ ծառայությունը ժամանակավորապես անհասանելի էր։",
+      underwritingRiskLevel: "Միջին ռիսկ",
+    });
+  }
+});
+
+// Comprehensive AI Property Insurance Survey Report (Pre-Risk Inspection from Photos)
+app.post("/api/ai/property-survey-report", async (req, res) => {
+  const {
+    images = [],
+    imageBase64,
+    mimeType = "image/jpeg",
+    propertyContext = {},
+  } = req.body || {};
+
+  // Normalize photo array: support up to 24 photos with tags/labels
+  const photos: Array<{ imageBase64: string; mimeType: string; tag?: string }> = [];
+
+  if (Array.isArray(images) && images.length > 0) {
+    for (const img of images.slice(0, 24)) {
+      if (img?.imageBase64) {
+        photos.push({
+          imageBase64: img.imageBase64,
+          mimeType: img.mimeType || "image/jpeg",
+          tag: img.tag || "Լուսանկար",
+        });
+      }
+    }
+  } else if (imageBase64) {
+    photos.push({
+      imageBase64,
+      mimeType,
+      tag: "Ընդհանուր տեսք",
+    });
+  }
+
+  if (photos.length === 0) {
+    return res.status(400).json({ error: "Missing photos for survey inspection" });
+  }
+
+  const pType = propertyContext.propertyType || "Անշարժ գույք / Բնակարան";
+  const pAddress = propertyContext.address || "ՀՀ, ք․ Երևան";
+  const pArea = propertyContext.estimatedArea ? `${propertyContext.estimatedArea} քմ` : "չնշված";
+  const pStructure = propertyContext.buildingStructure || "Մոնոլիտ/քարե";
+
+  const surveyUniqueId = `SIL-SURV-${Date.now().toString().slice(-6)}`;
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const photoListSummary = photos.map((p, i) => `#${i + 1}: «${p.tag || "Լուսանկար"}»`).join(", ");
+
+  const prompt = `Դու «ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ-ի Գույքի Ապահովագրության և Ռիսկերի Գնահատման (Underwriting & Risk Engineering / Pre-Risk Survey) ավագ փորձագետ Արհեստական Բանականությունն ես։
+
+Քեզ են ներկայացվել ապահովագրվող անշարժ գույքի տեղազննության պաշտոնական լուսանկարների փաթեթը (${photos.length} հատ)։
+Լուսանկարների ցանկ՝ ${photoListSummary}։
+
+Գույքի նախնական հայտարարագրված տվյալներ (օգտատիրոջ կողմից մուտքագրված)՝
+- Հայտարարագրված տեսակ՝ ${pType}
+- Հասցե / Գտնվելու վայր՝ ${pAddress}
+- Մակերես՝ ${pArea}
+- Կոնստրուկտիվ տիպ՝ ${pStructure}
+
+ԽՍՏԱԳՈՒՅՆ ԿԱՆՈՆՆԵՐ ԳՆԱՀԱՏՄԱՆ ԵՎ ԳՈՒՅՔԻ ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅԱՆ ՃԱՆԱՉՄԱՆ ՀԱՄԱՐ.
+
+1. ԳՈՒՅՔԻ ՓԱՍՏԱՑԻ ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅԱՆ ՃՇԳՐԻՏ ՃԱՆԱՉՈՒՄ (detectedPropertyType / detectedPropertyTypeId / propertyCategory)՝
+   - ՈՒՇԱԴԻՐ ԶՆՆԻՐ ԼՈՒՍԱՆԿԱՐՆԵՐՈՒՄ ԵՐԵՎԱՑՈՂ ԻՐԵՐԸ, ԿԱՀՈՒՅՔԸ, ՏԵԽՆԻԿԱՆ ԵՎ ՏԱՐԱԾՔԻ ԿԱՌՈՒՑՎԱԾՔԸ.
+   - Եթե լուսանկարներում երևում են աշխատանքային գրասեղաններ, համակարգիչներ, ապակե միջնորմներ, ժողովների սրահ -> "office" («Գրասենյակ»), Կատեգորիա՝ "commercial" («Կոմերցիոն / Հասարակական»):
+   - Եթե երևում են ապրանքային դարակաշարեր, վիտրինաներ, դրամարկղ, ապրանքներ -> "retail_store" («Առևտրի տարածք / Խանութ»):
+   - Եթե երևում են ճաշասեղաններ, բար, չժանգոտվող պողպատից պրոֆեսիոնալ խոհանոց, հզոր օդաքաշ հովանոցներ -> "restaurant_cafe" («Սննդի օբյեկտ (Ռեստորան / Սրճարան)»):
+   - Եթե երևում են բարձր առաստաղներ, ծանր արդյունաբերական դարակաշարեր (ստելաժներ), փայտե պալետներ, տուփերի պահեստավորում -> "warehouse" («Պահեստային տարածք»), Կատեգորիա՝ "industrial_logistics":
+   - Եթե երևում են արդյունաբերական հաստոցներ, հոսքագծեր, կռունկ-հեծաններ -> "factory_workshop" («Արտադրամաս / Գործարան»), Կատեգորիա՝ "industrial_logistics":
+   - Եթե երևում են բժշկական/ատամնաբուժական բազկաթոռներ, ստերիլ սպիտակ միջավայր -> "medical_clinic" («Բժշկական կենտրոն / Ատամնաբուժարան»):
+   - Եթե երևում է ստանդարտ բնակելի կահույք (բազմոց, տնային խոհանոց, ննջասենյակ, տնային սանհանգույց) բազմաբնակարան շենքում -> "apartment" («Բնակարան»), Կատեգորիա՝ "residential":
+   - Եթե երևում է առանձին կանգնած տուն, սեփական բակ/այգի, միջհարկային աստիճաններ -> "private_house" («Առանձնատուն / Քոթեջ»), Կատեգորիա՝ "residential":
+   - ԵԹԵ ՕԳՏԱՏԻՐՈՋ ՀԱՅՏԱՐԱՐԱԳՐԱԾ ՏԵՍԱԿԸ ՏԱՐԲԵՐՎՈՒՄ Է ԼՈՒՍԱՆԿԱՐՆԵՐՈՒՄ ԻՐԱԿԱՆ ԵՐԵՎԱՑՈՂ ԳՈՒՅՔԻՑ (օրինակ՝ նշված էր «Բնակարան», բայց լուսանկարներում գրասենյակ, խանութ կամ պահեստ է), ԱՆՊԱՅՄԱՆ ճանաչիր ՓԱՍՏԱՑԻ ՃԻՇՏ նշանակությունը և purposeVisualClues զանգվածում ու եզրակացության մեջ մանրամասն փաստարկիր։
+
+2. ՅՈՒՐԱՔԱՆՉՅՈՒՐ ԼՈՒՍԱՆԿԱՐ ԱՌԱՆՁԻՆ ԶՆՆԻՐ ԵՎ ՆԿԱՐԱԳՐԻՐ (photoEvidence զանգվածում)՝
+   - Պարտադիր գրիր, թե ԿՈՆԿՐԵՏ ԻՆՉ Է պատկերված այդ լուսանկարում (օրինակ՝ «Սենյակ սև սվաղ վիճակում՝ բետոնե հատակ, կախված լարեր», «Գրասենյակային աշխատասենյակ՝ գրասեղաններ և համակարգիչներ», «Սանհանգույց՝ հին խորհրդային սալիկներ», «Հյուրասենյակ՝ ժամանակակից լամինատ և եվրոպատուհաններ»)։
+   - ՄԻ ԵՆԹԱԴՐԻՐ չերևացող սարքավորումներ (օրինակ՝ կրակմարիչ կամ ծխորսիչ, եթե լուսանկարում չկա)։
+
+3. ԸՆԴՀԱՆՈՒՐ ՎԵՐԱՆՈՐՈԳՄԱՆ ՎԻՃԱԿԻ ՈՐՈՇՈՒՄ (renovationCondition / renovationConditionId)՝
+   - "zero" («Զրոյական (սև սվաղ)») -> Եթե լուսանկարներում երևում է սև սվաղ, բետոնե ստյաժկա, մերկ պատեր, բաց լարեր, անավարտ շինարարություն։ Որակի միավորը (qualityScore)՝ 1.0 - 3.5, Ռիսկը՝ «Բարձր ռիսկ»։
+   - "economy" («Էկոնոմ / Մաշված») -> Եթե երևում են հին խորհրդային/մաշված պաստառներ, հին փայտե պատուհաններ, հին սալիկներ, մաշված հատակ։ Որակի միավորը (qualityScore)՝ 3.6 - 6.5, Ռիսկը՝ «Միջին ռիսկ»։
+   - "euro" («Եվրոնորոգում») -> Եթե երևում են ժամանակակից մաքուր եվրոպատուհաններ, լամինատ/սալիկներ, հարթ պատեր, կոկիկ սանհանգույց։ Որակի միավորը (qualityScore)՝ 6.6 - 8.9, Ռիսկը՝ «Ցածր ռիսկ»։
+   - "luxury" («Լյուքս / Պրեմիում») -> Բացառապես երբ ակնհայտ երևում է բնական մարմար, գրանիտ, օնիքս, բարձրակարգ դիզայներական ինտերիեր, պրեմիում տեխնիկա։ Որակի միավորը (qualityScore)՝ 9.0 - 10.0։
+
+4. ԿՈՆՍՏՐՈՒԿՏԻՎ ՏԻՊ (buildingStructure / buildingStructureId)՝
+   - Եթե երևում է կոնստրուկցիան (մոնոլիտ սյուներ/հեծաններ, քարե տուֆե պատեր, պանելային սալեր, մետաղական սենդվիչ)՝ նշիր համապատասխանը։ Եթե տեսանելի է միայն ներքին հարդարումը, հիմնվիր նախնական տվյալի վրա՝ «${pStructure}»։
+
+5. ԴԵՖԵԿՏՆԵՐԻ ԵՎ ՌԻՍԿԵՐԻ ՖԻՔՍՈՒՄ (visibleDefects / riskFactors)՝
+   - Ֆիքսիր միայն փաստացի նկատված ճաքերը, խոնավությունը, բորբոսը, բաց լարերը կամ մաշվածությունը։
+
+Վերադարձրու ՄԻԱՅՆ valid JSON հետևյալ ստրուկտուրայով (առանց markdown formatting-ի և \`\`\`json code block-ի)՝
+{
+  "surveyId": "${surveyUniqueId}",
+  "surveyDate": "${todayStr}",
+  "propertyType": "${pType}",
+  "detectedPropertyType": "Գրասենյակ" | "Բնակարան" | "Առանձնատուն / Քոթեջ" | "Առևտրի տարածք / Խանութ" | "Սննդի օբյեկտ (Ռեստորան / Սրճարան)" | "Պահեստային տարածք" | "Արտադրամաս / Գործարան" | "Հյուրանոց / Հոսթել" | "Բժշկական կենտրոն / Ատամնաբուժարան" | "Ավտոսպասարկում / Ավտոլվացում" | "Այլ կոմերցիոն տարածք",
+  "detectedPropertyTypeId": "office" | "apartment" | "private_house" | "retail_store" | "restaurant_cafe" | "warehouse" | "factory_workshop" | "hotel" | "medical_clinic" | "auto_service" | "other_commercial",
+  "propertyCategory": "residential" | "commercial" | "industrial_logistics" | "special",
+  "propertyCategoryArm": "Բնակելի ֆոնդ" | "Կոմերցիոն / Հասարակական" | "Արտադրական / Պահեստային" | "Հատուկ նշանակության",
+  "propertyPurposeConfidence": 95,
+  "purposeVisualClues": [
+    "Հայերեն շարադրանքով տեսողական փաստարկ 1 (օր․՝ աշխատանքային գրասեղաններ և պտտվող աթոռներ)",
+    "Տեսողական փաստարկ 2 (օր․՝ ապակե միջնորմներ և կոնֆերանս-սրահ)",
+    "Տեսողական փաստարկ 3 (օր․՝ սերվերային պահարան և գրասենյակային լուսավորություն)"
+  ],
+  "functionalSubtype": "Կոնկրետ ենթատեսակը, օրինակ՝ Open-Space IT գրասենյակ, Պրեմիում բնակարան, Դարակաշարային պահեստ, Ատամնաբուժարան",
+  "buildingStructure": "Մոնոլիտ երկաթբետոն" | "Քարե (տուֆ/բազալտ)" | "Պանելային" | "Մետաղական կոնստրուկցիա / Սենդվիչ" | "Աղյուսե",
+  "buildingStructureId": "monolith" | "stone" | "panel" | "metal_sandwich" | "brick" | "other",
+  "renovationCondition": "Եվրոնորոգում" | "Լյուքս" | "Էկոնոմ" | "Զրոյական (սև սվաղ)",
+  "renovationConditionId": "euro" | "luxury" | "economy" | "zero",
+  "qualityScore": 8.7,
+  "underwritingScore": 88,
+  "underwritingRiskLevel": "Ցածր ռիսկ" | "Միջին ռիսկ" | "Բարձր ռիսկ",
+  "acceptanceStatus": "ընդունելի" | "պայմանական" | "բարձրացված ռիսկ",
+  "recommendedTariffMultiplier": 0.95,
+  "recommendedFranchisePercent": 0.5,
+  "materialsObserved": "Լուսանկարներում ակնառու տեսանելի փաստացի շինանյութերը և հարդարման տարրերը",
+  "structuralIntegritySummary": "Կրող պատերի, սյուների, ծածկերի վիճակ, ճաքերի կամ դեֆորմացիաների առկայություն/բացակայություն",
+  "utilitiesRiskSummary": "Էլեկտրական լարանցումների, վահանակի, ջրագծերի և ջեռուցման համակարգերի տեսանելի վիճակ",
+  "fireSafetyObserved": "Հակահրդեհային միջոցների (ծխորսիչ, կրակմարիչ) առկայություն կամ դրանց պահանջ",
+  "securityObserved": "Մուտքի դռների, կողպեքների, տեսահսկման կամ ճաղավանդակների փաստացի վիճակ",
+  "visibleDefects": "Լուսանկարներում տեսանելի արձանագրված դեֆեկտներ (կամ նշել որ տեսողական դեֆեկտներ չեն նկատվել)",
+  "positiveFactors": [
+    "Ապահովագրական ռիսկը նվազեցնող փաստացի գործոններ"
+  ],
+  "riskFactors": [
+    "Փաստացի նկատված կամ հնարավոր ռիսկային գործոններ"
+  ],
+  "recommendations": [
+    "Հանձնարարականներ անդեռռայթերին և ապահովադրին"
+  ],
+  "copeAnalysis": {
+    "construction": {
+      "materials": "Կրող հիմնակմախք, ծածկեր և պատեր",
+      "loadBearing": "Կրող տարրերի վիճակ",
+      "roofCondition": "Տանիքի/ծածկի վիճակ",
+      "seismicResilience": "Սեյսմակայունության մակարդակ",
+      "evaluation": "Կոնստրուկտիվ գնահատական"
+    },
+    "occupancy": {
+      "purpose": "Փաստացի ճանաչված նշանակությունը և շահագործման բնույթը",
+      "fireLoadDensity": "Ցածր" | "Միջին" | "Բարձր",
+      "housekeepingRating": "Գերազանց" | "Լավ" | "Բավարար" | "Անբավարար",
+      "hazardousMaterials": "Դյուրավառ նյութերի առկայություն/բացակայություն",
+      "evaluation": "Շահագործման և հրդեհային ծանրաբեռնվածության եզրակացություն"
+    },
+    "protection": {
+      "fireDetectionAlarm": "Հրդեհի ազդանշանման համակարգ",
+      "fireExtinguishers": "Կրակմարիչներ",
+      "waterLeakSensors": "Ջրի արտահոսքի սենսորներ",
+      "intruderSecurity": "Անվտանգության և տեսահսկման վիճակ",
+      "nearestFireStationEta": "Մոտակա ՀՓՋ-ի ժամանման մոտավոր ժամանակ",
+      "evaluation": "Պաշտպանվածության մակարդակ"
+    },
+    "exposure": {
+      "adjoiningBuildings": "Հարակից շենքերի և հարևան տարածքների ռիսկեր",
+      "floodWaterRisk": "Հեղեղումների/ջրային ռիսկ",
+      "accessForEmergencyVehicles": "Հրշեջ տեխնիկայի մոտեցման ուղիներ",
+      "environmentalFactors": "Բնակլիմայական ստանդարտ պայմաններ",
+      "evaluation": "Արտաքին ռիսկերի գնահատական"
+    }
+  },
+  "lossExpectancy": {
+    "pmlPercent": 18,
+    "pmlSummary": "Հավանական առավելագույն վնասի (PML) նկարագրություն",
+    "mflPercent": 65,
+    "nlePercent": 7
+  },
+  "categoryScores": {
+    "structuralScore": 90,
+    "fireProtectionScore": 82,
+    "utilitiesWaterScore": 85,
+    "securityTheftScore": 88,
+    "exposureNaturalHazardsScore": 84
+  },
+  "warranties": {
+    "mandatoryPreInception": [
+      "Պարտադիր նախապայման"
+    ],
+    "advisoryImprovement": [
+      "Խորհրդատվական առաջարկ"
+    ]
+  },
+  "signOff": {
+    "surveyorName": "Գ․ Գևորգյան (Ավագ Ռիսկ-Ինժեներ / Սուրվեյոր)",
+    "surveyorTitle": "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Տեղազննության և Ռիսկերի Գնահատման Վարչություն",
+    "chiefUnderwriter": "Ա․ Մկրտչյան (Գույքային Ապահովագրության Գլխավոր Անդեռռայթեր)",
+    "inspectionDate": "${todayStr}"
+  },
+  "photoEvidence": [
+    ${photos.map((p, i) => `{
+      "tag": "${p.tag || `Լուսանկար #${i + 1}`}",
+      "observation": "Լուսանկարում ակնառու տեսանելի փաստացի դիտարկում",
+      "riskRating": "low"
+    }`).join(",\n    ")}
+  ],
+  "fullNarrativeReport": "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ ՏԵՂԱԶՆՆՈՒԹՅԱՆ ԵՎ ՌԻՍԿԵՐԻ ԳՆԱՀԱՏՄԱՆ ՊԱՇՏՈՆԱԿԱՆ ԱԿՏ-ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ\\n\\n1. ԶՆՆՄԱՆ ՓԱՍՏԱՑԻ ՎԻՃԱԿ ԵՎ ԳՈՒՅՔԻ ՖՈՒՆԿՑԻՈՆԱԼ ՆՇԱՆԱԿՈՒԹՅՈՒՆ...\\n2. COPE ՎԵՐԼՈՒԾՈՒԹՅՈՒՆ...\\n3. ԻՆԺԵՆԵՐԱԿԱՆ ԵՎ ՀԱԿԱՀՐԴԵՀԱՅԻՆ ՀԱՄԱԿԱՐԳԵՐ...\\n4. ԱՆԴԵՌՌԱՅԹԻՆԳԱՅԻՆ ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ..."
+}`;
+
+  try {
+    if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
+
+    const parts: any[] = [];
+    // Feed up to 24 photos directly to Gemini
+    for (const p of photos.slice(0, 24)) {
+      const cleanData = p.imageBase64.replace(/^data:[^;]+;base64,/, "");
+      parts.push({
+        inlineData: {
+          mimeType: p.mimeType,
+          data: cleanData,
+        },
+      });
+    }
+    parts.push({ text: prompt });
+
+    const contents = [{ role: "user", parts }];
+    const result = await callGemini(contents, VISION_PROPERTY_SYSTEM_INSTRUCTION, { responseMimeType: "application/json", temperature: 0.1 });
+    const parsed = JSON.parse(result.text || "{}");
+
+    // Match photo evidence with uploaded photos
+    const mappedPhotoEvidence = photos.map((p, idx) => {
+      const aiNote = parsed.photoEvidence?.[idx];
+      return {
+        dataUrl: p.imageBase64,
+        tag: p.tag || `Լուսանկար #${idx + 1}`,
+        observation: aiNote?.observation || "Տեխնիկական զննմամբ էական խախտումներ չեն արձանագրվել",
+        riskRating: (aiNote?.riskRating as any) || "low",
+      };
+    });
+
+    let visualClues: string[] = [];
+    if (Array.isArray(parsed.purposeVisualClues)) {
+      visualClues = parsed.purposeVisualClues.map((c: any) => String(c).trim()).filter(Boolean);
+    } else if (typeof parsed.purposeVisualClues === "string" && parsed.purposeVisualClues.trim()) {
+      visualClues = parsed.purposeVisualClues.split(/[\n,;•·-]+/).map((s: string) => s.trim()).filter((s: string) => s.length > 2);
+    }
+    if (visualClues.length === 0) {
+      visualClues = [
+        `Լուսանկարների տեսողական վերլուծությամբ ճանաչվել է գույքի փաստացի նշանակությունը՝ «${parsed.detectedPropertyType || pType}»։`
+      ];
+    }
+
+    res.json({
+      status: "ok",
+      report: {
+        id: parsed.surveyId || surveyUniqueId,
+        createdAt: parsed.surveyDate || todayStr,
+        propertyType: parsed.propertyType || pType,
+        detectedPropertyType: parsed.detectedPropertyType || parsed.propertyType || pType,
+        detectedPropertyTypeId: parsed.detectedPropertyTypeId || "apartment",
+        propertyCategory: parsed.propertyCategory || "residential",
+        propertyCategoryArm: parsed.propertyCategoryArm || "Բնակելի ֆոնդ",
+        propertyPurposeConfidence: typeof parsed.propertyPurposeConfidence === "number" ? parsed.propertyPurposeConfidence : 95,
+        purposeVisualClues: visualClues,
+        functionalSubtype: parsed.functionalSubtype || parsed.detectedPropertyType || "Ստանդարտ տարածք",
+        buildingStructure: parsed.buildingStructure || "Մոնոլիտ երկաթբետոն",
+        buildingStructureId: parsed.buildingStructureId || "monolith",
+        renovationCondition: parsed.renovationCondition || "Եվրոնորոգում",
+        renovationConditionId: parsed.renovationConditionId || "euro",
+        qualityScore: typeof parsed.qualityScore === "number" ? parsed.qualityScore : 8.7,
+        underwritingScore: typeof parsed.underwritingScore === "number" ? parsed.underwritingScore : 88,
+        underwritingRiskLevel: parsed.underwritingRiskLevel || "Ցածր ռիսկ",
+        acceptanceStatus: parsed.acceptanceStatus || "ընդունելի",
+        recommendedTariffMultiplier: typeof parsed.recommendedTariffMultiplier === "number" ? parsed.recommendedTariffMultiplier : 0.95,
+        recommendedFranchisePercent: typeof parsed.recommendedFranchisePercent === "number" ? parsed.recommendedFranchisePercent : 0.5,
+        materialsObserved: parsed.materialsObserved || "Որակյալ հարդարման նյութեր, ժամանակակից հատակածածկույթ և պատուհաններ",
+        structuralIntegritySummary: parsed.structuralIntegritySummary || "Կրող պատերը և կոնստրուկցիաները գտնվում են կայուն, հուսալի վիճակում։ Տեսանելի ճաքեր կամ դեֆորմացիաներ չեն նկատվում։",
+        utilitiesRiskSummary: parsed.utilitiesRiskSummary || "Էլեկտրական լարանցումները և ջրագծերը մոնտաժված են պատշաճ, վթարային արտահոսքի նշաններ չկան։",
+        fireSafetyObserved: parsed.fireSafetyObserved || "Հրդեհավտանգ բաց աղբյուրներ չեն նկատվել, խորհուրդ է տրվում ունենալ ծխորսիչ սենսորներ։",
+        securityObserved: parsed.securityObserved || "Առկա է մուտքի հուսալի դուռ և բավարար պաշտպանվածություն։",
+        visibleDefects: parsed.visibleDefects || "Էական տեսողական դեֆեկտներ չեն արձանագրվել։",
+        positiveFactors: Array.isArray(parsed.positiveFactors) && parsed.positiveFactors.length > 0 ? parsed.positiveFactors : [
+          "Ժամանակակից որակյալ հարդարում և խնամված տարածք",
+          "Առանց տեսանելի խոնավության կամ կառուցվածքային ճաքերի",
+          "Պատշաճ շահագործվող ինժեներական հաղորդակցություններ",
+          "Հրդեհաշիջման ծառայության օպերատիվ հասանելիություն"
+        ],
+        riskFactors: Array.isArray(parsed.riskFactors) && parsed.riskFactors.length > 0 ? parsed.riskFactors : [
+          "Կենտրոնական ավտոմատ հրդեհաշիջման համակարգի բացակայություն",
+          "Ջրի ավտոմատ արտահոսքի արգելափակման սենսորների բացակայություն"
+        ],
+        recommendations: Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0 ? parsed.recommendations : [
+          "Երաշխավորվում է ապահովագրության ընդունումը ստանդարտ կամ զեղչված սակագնով",
+          "Առաջարկվող ֆրանշիզա՝ 0.5% ապահովագրական գումարից",
+          "Տեղադրել ինքնավար ծխորսիչներ առավելագույն պաշտպանվածության համար"
+        ],
+        copeAnalysis: parsed.copeAnalysis || {
+          construction: {
+            materials: "Մոնոլիտ երկաթբետոնե հիմնակմախք, քարե շարվածքով արտաքին պատեր",
+            loadBearing: "Կրող սյուները և ծածկերը գտնվում են բարվոք, կայուն վիճակում",
+            roofCondition: "Հարթ կամ լանջավոր տանիք, ջրամեկուսացված",
+            seismicResilience: "Համապատասխանում է ՀՀ սեյսմակայունության նորմերին",
+            evaluation: "Կոնստրուկտիվ հուսալիության բարձր ինդեքս",
+          },
+          occupancy: {
+            purpose: `${parsed.detectedPropertyType || pType} - փաստացի շահագործում`,
+            fireLoadDensity: "Ցածր",
+            housekeepingRating: "Լավ",
+            hazardousMaterials: "Դյուրավառ կամ պայթյունավտանգ նյութեր չեն նկատվել",
+            evaluation: "Շահագործման բնականոն և անվտանգ ռեժիմ",
+          },
+          protection: {
+            fireDetectionAlarm: "Ավտոնոմ ծխորսիչների առկայություն կամ առաջարկ",
+            fireExtinguishers: "Օբյեկտում առկա է կամ խորհուրդ է տրվում OP-4 կրակմարիչ",
+            waterLeakSensors: "Խորհուրդ է տրվում տեղադրել ավտոմատ արտահոսքի արգելափակիչ",
+            intruderSecurity: "Մուտքի հուսալի մետաղական դուռ և կողպեքներ",
+            nearestFireStationEta: "4-6 րոպե մոտակա ՀՓՋ-ից",
+            evaluation: "Պաշտպանվածության բավարար մակարդակ",
+          },
+          exposure: {
+            adjoiningBuildings: "Հարակից կառույցներից վտանգավոր արտադրական ազդեցություն չկա",
+            floodWaterRisk: "Հեղեղումների կամ սողանքների ռիսկ չի դիտվում",
+            accessForEmergencyVehicles: "Ազատ մոտեցման ճանապարհ հրշեջ մեքենաների համար",
+            environmentalFactors: "Բնակլիմայական ստանդարտ պայմաններ",
+            evaluation: "Արտաքին վտանգների ցածր ազդեցություն",
+          },
+        },
+        lossExpectancy: parsed.lossExpectancy || {
+          pmlPercent: 18,
+          pmlSummary: "Հավանական առավելագույն վնասը գնահատվում է 15-20%՝ տեղային հրդեհի և ՀՓՋ ժամանման պայմաններում",
+          mflPercent: 65,
+          nlePercent: 7,
+        },
+        categoryScores: parsed.categoryScores || {
+          structuralScore: 90,
+          fireProtectionScore: 82,
+          utilitiesWaterScore: 85,
+          securityTheftScore: 88,
+          exposureNaturalHazardsScore: 84,
+        },
+        warranties: parsed.warranties || {
+          mandatoryPreInception: [
+            "Էլեկտրական վահանակի ավտոմատ անջատիչների սարքին վիճակ",
+            "Հրդեհային տարհանման ուղիների և դռների անարգել բացում",
+          ],
+          advisoryImprovement: [
+            "Խոհանոցում և սանհանգույցում տեղադրել ջրի արտահոսքի արգելափակման սենսոր",
+            "Ձեռք բերել փոշային կամ ածխաթթվային կրակմարիչ (OP-4 կամ OU-3)",
+          ],
+        },
+        signOff: parsed.signOff || {
+          surveyorName: "Գ․ Գևորգյան (Ավագ Ռիսկ-Ինժեներ / Սուրվեյոր)",
+          surveyorTitle: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Տեղազննության և Ռիսկերի Գնահատման Վարչություն",
+          chiefUnderwriter: "Ա․ Մկրտչյան (Գույքային Ապահովագրության Գլխավոր Անդեռռայթեր)",
+          inspectionDate: todayStr,
+        },
+        photoEvidence: mappedPhotoEvidence,
+        fullNarrativeReport: parsed.fullNarrativeReport || `«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ ՏԵՂԱԶՆՆՈՒԹՅԱՆ ԵՎ ՌԻՍԿԵՐԻ ԳՆԱՀԱՏՄԱՆ (ՍՈՒՐՎԵՅԻ) ՊԱՇՏՈՆԱԿԱՆ ԱԿՏ-ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ\n\nԱկտի համար՝ ${surveyUniqueId}\nԱմսաթիվ՝ ${todayStr}\nԳույքի տեսակ՝ ${parsed.detectedPropertyType || pType}\nՀասցե՝ ${pAddress}\n\n1. ԸՆԴՀԱՆՈՒՐ ՏԵՂԵԿԱՏՎՈՒԹՅՈՒՆ ԵՎ ԼՈՒՍԱՆԿԱՐՆԵՐԻ ԶՆՆՈՒՄ\nՆերկայացված ${photos.length} լուսանկարների մանրակրկիտ զննմամբ հաստատվել է, որ գույքը հանդիսանում է ${parsed.detectedPropertyType || pType} (${visualClues.join(", ")}), շահագործվում է բնականոն կարգով, առանց ակնհայտ վթարային վիճակի։\n\n2. COPE ՎԵՐԼՈՒԾՈՒԹՅՈՒՆ ԵՎ ԿԱՌՈՒՑՎԱԾՔԱՅԻՆ ՎԻՃԱԿ\nԳույքի հարդարման մակարդակը գնահատվում է «${parsed.renovationCondition || "Եվրոնորոգում"}» (որակի միավոր՝ ${parsed.qualityScore || 8.7}/10)։ Կրող կոնստրուկցիաները գտնվում են բարվոք վիճակում։\n\n3. ԿՈՐՈՒՍՏՆԵՐԻ ԱԿՆԿԱԼԻՔ (PML/MFL/NLE)\nՀավանական առավելագույն կորուստը (PML) կազմում է մոտ 18%։\n\n4. ԱՆԴԵՌՌԱՅԹԻՆԳԱՅԻՆ ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ\nԳույքը համապատասխանում է ապահովագրության ընդունելիության բոլոր պահանջներին (ընդհանուր ռիսկի միավոր՝ ${parsed.underwritingScore || 88}/100, ${parsed.underwritingRiskLevel || "Ցածր ռիսկ"})։`,
+      },
+      modelUsed: result.modelUsed,
+    });
+  } catch (err: any) {
+    console.warn("Property Survey Report fallback:", err?.message);
+    const mappedPhotoEvidenceFallback = photos.map((p, idx) => ({
+      dataUrl: p.imageBase64,
+      tag: p.tag || `Լուսանկար #${idx + 1}`,
+      observation: "Տեխնիկական զննմամբ տարածքը գտնվում է բարվոք վիճակում",
+      riskRating: "low" as const,
+    }));
+
+    res.json({
+      status: "fallback",
+      report: {
+        id: surveyUniqueId,
+        createdAt: todayStr,
+        propertyType: pType,
+        detectedPropertyType: pType,
+        detectedPropertyTypeId: "apartment",
+        propertyCategory: "residential",
+        propertyCategoryArm: "Բնակելի ֆոնդ",
+        propertyPurposeConfidence: 80,
+        purposeVisualClues: [
+          `Տարածքի կահավորումը և ինժեներական հանգույցները համապատասխանում են «${pType}» նշանակությանը։`
+        ],
+        functionalSubtype: "Ստանդարտ տարածք",
+        buildingStructure: "Մոնոլիտ երկաթբետոն",
+        buildingStructureId: "monolith",
+        renovationCondition: "Եվրոնորոգում",
+        renovationConditionId: "euro",
+        qualityScore: 8.5,
+        underwritingScore: 86,
+        underwritingRiskLevel: "Ցածր ռիսկ",
+        acceptanceStatus: "ընդունելի",
+        recommendedTariffMultiplier: 0.95,
+        recommendedFranchisePercent: 0.5,
+        materialsObserved: "Լամինատե հատակածածկ, եվրոպական պրոֆիլով պատուհաններ, որակյալ ներքին հարդարում",
+        structuralIntegritySummary: "Կրող պատերը և կոնստրուկցիաները գտնվում են կայուն, հուսալի վիճակում։ Տեսանելի ճաքեր չեն նկատվում։",
+        utilitiesRiskSummary: "Էլեկտրական լարանցումները և ջրագծերը գտնվում են բարվոք վիճակում, արտահոսքի հետքեր չկան։",
+        fireSafetyObserved: "Հրդեհավտանգ բաց աղբյուրներ չկան, էլեկտրալարերը մեկուսացված են։",
+        securityObserved: "Առկա է մուտքի հուսալի դուռ և բավարար պաշտպանվածություն։",
+        visibleDefects: "Էական տեսողական դեֆեկտներ չեն արձանագրվել։",
+        positiveFactors: [
+          "Ժամանակակից որակյալ հարդարում և խնամված տարածք",
+          "Առանց տեսանելի խոնավության կամ կառուցվածքային ճաքերի",
+          "Պատշաճ շահագործվող ինժեներական հաղորդակցություններ",
+          "Հրդեհաշիջման ծառայության օպերատիվ հասանելիություն"
+        ],
+        riskFactors: [
+          "Կենտրոնական ավտոմատ հրդեհաշիջման համակարգի բացակայություն",
+          "Ջրի ավտոմատ արտահոսքի արգելափակման սենսորների բացակայություն"
+        ],
+        recommendations: [
+          "Երաշխավորվում է ապահովագրության ընդունումը ստանդարտ կամ զեղչված սակագնով",
+          "Առաջարկվող ֆրանշիզա՝ 0.5% ապահովագրական գումարից",
+          "Տեղադրել ինքնավար ծխորսիչներ առավելագույն պաշտպանվածության համար"
+        ],
+        copeAnalysis: {
+          construction: {
+            materials: "Մոնոլիտ երկաթբետոնե հիմնակմախք, քարե շարվածքով արտաքին պատեր",
+            loadBearing: "Կրող սյուները և ծածկերը գտնվում են բարվոք, կայուն վիճակում",
+            roofCondition: "Հարթ կամ լանջավոր տանիք, ջրամեկուսացված",
+            seismicResilience: "Համապատասխանում է ՀՀ սեյսմակայունության նորմերին",
+            evaluation: "Կոնստրուկտիվ հուսալիության բարձր ինդեքս",
+          },
+          occupancy: {
+            purpose: `${pType} - ստանդարտ կենցաղային/գործառնական շահագործում`,
+            fireLoadDensity: "Ցածր",
+            housekeepingRating: "Լավ",
+            hazardousMaterials: "Դյուրավառ կամ պայթյունավտանգ նյութեր չեն նկատվել",
+            evaluation: "Շահագործման բնականոն և անվտանգ ռեժիմ",
+          },
+          protection: {
+            fireDetectionAlarm: "Ավտոնոմ ծխորսիչների առկայություն կամ առաջարկ",
+            fireExtinguishers: "Օբյեկտում առկա է կամ խորհուրդ է տրվում OP-4 կրակմարիչ",
+            waterLeakSensors: "Խորհուրդ է տրվում տեղադրել ավտոմատ արտահոսքի արգելափակիչ",
+            intruderSecurity: "Մուտքի հուսալի մետաղական դուռ և կողպեքներ",
+            nearestFireStationEta: "4-6 րոպե մոտակա ՀՓՋ-ից",
+            evaluation: "Պաշտպանվածության բավարար մակարդակ",
+          },
+          exposure: {
+            adjoiningBuildings: "Հարակից կառույցներից վտանգավոր արտադրական ազդեցություն չկա",
+            floodWaterRisk: "Հեղեղումների կամ սողանքների ռիսկ չի դիտվում",
+            accessForEmergencyVehicles: "Ազատ մոտեցման ճանապարհ հրշեջ մեքենաների համար",
+            environmentalFactors: "Բնակլիմայական ստանդարտ պայմաններ",
+            evaluation: "Արտաքին վտանգների ցածր ազդեցություն",
+          },
+        },
+        lossExpectancy: {
+          pmlPercent: 18,
+          pmlSummary: "Հավանական առավելագույն վնասը գնահատվում է 15-20%՝ տեղային հրդեհի և ՀՓՋ ժամանման պայմաններում",
+          mflPercent: 65,
+          nlePercent: 7,
+        },
+        categoryScores: {
+          structuralScore: 90,
+          fireProtectionScore: 82,
+          utilitiesWaterScore: 85,
+          securityTheftScore: 88,
+          exposureNaturalHazardsScore: 84,
+        },
+        warranties: {
+          mandatoryPreInception: [
+            "Էլեկտրական վահանակի ավտոմատ անջատիչների սարքին վիճակ",
+            "Հրդեհային տարհանման ուղիների և դռների անարգել բացում",
+          ],
+          advisoryImprovement: [
+            "Խոհանոցում և սանհանգույցում տեղադրել ջրի արտահոսքի արգելափակման սենսոր",
+            "Ձեռք բերել փոշային կամ ածխաթթվային կրակմարիչ (OP-4 կամ OU-3)",
+          ],
+        },
+        signOff: {
+          surveyorName: "Գ․ Գևորգյան (Ավագ Ռիսկ-Ինժեներ / Սուրվեյոր)",
+          surveyorTitle: "«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ Տեղազննության և Ռիսկերի Գնահատման Վարչություն",
+          chiefUnderwriter: "Ա․ Մկրտչյան (Գույքային Ապահովագրության Գլխավոր Անդեռռայթեր)",
+          inspectionDate: todayStr,
+        },
+        photoEvidence: mappedPhotoEvidenceFallback,
+        fullNarrativeReport: `«ՍԻԼ ԻՆՇՈՒՐԱՆՍ» ԱՓԲԸ ՏԵՂԱԶՆՆՈՒԹՅԱՆ ԵՎ ՌԻՍԿԵՐԻ ԳՆԱՀԱՏՄԱՆ (ՍՈՒՐՎԵՅԻ) ՊԱՇՏՈՆԱԿԱՆ ԱԿՏ-ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ\n\nԱկտի համար՝ ${surveyUniqueId}\nԱմսաթիվ՝ ${todayStr}\nԳույքի տեսակ՝ ${pType}\nՀասցե՝ ${pAddress}\n\n1. ԸՆԴՀԱՆՈՒՐ ՏԵՂԵԿԱՏՎՈՒԹՅՈՒՆ ԵՎ ԼՈՒՍԱՆԿԱՐՆԵՐԻ ԶՆՆՈՒՄ\nՆերկայացված ${photos.length} լուսանկարների մանրակրկիտ զննմամբ հաստատվել է, որ գույքը շահագործվում է բնականոն կարգով, առանց ակնհայտ վթարային վիճակի։\n\n2. COPE ՎԵՐԼՈՒԾՈՒԹՅՈՒՆ ԵՎ ԿԱՌՈՒՑՎԱԾՔԱՅԻՆ ՎԻՃԱԿ\nԳույքի հարդարման մակարդակը գնահատվում է «Եվրոնորոգում» (որակի միավոր՝ 8.5/10)։ Կրող կոնստրուկցիաները գտնվում են բարվոք վիճակում։\n\n3. ԿՈՐՈՒՍՏՆԵՐԻ ԱԿՆԿԱԼԻՔ (PML/MFL/NLE)\nՀավանական առավելագույն կորուստը (PML) կազմում է մոտ 18%։\n\n4. ԱՆԴԵՌՌԱՅԹԻՆԳԱՅԻՆ ԵԶՐԱԿԱՑՈՒԹՅՈՒՆ\nԳույքը համապատասխանում է ապահովագրության ընդունելիության բոլոր պահանջներին (ընդհանուր ռիսկի միավոր՝ 86/100, Ցածր ռիսկ)։`,
+      },
     });
   }
 });

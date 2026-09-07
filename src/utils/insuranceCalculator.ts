@@ -221,6 +221,11 @@ export function buildPropertyProposal(state: PropertyInsuranceFormState): Quotat
     coveredPerilsList: perils,
     propertyBreakdown: calc.breakdown,
     specialConditions: [
+      ...(state.surveyReport
+        ? [
+            `Առկա է Ապահովագրական Տեղազննության (Սուրվեյի) Պաշտոնական Ակտ՝ N ${state.surveyReport.id} (Ամսաթիվ՝ ${state.surveyReport.createdAt}, Ռիսկայնություն՝ «${state.surveyReport.underwritingRiskLevel}», Գնահատական՝ ${state.surveyReport.underwritingScore}/100, Կարգավիճակ՝ «${state.surveyReport.acceptanceStatus}», Վերանորոգում՝ «${state.surveyReport.renovationCondition}»): Կիրառված է համապատասխան սակագնային կարգավորում։`,
+          ]
+        : []),
       "Վերջնական ծածկույթը, բացառությունները, սահմանաչափերը և հատուկ պայմանները սահմանվում են գործող ապահովագրական պայմաններով և սույն գնառաջարկում ընտրված ռիսկերով։",
       "Գույքի վերաբերյալ վերջնական սակագինը և պայմանները կարող են կախված լինել ներկայացված տվյալներից, վնասների պատմությունից և անհրաժեշտ զննությունից։",
     ],

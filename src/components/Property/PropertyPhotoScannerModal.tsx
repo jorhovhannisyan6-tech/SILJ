@@ -2,11 +2,17 @@ import React, { useState } from "react";
 import { Camera, Upload, Sparkles, CheckCircle2, AlertCircle, X, Loader2, ShieldCheck, Home } from "lucide-react";
 
 interface PropertyScanResult {
+  detectedPropertyType?: string;
+  detectedPropertyTypeId?: string;
+  propertyCategoryArm?: string;
+  purposeVisualClues?: string[];
   renovationCondition: string;
   renovationConditionId: string; // "economy" | "euro" | "luxury" | "zero"
   buildingStructure?: string;
+  buildingStructureId?: string;
   qualityScore: number;
   materialsObserved: string;
+  visibleDefects?: string;
   aiAnalysisSummary: string;
   underwritingRiskLevel: string;
 }
@@ -14,9 +20,10 @@ interface PropertyScanResult {
 interface Props {
   onClose: () => void;
   onApplyResult: (result: PropertyScanResult) => void;
+  onOpenFullSurvey?: () => void;
 }
 
-export function PropertyPhotoScannerModal({ onClose, onApplyResult }: Props) {
+export function PropertyPhotoScannerModal({ onClose, onApplyResult, onOpenFullSurvey }: Props) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string>("image/jpeg");
   const [loading, setLoading] = useState<boolean>(false);
@@ -63,12 +70,22 @@ export function PropertyPhotoScannerModal({ onClose, onApplyResult }: Props) {
 
       const data = await res.json();
       setScanResult({
+        detectedPropertyType: data.detectedPropertyType || "Բնակարան",
+        detectedPropertyTypeId: data.detectedPropertyTypeId || "apartment",
+        propertyCategoryArm: data.propertyCategoryArm || "Բնակելի ֆոնդ",
+        purposeVisualClues: Array.isArray(data.purposeVisualClues)
+          ? data.purposeVisualClues
+          : typeof data.purposeVisualClues === "string" && data.purposeVisualClues.trim()
+          ? [data.purposeVisualClues]
+          : ["Տարածքի կահավորումը համապատասխանում է տեսակին։"],
         renovationCondition: data.renovationCondition || "Եվրոնորոգում",
         renovationConditionId: data.renovationConditionId || "euro",
-        buildingStructure: data.buildingStructure || "Մոնոլիտ",
-        qualityScore: data.qualityScore || 8.0,
-        materialsObserved: data.materialsObserved || "Որակյալ հարդարման նյութեր",
-        aiAnalysisSummary: data.aiAnalysisSummary || "Լուսանկարի վերլուծությամբ հաստատվել է գույքի բարձրորակ վիճակը։",
+        buildingStructure: data.buildingStructure || "Մոնոլիտ (Նորակառույց)",
+        buildingStructureId: data.buildingStructureId || "monolith",
+        qualityScore: typeof data.qualityScore === "number" ? data.qualityScore : 7.5,
+        materialsObserved: data.materialsObserved || "Հարդարման նյութեր",
+        visibleDefects: data.visibleDefects || "Էական դեֆեկտներ չեն նկատվել",
+        aiAnalysisSummary: data.aiAnalysisSummary || "Լուսանկարի վերլուծությամբ արձանագրվել է գույքի վիճակը։",
         underwritingRiskLevel: data.underwritingRiskLevel || "Ցածր ռիսկ",
       });
     } catch (err: any) {
@@ -99,9 +116,30 @@ export function PropertyPhotoScannerModal({ onClose, onApplyResult }: Props) {
           </div>
         </div>
 
-        <p className="text-xs text-slate-600 mb-6 leading-relaxed">
+        <p className="text-xs text-slate-600 mb-3 leading-relaxed">
           Վերբեռնեք բնակարանի կամ տան ներքին հարդարման լուսանկարը։ Արհեստական Բանականությունը (Gemini Vision) ավտոմատ կգնահատի վերանորոգման որակը (Էկոնոմ / Եվրոնորոգում / Լյուքս), նյութերը և ռիսկայնությունը։
         </p>
+
+        {onOpenFullSurvey && (
+          <div className="mb-5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-emerald-950 font-medium">
+                Անհրաժեշտ է ամբողջակա՞ն սուրվեյ (1-6 լուսանկար, ինժեներական ցանցեր, պաշտոնական ակտ)։
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenFullSurvey();
+              }}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shrink-0 transition cursor-pointer"
+            >
+              Բացել Սուրվեյի Ռեպորտը
+            </button>
+          </div>
+        )}
 
         {!selectedImage ? (
           <label className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 hover:bg-indigo-50 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition text-center space-y-3">
@@ -165,21 +203,66 @@ export function PropertyPhotoScannerModal({ onClose, onApplyResult }: Props) {
                   <Home className="w-5 h-5 text-cyan-400" />
                   <span className="text-xs font-bold uppercase tracking-wider text-cyan-200">AI Վերլուծության Արդյունք</span>
                 </div>
-                <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black">
+                <span className={`px-3 py-1 rounded-full text-xs font-black border ${
+                  scanResult.renovationConditionId === "zero"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    : scanResult.renovationConditionId === "economy"
+                    ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                    : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                }`}>
                   {scanResult.renovationCondition}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div className="bg-white/10 rounded-xl p-3 border border-white/10">
-                  <div className="text-[11px] text-slate-300">Վերանորոգման մակարդակ</div>
-                  <div className="text-base font-extrabold text-white mt-0.5">{scanResult.renovationCondition}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
+                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10 col-span-2 sm:col-span-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider">Ճանաչված Գույքի Նշանակություն</div>
+                    <div className="text-sm font-black text-white mt-0.5">{scanResult.detectedPropertyType || "Բնակարան"}</div>
+                  </div>
+                  {scanResult.propertyCategoryArm && (
+                    <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-400/30 text-[11px] font-bold text-cyan-200">
+                      {scanResult.propertyCategoryArm}
+                    </span>
+                  )}
                 </div>
-                <div className="bg-white/10 rounded-xl p-3 border border-white/10">
-                  <div className="text-[11px] text-slate-300">Որակի AI Միավոր (1-10)</div>
-                  <div className="text-base font-extrabold text-amber-300 mt-0.5">{scanResult.qualityScore} / 10</div>
+                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                  <div className="text-[10px] text-slate-300">Վերանորոգում</div>
+                  <div className="text-sm font-extrabold text-white mt-0.5">{scanResult.renovationCondition}</div>
+                </div>
+                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                  <div className="text-[10px] text-slate-300">Կառուցվածք / Շենք</div>
+                  <div className="text-sm font-extrabold text-white mt-0.5">{scanResult.buildingStructure || "Մոնոլիտ"}</div>
+                </div>
+                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10 col-span-2 sm:col-span-1">
+                  <div className="text-[10px] text-slate-300">Որակի Միավոր</div>
+                  <div className="text-sm font-extrabold text-amber-300 mt-0.5">{scanResult.qualityScore} / 10</div>
                 </div>
               </div>
+
+              {scanResult.purposeVisualClues && scanResult.purposeVisualClues.length > 0 && (
+                <div className="text-xs text-cyan-100 bg-cyan-950/40 p-3 rounded-xl border border-cyan-500/30 space-y-1">
+                  <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Տեսողական նշաններ ըստ լուսանկարի.</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-cyan-100/90 pl-1">
+                    {scanResult.purposeVisualClues.map((clue, idx) => (
+                      <li key={idx}>{clue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {scanResult.visibleDefects && scanResult.visibleDefects !== "Էական դեֆեկտներ չեն նկատվել" && (
+                <div className="text-xs text-amber-200 bg-amber-950/40 p-3 rounded-xl border border-amber-500/30 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-amber-300">Նկատված դեֆեկտներ/առանձնահատկություններ՝ </span>
+                    <span>{scanResult.visibleDefects}</span>
+                  </div>
+                </div>
+              )}
 
               <div className="text-xs text-indigo-100 bg-white/5 p-3 rounded-xl border border-white/10">
                 <div className="font-bold text-white mb-1">Նկատված նյութեր և հարդարում.</div>
@@ -200,7 +283,7 @@ export function PropertyPhotoScannerModal({ onClose, onApplyResult }: Props) {
               className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
             >
               <CheckCircle2 className="w-5 h-5" />
-              <span>Կիրառել «{scanResult.renovationCondition}» վիճակը հաշվիչում</span>
+              <span>Կիրառել «{scanResult.renovationCondition}» տվյալները հաշվիչում</span>
             </button>
           </div>
         )}

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ListAmPropertyValuationCalculator } from "../Property/ListAmPropertyValuationCalculator";
+import { PropertySurveyReportModal } from "../Property/PropertySurveyReportModal";
 import {
   PropertyInsuranceFormState,
+  PropertySurveyReport,
   QuotationProposal,
 } from "../../types";
 import {
@@ -36,7 +38,13 @@ import {
   Percent,
   ChevronDown,
   ChevronUp,
+  Camera,
+  Eye,
+  Trash2,
+  FileDown,
+  Loader2,
 } from "lucide-react";
+import { downloadSurveyReportAsPdf } from "../../utils/surveyReportExport";
 
 interface PropertyInsuranceFormProps {
   state: PropertyInsuranceFormState;
@@ -51,10 +59,12 @@ export function PropertyInsuranceForm({
 }: PropertyInsuranceFormProps) {
   const [activeSection, setActiveSection] = useState<number | "all">("all");
   const [showPropertyValuationModal, setShowPropertyValuationModal] = useState(false);
+  const [showSurveyModal, setShowSurveyModal] = useState(false);
   const [aiParseModalOpen, setAiParseModalOpen] = useState(false);
   const [aiInputText, setAiInputText] = useState("");
   const [aiParsingLoading, setAiParsingLoading] = useState(false);
   const [aiParseError, setAiParseError] = useState("");
+  const [downloadingSurveyPdf, setDownloadingSurveyPdf] = useState(false);
 
   const calc = calculatePropertyQuotation(state);
 
@@ -145,6 +155,15 @@ export function PropertyInsuranceForm({
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
+              onClick={() => setShowSurveyModal(true)}
+              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-950/30 transition cursor-pointer border border-emerald-400/30 active:scale-95"
+            >
+              <Camera className="w-4 h-4 text-emerald-200" />
+              📸 AI Սուրվեյի Ռեպորտ (Լուսանկարներ)
+            </button>
+
+            <button
               onClick={() => setAiParseModalOpen(true)}
               className="inline-flex items-center gap-1.5 bg-[#0066FF] hover:bg-[#0052CC] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-blue-950/30 transition cursor-pointer border border-blue-400/30 active:scale-95"
             >
@@ -175,6 +194,89 @@ export function PropertyInsuranceForm({
             </div>
           </div>
         </div>
+
+        {/* Survey Report Status Notification Bar (if survey report is attached) */}
+        {state.surveyReport && (
+          <div className="mt-4 bg-gradient-to-r from-emerald-950/90 via-teal-950/90 to-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-emerald-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/30 text-emerald-200 px-2.5 py-0.5 rounded-full border border-emerald-400/40">
+                    Ակտ N {state.surveyReport.id}
+                  </span>
+                  <span className="text-xs text-emerald-200 font-bold">
+                    • Ռիսկայնություն՝ {state.surveyReport.underwritingRiskLevel} ({state.surveyReport.underwritingScore}/100)
+                  </span>
+                  <span className="text-xs text-cyan-300 font-semibold hidden md:inline">
+                    • Կարգավիճակ՝ «{state.surveyReport.acceptanceStatus}»
+                  </span>
+                </div>
+                <div className="text-sm font-black text-white mt-1">
+                  Գույքի Ապահովագրական Սուրվեյի (Տեղազննության) Եզրակացությունը կցված է
+                </div>
+                <div className="text-xs text-emerald-100/80 mt-0.5">
+                  Հարդարում՝ {state.surveyReport.renovationCondition} (Որակ՝ {state.surveyReport.qualityScore}/10) • Սակագնի գործակից՝ x{state.surveyReport.recommendedTariffMultiplier} • Ֆրանշիզա՝ {state.surveyReport.recommendedFranchisePercent}%
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!state.surveyReport) return;
+                  setDownloadingSurveyPdf(true);
+                  try {
+                    await downloadSurveyReportAsPdf(
+                      state.surveyReport,
+                      state.objectData.address,
+                      state.objectData.totalArea
+                    );
+                  } catch (e) {
+                    console.error("PDF download failed:", e);
+                  } finally {
+                    setDownloadingSurveyPdf(false);
+                  }
+                }}
+                disabled={downloadingSurveyPdf}
+                className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-md disabled:opacity-70"
+                title="Ներբեռնել Սուրվեյի PDF Ակտը"
+              >
+                {downloadingSurveyPdf ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="w-4 h-4" />
+                    <span>Ներբեռնել PDF Ակտ</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSurveyModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/25 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Eye className="w-4 h-4 text-cyan-200" />
+                <span>Դիտել / Տպել</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange((prev) => ({ ...prev, surveyReport: undefined }))}
+                className="p-2.5 rounded-xl bg-white/10 hover:bg-red-600/40 text-white/80 hover:text-red-100 text-xs transition cursor-pointer"
+                title="Հեռացնել կցված սուրվեյը"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -368,18 +470,29 @@ export function PropertyInsuranceForm({
           {/* Section 2: Ապահովագրվող օբյեկտի տվյալներ */}
           {(activeSection === "all" || activeSection === 2) && (
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm transition">
-              <div className="flex items-center gap-3 border-b border-slate-100 pb-3 mb-4">
-                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
-                  II
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    II
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                      II. Ապահովագրվող օբյեկտի տվյալներ
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Գույքի գտնվելու վայրի հասցե, հարկայնություն, շինության նյութ
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
-                    II. Ապահովագրվող օբյեկտի տվյալներ
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Գույքի գտնվելու վայրի հասցե, հարկայնություն, շինության նյութ
-                  </p>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSurveyModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-extrabold border border-emerald-300 transition cursor-pointer shrink-0"
+                >
+                  <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Լուսանկարների Սուրվեյ</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1934,6 +2047,70 @@ export function PropertyInsuranceForm({
             </div>
           </div>
         </div>
+      )}
+
+      {showSurveyModal && (
+        <PropertySurveyReportModal
+          initialAddress={state.objectData.address}
+          initialPropertyType={state.objectData.purpose || "Բնակարան"}
+          initialArea={state.objectData.totalArea}
+          existingReport={state.surveyReport}
+          onClose={() => setShowSurveyModal(false)}
+          onApplySurveyReport={(report) => {
+            onChange((prev) => {
+              const baseTariff = calc.baseTariff || 0.15;
+              const newCustomTariff =
+                report.recommendedTariffMultiplier && report.recommendedTariffMultiplier !== 1.0
+                  ? Number((baseTariff * report.recommendedTariffMultiplier).toFixed(3))
+                  : prev.customTariff;
+
+              return {
+                ...prev,
+                surveyReport: report,
+                objectData: {
+                  ...prev.objectData,
+                  purpose: report.detectedPropertyType || report.propertyType || prev.objectData.purpose,
+                  buildingMaterial: report.buildingStructure || prev.objectData.buildingMaterial,
+                },
+                insuredProperty: {
+                  ...prev.insuredProperty,
+                  building: true,
+                  interior: true,
+                },
+                customTariff: newCustomTariff,
+                customFranchise: report.recommendedFranchisePercent || prev.customFranchise,
+                fireProtection: {
+                  ...prev.fireProtection,
+                  smokeDetectors:
+                    report.fireSafetyObserved.toLowerCase().includes("ծխորսիչ") ||
+                    report.fireSafetyObserved.toLowerCase().includes("սենսոր") ||
+                    prev.fireProtection.smokeDetectors,
+                  extinguishers:
+                    report.fireSafetyObserved.toLowerCase().includes("կրակմարիչ") ||
+                    prev.fireProtection.extinguishers,
+                },
+                security: {
+                  ...prev.security,
+                  cctv:
+                    report.securityObserved.toLowerCase().includes("տեսահսկ") ||
+                    report.securityObserved.toLowerCase().includes("տեսախցիկ") ||
+                    prev.security.cctv,
+                  bars:
+                    report.securityObserved.toLowerCase().includes("ճաղավանդակ") ||
+                    prev.security.bars,
+                  burglarAlarm:
+                    report.securityObserved.toLowerCase().includes("ազդանշան") ||
+                    prev.security.burglarAlarm,
+                },
+                documents: {
+                  ...prev.documents,
+                  photos: true,
+                },
+              };
+            });
+            setShowSurveyModal(false);
+          }}
+        />
       )}
     </div>
   );

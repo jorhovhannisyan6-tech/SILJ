@@ -44,7 +44,8 @@
     {
       "productId": "machinery-breakdown",
       "sourceFile": "Մեքենաների խափանման ապ-ն Պայմաններ հայերեն.docx",
-      "textFile": "text/meqenaneri_khapanman_ap-n_paymanner_hayeren.docx.txt"
+      "textFile": "text/Մեքենաների_խափանման_ապ-ն_Պայմաններ_հայերեն.docx.txt",
+      "characters": 12350
     },
     {
       "productId": "warehouse-liability",
@@ -59,8 +60,8 @@
     {
       "productId": "accident",
       "sourceFile": "Դժբախտ Պատահարներ Պայմաններ.docx",
-      "textFile": "text/djbakht_pataharner.docx.txt",
-      "characters": 404
+      "textFile": "text/Դժբախտ_Պատահարներ_Պայմաններ.docx.txt",
+      "characters": 43104
     },
     {
       "productId": "casco",
@@ -73,6 +74,12 @@
       "sourceFile": "HO-177-N.txt",
       "textFile": "text/HO-177-N.txt.txt",
       "characters": 271432
+    },
+    {
+      "productId": "legislation",
+      "sourceFile": "ՀՀ քաղ․Օրենսգրքի 54 գլուխ",
+      "textFile": "text/ՀՀ_քաղ_Օրենսգրքի_54_գլուխ.txt",
+      "characters": 48531
     }
   ]
 }

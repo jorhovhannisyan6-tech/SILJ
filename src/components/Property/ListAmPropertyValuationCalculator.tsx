@@ -803,13 +803,20 @@ export function ListAmPropertyValuationCalculator({
           onClose={() => setShowPhotoScanner(false)}
           onApplyResult={(result) => {
             const conditionMap: Record<string, string> = {
-              economy: "Էկոնոմ (հին / ստանդարտ)",
-              euro: "Եվրոնորոգված (որակյալ)",
-              luxury: "Լյուքս / Դիզայներական",
-              zero: "Զրոյական (սև սվաղ)",
+              economy: "needs_repair",
+              euro: "euro",
+              luxury: "euro",
+              zero: "zero",
             };
-            const mapped = conditionMap[result.renovationConditionId] || "Եվրոնորոգված (որակյալ)";
+            const mapped = conditionMap[result.renovationConditionId] || "euro";
             setRenovationCondition(mapped as any);
+
+            if (result.buildingStructureId) {
+              const validStructures = ["monolith", "stone", "panel", "brick", "other"];
+              if (validStructures.includes(result.buildingStructureId)) {
+                setBuildingStructure(result.buildingStructureId as any);
+              }
+            }
           }}
         />
       )}
