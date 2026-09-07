@@ -31,6 +31,11 @@ import {
   QuotationProposal,
 } from "./types";
 import {
+  syncQuotationToCloud,
+  deleteQuotationFromCloud,
+  listenToCloudQuotations,
+} from "./lib/firestoreSync";
+import {
   DEFAULT_PROPERTY_STATE,
   DEFAULT_MORTGAGE_PACKAGE_I,
 } from "./data/presets";
@@ -73,10 +78,19 @@ export default function App() {
     window.addEventListener("sil-new-lead", handleNewLead);
     window.addEventListener("sil-notification", handleNotification);
     window.addEventListener("sil-auth-changed", handleAuthChanged);
+
+    // Real-time Cloud Firestore synchronization across all agents & devices
+    const unsubscribeCloud = listenToCloudQuotations((cloudQuotes) => {
+      if (Array.isArray(cloudQuotes) && cloudQuotes.length > 0) {
+        setQuoteHistory(cloudQuotes);
+      }
+    });
+
     return () => {
       window.removeEventListener("sil-new-lead", handleNewLead);
       window.removeEventListener("sil-notification", handleNotification);
       window.removeEventListener("sil-auth-changed", handleAuthChanged);
+      unsubscribeCloud();
     };
   }, []);
 
@@ -171,6 +185,7 @@ export default function App() {
     setCurrentProposal(enriched);
     localStorage.setItem("sil-current-proposal", JSON.stringify(enriched));
     setQuoteHistory(prev => { const next = [enriched, ...prev.filter(p => p.id !== enriched.id)].slice(0, 200); localStorage.setItem("sil-quote-history", JSON.stringify(next)); return next; });
+    syncQuotationToCloud(enriched);
     setActiveTab("quotation");
   };
 
@@ -193,10 +208,20 @@ export default function App() {
     };
     handleGenerateQuotation(copy);
   };
-  const deleteQuote = (id: string) => { setQuoteHistory(prev => { const next = prev.filter(p=>p.id !== id); localStorage.setItem("sil-quote-history", JSON.stringify(next)); return next; }); };
+  const deleteQuote = (id: string) => {
+    deleteQuotationFromCloud(id);
+    setQuoteHistory(prev => { const next = prev.filter(p=>p.id !== id); localStorage.setItem("sil-quote-history", JSON.stringify(next)); return next; });
+  };
   const updateQuoteStatus = (id: string, status: any, patch?: Partial<QuotationProposal>) => {
     setQuoteHistory(prev => {
-      const next = prev.map(p => p.id === id ? { ...p, status, ...patch, updatedAt: new Date().toISOString() } : p);
+      const next = prev.map(p => {
+        if (p.id === id) {
+          const updatedQuote = { ...p, status, ...patch, updatedAt: new Date().toISOString() };
+          syncQuotationToCloud(updatedQuote);
+          return updatedQuote;
+        }
+        return p;
+      });
       localStorage.setItem("sil-quote-history", JSON.stringify(next));
       return next;
     });
@@ -204,6 +229,7 @@ export default function App() {
       const updated = { ...currentProposal, status, ...patch, updatedAt: new Date().toISOString() };
       setCurrentProposal(updated);
       localStorage.setItem("sil-current-proposal", JSON.stringify(updated));
+      syncQuotationToCloud(updated);
     }
   };
 
@@ -303,6 +329,7 @@ export default function App() {
               setCurrentProposal(enriched);
               localStorage.setItem("sil-current-proposal", JSON.stringify(enriched));
               setQuoteHistory(prev => { const next = [enriched, ...prev.filter(p => p.id !== enriched.id)].slice(0, 200); localStorage.setItem("sil-quote-history", JSON.stringify(next)); return next; });
+              syncQuotationToCloud(enriched);
               addAuditEvent({ action: enriched.status === "policy_issued" ? "quote.policy_issued" : enriched.status === "locked" ? "quote.lock" : "quote.update", entity: "quotation", entityId: enriched.id, details: { quotationNumber: enriched.quotationNumber, status: enriched.status, policyNumber: enriched.policyNumber, version: enriched.version } });
             }}
             onBackToCatalog={() => setActiveTab("catalog")}

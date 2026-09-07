@@ -45,6 +45,31 @@ service cloud.firestore {
     match /knowledge_base_docs/{docId} {
       allow read, write: if true;
     }
+
+    // Quotations & Proposals collection (shared among SIL agents)
+    match /quotations/{quoteId} {
+      allow read, write: if true;
+    }
+
+    // Contracts & Issued Policies collection
+    match /contracts/{contractId} {
+      allow read, write: if true;
+    }
+
+    // Client Directory collection
+    match /clients/{clientId} {
+      allow read, write: if true;
+    }
+
+    // Backup snapshots
+    match /backup_snapshots/{backupId} {
+      allow read, write: if true;
+    }
+
+    // System audit logs
+    match /audit_logs/{logId} {
+      allow read, write: if true;
+    }
   }
 }
 

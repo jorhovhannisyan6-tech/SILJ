@@ -32,13 +32,19 @@ import {
   FileDown,
   Download,
   FileText,
+  Globe,
+  PenTool,
+  Lock,
 } from "lucide-react";
 import { PropertySurveyReport } from "../../types";
 import {
   downloadSurveyReportAsPdf,
   downloadSurveyReportAsWordDoc,
   copySurveyReportForWord,
+  type ExportLanguage,
+  type DigitalSignatureAttachment,
 } from "../../utils/surveyReportExport";
+import { SignatureModal, type DigitalSignatureResult } from "../Common/SignatureModal";
 
 interface SurveyPhotoItem {
   id: string;
@@ -142,6 +148,9 @@ export function PropertySurveyReportModal({
   const [pdfExportSuccess, setPdfExportSuccess] = useState<boolean>(false);
   const [copyFormattedSuccess, setCopyFormattedSuccess] = useState<boolean>(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportLanguage, setExportLanguage] = useState<ExportLanguage>("hy");
+  const [signatureModalOpen, setSignatureModalOpen] = useState<boolean>(false);
+  const [digitalSignature, setDigitalSignature] = useState<DigitalSignatureAttachment | null>(null);
 
   const MAX_PHOTOS = 24;
 
@@ -276,7 +285,13 @@ export function PropertySurveyReportModal({
     setIsExportingPdf(true);
     setExportError(null);
     try {
-      await downloadSurveyReportAsPdf(surveyReport, address, estimatedArea);
+      await downloadSurveyReportAsPdf(
+        surveyReport,
+        address,
+        Number(estimatedArea) || 85,
+        exportLanguage,
+        digitalSignature || undefined
+      );
       setPdfExportSuccess(true);
       setTimeout(() => setPdfExportSuccess(false), 3000);
     } catch (err: any) {
@@ -296,7 +311,13 @@ export function PropertySurveyReportModal({
   const handleDownloadWord = () => {
     if (!surveyReport) return;
     try {
-      downloadSurveyReportAsWordDoc(surveyReport, address, estimatedArea);
+      downloadSurveyReportAsWordDoc(
+        surveyReport,
+        address,
+        Number(estimatedArea) || 85,
+        exportLanguage,
+        digitalSignature || undefined
+      );
     } catch (err: any) {
       console.error("Word export failed:", err);
       setExportError(err?.message || "Word փաստաթղթի ներբեռնումը չհաջողվեց:");
@@ -305,7 +326,7 @@ export function PropertySurveyReportModal({
 
   const handleCopyFormatted = async () => {
     if (!surveyReport) return;
-    const ok = await copySurveyReportForWord(surveyReport, address, estimatedArea);
+    const ok = await copySurveyReportForWord(surveyReport, address, Number(estimatedArea) || 85);
     if (ok) {
       setCopyFormattedSuccess(true);
       setTimeout(() => setCopyFormattedSuccess(false), 2000);
@@ -356,6 +377,61 @@ export function PropertySurveyReportModal({
           <div className="flex items-center gap-2 flex-wrap">
             {surveyReport && (
               <>
+                {/* Language Switcher */}
+                <div className="flex items-center bg-black/30 border border-white/20 rounded-xl p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setExportLanguage("hy")}
+                    className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      exportLanguage === "hy"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-blue-100 hover:text-white"
+                    }`}
+                    title="Հայերեն Պաշտոնական Ակտ"
+                  >
+                    🇦🇲 HY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportLanguage("en")}
+                    className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      exportLanguage === "en"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-blue-100 hover:text-white"
+                    }`}
+                    title="English Reinsurance Format (Swiss Re / Munich Re)"
+                  >
+                    🇬🇧 EN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportLanguage("ru")}
+                    className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      exportLanguage === "ru"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-blue-100 hover:text-white"
+                    }`}
+                    title="Русский Акт Осмотра"
+                  >
+                    🇷🇺 RU
+                  </button>
+                </div>
+
+                {/* Digital Signature Action */}
+                <button
+                  type="button"
+                  onClick={() => setSignatureModalOpen(true)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer border shadow-xs ${
+                    digitalSignature
+                      ? "bg-emerald-600/90 hover:bg-emerald-500 text-white border-emerald-400"
+                      : "bg-white/15 hover:bg-white/25 text-white border-white/20"
+                  }`}
+                  title="Էլեկտրոնային Թվային Ստորագրություն"
+                >
+                  <PenTool className="w-3.5 h-3.5 text-cyan-200" />
+                  <span>{digitalSignature ? "✓ Ստորագրված է" : "✍️ e-Sign"}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleDownloadPdf}
@@ -365,22 +441,22 @@ export function PropertySurveyReportModal({
                       ? "bg-emerald-500 text-white border border-emerald-400"
                       : "bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black border border-cyan-300"
                   }`}
-                  title="Ներբեռնել պաշտոնական PDF ակտը"
+                  title={`Ներբեռնել ${exportLanguage.toUpperCase()} PDF ակտը`}
                 >
                   {isExportingPdf ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>PDF Պատրաստում...</span>
+                      <span>PDF...</span>
                     </>
                   ) : pdfExportSuccess ? (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>PDF Ներբեռնված է</span>
+                      <span>PDF Պատրաստ է</span>
                     </>
                   ) : (
                     <>
                       <FileDown className="w-4 h-4" />
-                      <span>Տպել / Ներբեռնել PDF Ակտ</span>
+                      <span>PDF ({exportLanguage.toUpperCase()})</span>
                     </>
                   )}
                 </button>
@@ -389,10 +465,10 @@ export function PropertySurveyReportModal({
                   type="button"
                   onClick={handleDownloadWord}
                   className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition cursor-pointer border border-white/20 shadow-xs"
-                  title="Ներբեռնել Word (.doc) ձևաչափով"
+                  title={`Ներբեռնել Word (${exportLanguage.toUpperCase()})`}
                 >
                   <FileText className="w-3.5 h-3.5 text-blue-200" />
-                  <span>Word (.doc)</span>
+                  <span>Word</span>
                 </button>
 
                 <button
@@ -1534,6 +1610,20 @@ export function PropertySurveyReportModal({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Digital Signature Modal */}
+      {signatureModalOpen && (
+        <SignatureModal
+          isOpen={signatureModalOpen}
+          onClose={() => setSignatureModalOpen(false)}
+          defaultSignerName={surveyReport?.signOff?.surveyorName || "Գ․ Գևորգյան"}
+          defaultRole="surveyor"
+          title="Սուրվեյի Ակտի Էլեկտրոնային Թվային Ստորագրություն"
+          onSaveSignature={(sig) => {
+            setDigitalSignature(sig);
+          }}
+        />
       )}
 
       {/* Printable Official Paper Survey Report */}

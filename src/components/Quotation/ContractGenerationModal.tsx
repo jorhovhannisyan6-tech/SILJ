@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { QuotationProposal } from "../../types";
 import {
   ContractGenerationData,
@@ -10,6 +10,7 @@ import {
   copyContractForWord,
 } from "../../utils/contractTemplate";
 import { formatCurrency } from "../../utils/insuranceCalculator";
+import { AiDocumentScanner, ExtractedTechPassportData } from "../AiDocumentScanner";
 import {
   X,
   FileCheck,
@@ -28,6 +29,12 @@ import {
   RefreshCw,
   Edit3,
   CheckCircle2,
+  Camera,
+  Upload,
+  Layers,
+  Car,
+  Home,
+  Building2,
 } from "lucide-react";
 
 interface Props {
@@ -44,6 +51,12 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfError, setPdfError] = useState("");
   const [isSaved, setIsSaved] = useState(false);
+
+  // OCR Modal & Highlights State
+  const [showOcrModal, setShowOcrModal] = useState(false);
+  const [ocrNotification, setOcrNotification] = useState<string | null>(null);
+  const [ocrHighlights, setOcrHighlights] = useState<string[]>([]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // AI State
   const [aiPromptTopic, setAiPromptTopic] = useState("standard_terms");
@@ -62,6 +75,103 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
 
   const handleFieldChange = (field: keyof ContractGenerationData, value: any) => {
     setContractData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleOcrAutoFill = (scanned: ExtractedTechPassportData) => {
+    const updated = { ...contractData };
+    const filledFields: string[] = [];
+
+    // 1. Client / Owner name
+    if (scanned.ownerName) {
+      updated.clientName = scanned.ownerName;
+      filledFields.push("Ապահովադրի անվանում");
+    }
+
+    // 2. Passport / SSN / Tax ID
+    if (scanned.taxId) {
+      updated.clientPassportOrTaxId = `ՀՎՀՀ՝ ${scanned.taxId}${scanned.registrationNumber ? ` (Գրանցման N՝ ${scanned.registrationNumber})` : ""}`;
+      filledFields.push("ՀՎՀՀ / Պետռեգիստր");
+    } else if (scanned.passportNumber || scanned.ssn) {
+      const parts = [
+        scanned.passportNumber ? `Անձնագիր՝ ${scanned.passportNumber}` : "",
+        scanned.ssn ? `ՀԾՀ՝ ${scanned.ssn}` : "",
+      ].filter(Boolean);
+      updated.clientPassportOrTaxId = parts.join(", ");
+      filledFields.push("Անձնագիր / ՀԾՀ");
+    }
+
+    // 3. Address
+    if (scanned.address) {
+      updated.clientAddress = scanned.address;
+      filledFields.push("Հասցե");
+    }
+
+    // 4. Contact
+    if (scanned.phone) {
+      updated.clientPhone = scanned.phone;
+      filledFields.push("Հեռախոս");
+    }
+    if (scanned.email) {
+      updated.clientEmail = scanned.email;
+      filledFields.push("Էլ․ փոստ");
+    }
+
+    // 5. Insured Object
+    if (scanned.documentType === "tech_passport" || scanned.vinCode || scanned.plateNumber) {
+      const carParts = [
+        scanned.vehicleMake && scanned.vehicleModel ? `${scanned.vehicleMake} ${scanned.vehicleModel}` : "",
+        scanned.manufactureYear ? `(${scanned.manufactureYear}թ.)` : "",
+        scanned.plateNumber ? `Պ/հ՝ ${scanned.plateNumber}` : "",
+        scanned.vinCode ? `VIN՝ ${scanned.vinCode}` : "",
+        scanned.enginePowerHp ? `Շարժիչ՝ ${scanned.enginePowerHp} ձ․ու․` : "",
+      ].filter(Boolean);
+      if (carParts.length > 0) {
+        updated.insuredObject = carParts.join(", ");
+        filledFields.push("Տրանսպորտային միջոց (VIN, Պետհամարանիշ)");
+      }
+    } else if (scanned.documentType === "property_certificate" || scanned.propertyAreaSqm) {
+      const propParts = [
+        scanned.address || "Անշարժ գույք",
+        scanned.propertyAreaSqm ? `Մակերես՝ ${scanned.propertyAreaSqm} քմ` : "",
+        scanned.cadastreCode ? `Կադաստր՝ ${scanned.cadastreCode}` : "",
+        scanned.buildingStructure ? `Կոնստրուկցիա՝ ${scanned.buildingStructure}` : "",
+      ].filter(Boolean);
+      if (propParts.length > 0) {
+        updated.insuredObject = propParts.join(", ");
+        filledFields.push("Անշարժ գույք (Կադաստր, Մակերես)");
+      }
+      if (scanned.propertyValue && !updated.totalSumInsured) {
+        updated.totalSumInsured = scanned.propertyValue;
+        filledFields.push("Ապահովագրական գումար");
+      }
+    }
+
+    // 6. Beneficiary & Bank Details
+    if (scanned.bankAccount) {
+      updated.beneficiaryDetails = `${scanned.bankName ? scanned.bankName + ", " : ""}Հ/Հ ${scanned.bankAccount}`;
+      filledFields.push("Շահառուի բանկային հաշիվ");
+    }
+
+    setContractData(updated);
+    setOcrHighlights(filledFields);
+    setOcrNotification(`✓ AI OCR ճանաչմամբ լրացվեցին (${filledFields.length}) դաշտեր՝ ${filledFields.join(", ")}`);
+    setShowOcrModal(false);
+    setTimeout(() => setOcrNotification(null), 9000);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    setShowOcrModal(true);
   };
 
   const handleRegenerateNumbers = () => {
@@ -162,7 +272,43 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
+    >
+      {/* Drag & Drop Visual Overlay */}
+      {isDraggingOver && (
+        <div className="fixed inset-0 z-60 bg-blue-950/80 border-4 border-dashed border-cyan-400 flex flex-col items-center justify-center text-white pointer-events-none">
+          <Upload className="w-16 h-16 text-cyan-400 mb-3 animate-bounce" />
+          <h3 className="text-xl font-bold">Բաց թողեք փաստաթուղթը այստեղ</h3>
+          <p className="text-sm text-cyan-200">AI OCR սկաները ավտոմատ կճանաչի տվյալները և կլրացնի պայմանագրում</p>
+        </div>
+      )}
+
+      {/* OCR Scanner Modal Sub-layer */}
+      {showOcrModal && (
+        <div className="fixed inset-0 z-70 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl animate-fadeIn">
+            <AiDocumentScanner
+              customTitle="AI OCR Փաստաթղթերի Սկաներ (Պայմանագրի Տվյալներ)"
+              customSubtitle="Բեռնեք անձնագիր, տեխանձնագիր, գույքի վկայական կամ ՀՎՀՀ՝ պայմանագրի դաշտերն ակնթարթորեն լրացնելու համար"
+              allowMultiScan={true}
+              initialDocType={
+                proposal.type === "casco"
+                  ? "tech_passport"
+                  : proposal.type === "property"
+                  ? "property_certificate"
+                  : "passport_id"
+              }
+              onAutoFill={handleOcrAutoFill}
+              onClose={() => setShowOcrModal(false)}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-[#00235B] text-white px-6 py-5 flex items-center justify-between border-b border-blue-900/50">
@@ -192,6 +338,13 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowOcrModal(true)}
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Camera className="w-4 h-4" />
+              <span>📸 AI OCR Սկաներ</span>
+            </button>
             <button
               onClick={onClose}
               className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer"
@@ -261,31 +414,76 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
           </div>
         </div>
 
+        {/* Notification Banner */}
+        {ocrNotification && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-2.5 flex items-center justify-between text-xs text-emerald-800 font-medium animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{ocrNotification}</span>
+            </div>
+            <button
+              onClick={() => setOcrNotification(null)}
+              className="text-emerald-600 hover:text-emerald-900 font-bold px-2 py-0.5 text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {pdfError && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200 flex items-center gap-2">
+            <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{pdfError}</span>
             </div>
           )}
 
-          {/* TAB 1: EDIT CONTRACT DETAILS */}
+          {/* TAB 1: FORM EDITING */}
           {activeTab === "edit" && (
-            <div className="space-y-6">
-              {/* Numbers and Dates */}
+            <div className="space-y-5">
+              {/* Quick AI OCR Action Banner */}
+              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-4 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 border border-blue-700/40">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shrink-0">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                      Ավտոմատ Լրացում AI OCR Սկաներով
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full font-semibold">
+                        Instant Fill
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-blue-200">
+                      Բեռնեք կամ քաշեք (Drag & Drop) անձնագրի, տեխանձնագրի, գույքի վկայականի կամ ՀՎՀՀ-ի նկարը՝ դաշտերն ավտոմատ լրացնելու համար:
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowOcrModal(true)}
+                  className="shrink-0 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4" /> Բացել OCR Սկաները
+                </button>
+              </div>
+
+              {/* Policy Numbers & Dates */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                    <FileCheck className="w-4 h-4 text-[#003399]" /> Պայմանագրի և Պոլիսի Համարներ
+                    <Shield className="w-4 h-4 text-[#003399]" /> Պայմանագրի / Պոլիսի Համարներ և Ժամկետներ
                   </h3>
                   <button
+                    type="button"
                     onClick={handleRegenerateNumbers}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-[11px] text-[#003399] hover:underline flex items-center gap-1 font-bold cursor-pointer"
                   >
-                    <RefreshCw className="w-3 h-3" /> Վերագեներացնել
+                    <RefreshCw className="w-3 h-3" /> Գեներացնել նոր համարներ
                   </button>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
@@ -295,18 +493,18 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
                       type="text"
                       value={contractData.contractNumber}
                       onChange={(e) => handleFieldChange("contractNumber", e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#003399]"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003399]"
                     />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
-                      Պոլիսի N
+                      Պոլիսի (Վկայագրի) N
                     </label>
                     <input
                       type="text"
                       value={contractData.policyNumber}
                       onChange={(e) => handleFieldChange("policyNumber", e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#003399]"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#003399]"
                     />
                   </div>
                   <div>
@@ -315,7 +513,7 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
                     </label>
                     <input
                       type="text"
-                      value={contractData.signDate}
+                      value={contractData.signDate || ""}
                       onChange={(e) => handleFieldChange("signDate", e.target.value)}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#003399]"
                     />
@@ -347,9 +545,19 @@ export function ContractGenerationModal({ proposal, isOpen, onClose, onIssuePoli
 
               {/* Client & Insured Object */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4 text-[#003399]" /> Ապահովադիր և Ապահովագրության Օբյեկտ
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <User className="w-4 h-4 text-[#003399]" /> Ապահովադիր և Ապահովագրության Օբյեկտ
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrModal(true)}
+                    className="text-[11px] bg-blue-100 hover:bg-blue-200 text-[#003399] px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" /> Սկանավորել Փաստաթուղթ
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-3">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">

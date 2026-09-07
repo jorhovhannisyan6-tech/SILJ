@@ -74,6 +74,57 @@
         "category": { "type": "string" }
       },
       "required": ["title", "content"]
+    },
+    "Quotation": {
+      "title": "Quotation",
+      "description": "Insurance quotation proposal record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "clientName": { "type": "string" },
+        "totalPremium": { "type": "number" },
+        "currency": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" },
+        "formData": { "type": "object" },
+        "selectedOptions": { "type": "object" }
+      },
+      "required": ["id", "productId", "totalPremium", "createdAt"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Issued policy and signed contract document record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "contractNumber": { "type": "string" },
+        "insuredName": { "type": "string" },
+        "productId": { "type": "string" },
+        "premiumAmd": { "type": "number" },
+        "issuedAt": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "contractData": { "type": "object" }
+      },
+      "required": ["id", "contractNumber", "insuredName", "issuedAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Insured client profile and history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "ssn": { "type": "string" },
+        "passport": { "type": "string" },
+        "totalPolicies": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
     }
   },
   "firestore": {
@@ -108,6 +159,18 @@
     "/knowledge_base_docs/{docId}": {
       "schema": "KnowledgeBaseDoc",
       "description": "Knowledge base documents collection"
+    },
+    "/quotations/{quoteId}": {
+      "schema": "Quotation",
+      "description": "Shared quotation proposals collection"
+    },
+    "/contracts/{contractId}": {
+      "schema": "Contract",
+      "description": "Issued policies and contracts collection"
+    },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Client registry collection"
     }
   }
 }

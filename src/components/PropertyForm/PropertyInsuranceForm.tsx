@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ListAmPropertyValuationCalculator } from "../Property/ListAmPropertyValuationCalculator";
 import { PropertySurveyReportModal } from "../Property/PropertySurveyReportModal";
+import { AiDocumentScanner, type ExtractedTechPassportData } from "../AiDocumentScanner";
+import { UnderwritingAnalyticsModal } from "../Analytics/UnderwritingAnalyticsModal";
 import {
   PropertyInsuranceFormState,
   PropertySurveyReport,
@@ -43,6 +45,7 @@ import {
   Trash2,
   FileDown,
   Loader2,
+  Activity,
 } from "lucide-react";
 import { downloadSurveyReportAsPdf } from "../../utils/surveyReportExport";
 
@@ -60,6 +63,8 @@ export function PropertyInsuranceForm({
   const [activeSection, setActiveSection] = useState<number | "all">("all");
   const [showPropertyValuationModal, setShowPropertyValuationModal] = useState(false);
   const [showSurveyModal, setShowSurveyModal] = useState(false);
+  const [showOcrModal, setShowOcrModal] = useState(false);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [aiParseModalOpen, setAiParseModalOpen] = useState(false);
   const [aiInputText, setAiInputText] = useState("");
   const [aiParsingLoading, setAiParsingLoading] = useState(false);
@@ -156,11 +161,20 @@ export function PropertyInsuranceForm({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowOcrModal(true)}
+              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-lg shadow-cyan-950/30 transition cursor-pointer border border-cyan-400/30 active:scale-95"
+            >
+              <FileText className="w-4 h-4 text-cyan-200" />
+              📄 AI OCR Սկաներ (Վկայական)
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowSurveyModal(true)}
               className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-950/30 transition cursor-pointer border border-emerald-400/30 active:scale-95"
             >
               <Camera className="w-4 h-4 text-emerald-200" />
-              📸 AI Սուրվեյի Ռեպորտ (Լուսանկարներ)
+              📸 AI Սուրվեյի Ռեպորտ
             </button>
 
             <button
@@ -169,6 +183,16 @@ export function PropertyInsuranceForm({
             >
               <Sparkles className="w-4 h-4 text-cyan-200" />
               AI Լրացում Տեքստից
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowAnalyticsModal(true)}
+              className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold px-3.5 py-2.5 rounded-xl transition cursor-pointer border border-slate-700 shadow-md active:scale-95"
+              title="Անդեռռայթինգի և ռիսկերի վերլուծություն"
+            >
+              <Activity className="w-4 h-4 text-cyan-400" />
+              <span>📊 Ռիսկերի Անալիտիկա</span>
             </button>
 
             <div className="flex items-center bg-[#001D4A]/80 border border-blue-700/50 rounded-xl p-1 text-xs">
@@ -233,7 +257,7 @@ export function PropertyInsuranceForm({
                     await downloadSurveyReportAsPdf(
                       state.surveyReport,
                       state.objectData.address,
-                      state.objectData.totalArea
+                      Number(state.objectData.totalArea) || 85
                     );
                   } catch (e) {
                     console.error("PDF download failed:", e);
@@ -2049,6 +2073,38 @@ export function PropertyInsuranceForm({
         </div>
       )}
 
+      {showOcrModal && (
+        <div className="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+          <div className="w-full max-w-3xl my-6">
+            <AiDocumentScanner
+              onClose={() => setShowOcrModal(false)}
+              onAutoFill={(scanned: ExtractedTechPassportData) => {
+                onChange((prev) => ({
+                  ...prev,
+                  company: {
+                    ...prev.company,
+                    name: scanned.ownerName || prev.company.name,
+                    legalAddress: scanned.address || prev.company.legalAddress,
+                  },
+                  objectData: {
+                    ...prev.objectData,
+                    address: scanned.address || prev.objectData.address,
+                    totalArea: scanned.propertyAreaSqm ? String(scanned.propertyAreaSqm) : prev.objectData.totalArea,
+                    purpose: "Բնակարան / Գույք",
+                    buildingMaterial: "Մոնոլիտ երկաթբետոն",
+                  },
+                  values: {
+                    ...prev.values,
+                    buildingValue: scanned.propertyValue ? Number(scanned.propertyValue) : prev.values.buildingValue,
+                  },
+                }));
+                setShowOcrModal(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {showSurveyModal && (
         <PropertySurveyReportModal
           initialAddress={state.objectData.address}
@@ -2110,6 +2166,13 @@ export function PropertyInsuranceForm({
             });
             setShowSurveyModal(false);
           }}
+        />
+      )}
+
+      {showAnalyticsModal && (
+        <UnderwritingAnalyticsModal
+          isOpen={showAnalyticsModal}
+          onClose={() => setShowAnalyticsModal(false)}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, BarChart3, CheckCircle2, FileText, KeyRound, Lock, RefreshCw, Save, Shield, Users, XCircle, Settings2, BookOpen, Sparkles, Bot, Zap } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { Activity, BarChart3, CheckCircle2, FileText, KeyRound, Lock, RefreshCw, Save, Shield, Users, XCircle, Settings2, BookOpen, Sparkles, Bot, Zap, Database, Download, Upload, CloudCheck, AlertCircle } from 'lucide-react';
 import { FIXED_QUOTATION_RULES, type FixedProductRule } from '../data/quotationRules';
 import { getDraftQuotationRules, getSiteContent, saveQuotationRules, saveSiteContent, publishQuotationRules } from '../utils/rulesStore';
 import { getAuditLog, getRulesVersion, publishRules, addAuditEvent } from '../utils/auditStore';
@@ -9,6 +9,7 @@ import { getCurrentUser } from '../utils/authStore';
 import { KnowledgeBaseAdmin } from './KnowledgeBaseAdmin';
 import { SmartOperations } from './SmartOperations';
 import { ProductTemplateMapper } from './TemplateMapper/ProductTemplateMapper';
+import { exportFullDatabaseBackup, restoreFullDatabaseBackup, syncQuotationToCloud } from '../lib/firestoreSync';
 
 type Tab='dashboard'|'users'|'approvals'|'logs'|'kb'|'rules'|'templates'|'security'|'analytics'|'settings'|'database'|'ai-overview'|'ai-rules'|'ai-bot'|'ai-templates';
 const roles=['agent','underwriter','manager','auditor','admin'];
@@ -69,6 +70,12 @@ function Dashboard({users,logs,onTab}:{users:any[];logs:any[];onTab:(x:any)=>voi
 function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any[]; logs: any[]; serverLogs: any[]; onUpdateUser: (id: string, patch: any) => void }) {
   const [selectedTable, setSelectedTable] = useState<'users' | 'audit' | 'quotes'>('users');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [localQuotes, setLocalQuotes] = useState<any[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('sil-quote-history') || localStorage.getItem('sil_quote_history') || '[]');
@@ -76,6 +83,66 @@ function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any
       return [];
     }
   });
+
+  const handleExportBackup = async () => {
+    setIsExporting(true);
+    try {
+      const jsonStr = await exportFullDatabaseBackup();
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sil-insurance-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setSyncFeedback('✅ Տվյալների պահուստային պատճենը (Backup JSON) հաջողությամբ ներբեռնվեց');
+    } catch (e: any) {
+      setSyncFeedback(`❌ Արտահանման սխալ: ${e.message}`);
+    } finally {
+      setIsExporting(false);
+      setTimeout(() => setSyncFeedback(null), 4000);
+    }
+  };
+
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsRestoring(true);
+    try {
+      const text = await file.text();
+      const res = await restoreFullDatabaseBackup(text);
+      setSyncFeedback(`✅ Հաջողությամբ վերականգնվեց ${res.importedQuotes} գնառաջարկ և ${res.importedContracts} պայմանագիր`);
+      const updatedQuotes = JSON.parse(localStorage.getItem('sil-quote-history') || '[]');
+      setLocalQuotes(updatedQuotes);
+    } catch (err: any) {
+      setSyncFeedback(`❌ Վերականգնման սխալ: ${err.message}`);
+    } finally {
+      setIsRestoring(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setTimeout(() => setSyncFeedback(null), 5000);
+    }
+  };
+
+  const handleSyncAllToCloud = async () => {
+    setIsSyncingAll(true);
+    try {
+      let count = 0;
+      for (const q of localQuotes) {
+        if (q && q.id) {
+          await syncQuotationToCloud(q);
+          count++;
+        }
+      }
+      setSyncFeedback(`✅ Բոլոր ${count} տեղային գնառաջարկները սինխրոնացվեցին ամպային Firebase բազայի հետ`);
+    } catch (err: any) {
+      setSyncFeedback(`❌ Սինխրոնիզացիայի սխալ: ${err.message}`);
+    } finally {
+      setIsSyncingAll(false);
+      setTimeout(() => setSyncFeedback(null), 4000);
+    }
+  };
 
   const handleDeleteQuote = (id: string) => {
     if (confirm('Վստա՞հ եք, որ ցանկանում եք ջնջել այս գնառաջարկը տվյալների բազայից:')) {
@@ -110,7 +177,71 @@ function DatabaseConsole({ users, logs, serverLogs, onUpdateUser }: { users: any
   }, [selectedTable, searchQuery, users, logs, serverLogs, localQuotes]);
 
   return (
-    <div className="sil-card p-6 space-y-4">
+    <div className="sil-card p-6 space-y-5">
+      {/* Cloud Sync & Backup Banner */}
+      <div className="rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-950 text-white p-5 border border-blue-700/50 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-cyan-300">
+            <Database size={20} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-extrabold text-sm sm:text-base">Firebase Cloud Firestore Live Database</h3>
+              <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Ակտիվ է & Սինխրոնացված
+              </span>
+            </div>
+            <p className="text-xs text-blue-200 mt-0.5">
+              Տվյալները պահպանվում են ամպային բազայում. Render-ի redeploy-ի կամ բրաուզերի քեշի մաքրման դեպքում տվյալները չեն կորչում:
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleRestoreFile}
+            accept=".json"
+            className="hidden"
+          />
+          <button
+            onClick={handleExportBackup}
+            disabled={isExporting}
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 flex items-center gap-1.5 transition cursor-pointer"
+            title="Ներբեռնել ամբողջ բազայի պահուստային ֆայլը (JSON)"
+          >
+            <Download size={14} />
+            {isExporting ? 'Արտահանվում է...' : 'Export Backup'}
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isRestoring}
+            className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            title="Վերականգնել տվյալները պահուստային ֆայլից"
+          >
+            <Upload size={14} />
+            {isRestoring ? 'Վերականգնվում է...' : 'Restore Backup'}
+          </button>
+          <button
+            onClick={handleSyncAllToCloud}
+            disabled={isSyncingAll}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+            title="Տեղային բոլոր գնառաջարկները ուղարկել Firebase ամպ"
+          >
+            <RefreshCw size={14} className={isSyncingAll ? "animate-spin" : ""} />
+            {isSyncingAll ? 'Սինխրոնացվում է...' : 'Sync All to Cloud'}
+          </button>
+        </div>
+      </div>
+
+      {syncFeedback && (
+        <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-bold flex items-center gap-2">
+          <Sparkles size={15} className="text-blue-600" />
+          <span>{syncFeedback}</span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
         <div>
           <h2 className="text-xl font-black text-slate-900">Տվյալների Բազայի Ադմին Պանել</h2>
