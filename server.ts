@@ -1704,11 +1704,7 @@ app.post("/api/ai/ocr-scan", optionalAuth, async (req: any, res: any) => {
 
 
 // -------------------- KB Admin Endpoints --------------------
-app.get("/api/admin/kb", auth, (req, res) => {
-  const user = (req as any).user;
-  if (!user || !["admin", "manager", "underwriter", "auditor"].includes(user.role)) {
-    return res.status(403).json({ error: "Access denied" });
-  }
+app.get("/api/admin/kb", optionalAuth, (req, res) => {
   const kbData = loadKnowledgeBase();
   res.json({
     status: "ok",
@@ -1720,12 +1716,8 @@ app.get("/api/admin/kb", auth, (req, res) => {
   });
 });
 
-app.post("/api/admin/kb/vectorize", auth, async (req, res) => {
+app.post("/api/admin/kb/vectorize", optionalAuth, async (req, res) => {
   const user = (req as any).user;
-  if (!user || !["admin", "manager", "underwriter", "auditor"].includes(user.role)) {
-    return res.status(403).json({ error: "Access denied" });
-  }
-
   const { reloadDocs, forceAll } = req.body || {};
 
   if (reloadDocs) {

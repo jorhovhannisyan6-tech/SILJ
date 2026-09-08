@@ -49,15 +49,20 @@ export function KnowledgeBaseAdmin() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [vectorizing, setVectorizing] = useState(false);
 
-  const token = localStorage.getItem('sil-auth-token');
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const getHeaders = () => {
+    const token = localStorage.getItem('sil-auth-token') || localStorage.getItem('sil-session-token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const loadKb = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/admin/kb', { headers });
-      if (!res.ok) throw new Error('Չհաջողվեց բեռնել AI Knowledge Base-ը');
+      const res = await fetch('/api/admin/kb', { headers: getHeaders() });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Չհաջողվեց բեռնել AI Knowledge Base-ը');
+      }
       const data = await res.json();
       setDocs(data.products || []);
       setVectorSearchActive(!!data.vectorSearchActive);
@@ -78,7 +83,7 @@ export function KnowledgeBaseAdmin() {
       const res = await fetch('/api/admin/kb/vectorize', {
         method: 'POST',
         headers: {
-          ...headers,
+          ...getHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ reloadDocs: true, forceAll }),
@@ -108,7 +113,7 @@ export function KnowledgeBaseAdmin() {
     let interval: any = null;
     if (isGenerating) {
       interval = setInterval(() => {
-        fetch('/api/admin/kb', { headers })
+        fetch('/api/admin/kb', { headers: getHeaders() })
           .then(res => res.json())
           .then(data => {
             setTotalChunks(data.totalChunks || 0);
@@ -161,7 +166,7 @@ export function KnowledgeBaseAdmin() {
       const res = await fetch(endpoint, {
         method,
         headers: {
-          ...headers,
+          ...getHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(editDoc),
@@ -562,7 +567,7 @@ export function KnowledgeBaseAdmin() {
                   try {
                     const res = await fetch(`/api/admin/kb/${idx}`, {
                       method: 'DELETE',
-                      headers,
+                      headers: getHeaders(),
                     });
                     if (!res.ok) {
                       const d = await res.json().catch(() => ({}));
