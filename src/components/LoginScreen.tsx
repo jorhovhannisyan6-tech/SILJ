@@ -273,7 +273,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
                     required
                     value={usernameOrEmail}
                     onChange={(e) => setUsernameOrEmail(e.target.value)}
-                    placeholder="օր․ admin, agent կամ email"
+                    placeholder="օր․ Admin կամ email"
                     className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none text-xs sm:text-sm text-slate-800 font-medium transition"
                   />
                 </div>
