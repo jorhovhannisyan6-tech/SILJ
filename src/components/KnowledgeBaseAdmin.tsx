@@ -11,6 +11,7 @@ interface KbDocument {
 
 const PRODUCT_NAMES: Record<string, string> = {
   property: "Գույքի ապահովագրություն",
+  "property-all-risks": "Գույքի ապահովագրություն բոլոր ռիսկերից (All Risks)",
   casco: "ԿԱՍԿՈ",
   health: "Առողջության ապահովագրություն (ԲԾԱ)",
   travel: "Ճամփորդական ապահովագրություն",

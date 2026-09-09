@@ -49,7 +49,11 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
           createdAt: data.createdAt || new Date().toISOString(),
           lastLogin: new Date().toISOString()
         };
-        await setDoc(userRef, { lastLogin: new Date().toISOString() }, { merge: true });
+        try {
+          await setDoc(userRef, { lastLogin: new Date().toISOString() }, { merge: true });
+        } catch (writeErr) {
+          console.info("Firestore user lastLogin update skipped (local session active):", writeErr);
+        }
       } else {
         const isAdmin = firebaseUser.email === 'jor.hovhannisyan6@gmail.com';
         portalUser = {
@@ -62,7 +66,11 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
         };
-        await setDoc(userRef, portalUser);
+        try {
+          await setDoc(userRef, portalUser);
+        } catch (writeErr) {
+          console.info("Firestore user creation skipped (local session active):", writeErr);
+        }
       }
 
       if (portalUser.status !== 'active') {

@@ -24,6 +24,7 @@ const PRODUCT_LABELS: Record<InsuranceProductType, {
   riskLabel: string;
 }> = {
   property: { title: "Գույքի ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող գույք", amountLabel: "Արժեք / ապահովագրական գումար", tariffLabel: "Տարեկան սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Գույքային ռիսկեր" },
+  "property-all-risks": { title: "Գույքի ապահովագրության (All Risks) առաջարկ", objectLabel: "Ապահովագրվող գույք (All Risks)", amountLabel: "Արժեք / ապահովագրական գումար", tariffLabel: "Տարեկան All Risks սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար (Ֆրանշիզա)", riskLabel: "All Risks ծածկույթներ" },
   mortgage: { title: "Հիփոթեքային վարկառուների ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող օբյեկտ / վարկառու", amountLabel: "Ապահովագրական գումար", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Հիփոթեքային ծածկույթներ" },
   casco: { title: "ԿԱՍԿՈ ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող ավտոմեքենա", amountLabel: "Շուկայական արժեք / ապահովագրական գումար", tariffLabel: "Վերջնական սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Ֆրանշիզա", riskLabel: "ԿԱՍԿՈ ծածկույթներ և ռիսկեր" },
   health: { title: "Առողջության ապահովագրության առաջարկ", objectLabel: "Ապահովագրվող անձինք / ծրագիր", amountLabel: "Ապահովագրական սահմանաչափ", tariffLabel: "Սակագին", premiumLabel: "Ապահովագրավճար", franchiseLabel: "Չհատուցվող գումար", riskLabel: "Բժշկական ծածկույթներ" },

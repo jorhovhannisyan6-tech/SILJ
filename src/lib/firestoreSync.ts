@@ -28,13 +28,38 @@ const LOCAL_STORAGE_QUOTES_KEY = "sil-quote-history";
 const LOCAL_STORAGE_CONTRACTS_KEY = "sil-issued-contracts-v1";
 const LOCAL_STORAGE_CLIENTS_KEY = "sil-crm-clients-v1";
 
+// Circuit breaker for Firestore write operations when daily quota is reached
+let cloudWriteQuotaExceededUntil = 0;
+
+function isQuotaOrQueueError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err?.message || err?.code || err || "").toLowerCase();
+  return (
+    msg.includes("resource-exhausted") ||
+    msg.includes("quota") ||
+    msg.includes("exhausted maximum allowed queued writes") ||
+    msg.includes("write stream") ||
+    msg.includes("free daily write units")
+  );
+}
+
+function handleCloudWriteError(operation: string, err: any) {
+  if (isQuotaOrQueueError(err)) {
+    // Trip the circuit breaker for 15 minutes to prevent spamming the write queue
+    cloudWriteQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+    console.info(`[Firestore] Cloud write quota reached for ${operation}. Seamlessly operating in offline-first mode (LocalStorage active).`);
+  } else {
+    console.warn(`[Firestore] ${operation} write warning (offline copy preserved):`, err?.message || err);
+  }
+}
+
 /**
  * Save / Update Quotation Proposal to Cloud Firestore and LocalStorage
  */
 export async function syncQuotationToCloud(quote: QuotationProposal): Promise<void> {
   if (!quote || !quote.id) return;
 
-  // 1. Immediately cache locally
+  // 1. Immediately cache locally (offline-first source of truth)
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_QUOTES_KEY);
     const existing: QuotationProposal[] = raw ? JSON.parse(raw) : [];
@@ -42,6 +67,11 @@ export async function syncQuotationToCloud(quote: QuotationProposal): Promise<vo
     localStorage.setItem(LOCAL_STORAGE_QUOTES_KEY, JSON.stringify(updated));
   } catch (err) {
     console.warn("Local storage cache error:", err);
+  }
+
+  // Check circuit breaker before attempting Firestore write
+  if (Date.now() < cloudWriteQuotaExceededUntil) {
+    return;
   }
 
   // 2. Persist to Cloud Firestore
@@ -58,7 +88,7 @@ export async function syncQuotationToCloud(quote: QuotationProposal): Promise<vo
       { merge: true }
     );
   } catch (err) {
-    console.warn("Firestore sync quotation error (offline-first preserved):", err);
+    handleCloudWriteError("Quotation sync", err);
   }
 }
 
@@ -80,12 +110,16 @@ export async function deleteQuotationFromCloud(quoteId: string): Promise<void> {
     console.warn("Local storage delete error:", err);
   }
 
+  if (Date.now() < cloudWriteQuotaExceededUntil) {
+    return;
+  }
+
   // 2. Delete from Cloud Firestore
   try {
     const docRef = doc(db, QUOTES_COLLECTION, String(quoteId));
     await deleteDoc(docRef);
   } catch (err) {
-    console.warn("Firestore delete quotation error:", err);
+    handleCloudWriteError("Quotation delete", err);
   }
 }
 
@@ -130,9 +164,13 @@ export function listenToCloudQuotations(
         }
       },
       (err) => {
-        console.warn("Firestore Quotations live stream warning:", err);
+        if (isQuotaOrQueueError(err)) {
+          console.info("[Firestore] Quotations live stream running in local cache mode (quota limit).");
+        } else {
+          console.warn("Firestore Quotations live stream notice:", err?.message || err);
+        }
         if (onError) onError(err);
-        // Fallback to local storage
+        // Seamless fallback to local storage
         try {
           const raw = localStorage.getItem(LOCAL_STORAGE_QUOTES_KEY);
           if (raw) onUpdate(JSON.parse(raw));
@@ -165,6 +203,10 @@ export async function syncContractToCloud(contract: any): Promise<void> {
     console.warn("Local contract cache error:", err);
   }
 
+  if (Date.now() < cloudWriteQuotaExceededUntil) {
+    return;
+  }
+
   try {
     const cleanContract = JSON.parse(JSON.stringify(contract));
     const docRef = doc(db, CONTRACTS_COLLECTION, String(docId));
@@ -178,7 +220,7 @@ export async function syncContractToCloud(contract: any): Promise<void> {
       { merge: true }
     );
   } catch (err) {
-    console.warn("Firestore sync contract error:", err);
+    handleCloudWriteError("Contract sync", err);
   }
 }
 
@@ -213,6 +255,9 @@ export function listenToCloudContracts(
         }
       },
       (err) => {
+        if (isQuotaOrQueueError(err)) {
+          console.info("[Firestore] Contracts live stream running in local cache mode (quota limit).");
+        }
         if (onError) onError(err);
         try {
           const raw = localStorage.getItem(LOCAL_STORAGE_CONTRACTS_KEY);

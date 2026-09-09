@@ -40,6 +40,7 @@ export function generateQuotationNumber(type: InsuranceProductType): string {
   const random = Math.floor(1000 + Math.random() * 9000);
   const prefixMap: Record<InsuranceProductType, string> = {
     property: "SIL-PROP",
+    "property-all-risks": "SIL-PAR",
     mortgage: "SIL-MORT",
     casco: "SIL-CASCO",
     health: "SIL-MED",

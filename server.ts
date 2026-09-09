@@ -125,8 +125,18 @@ async function syncKnowledgeBaseFromFirestore() {
   }
 }
 
+let serverFirestoreQuotaExceededUntil = 0;
+
+function isServerQuotaError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err?.message || err?.code || err || "").toLowerCase();
+  return msg.includes("resource-exhausted") || msg.includes("quota") || msg.includes("free daily write units");
+}
+
 async function persistEmbeddingsToFirestore(embeddingsMap: Record<string, number[]>) {
   if (!db || Object.keys(embeddingsMap).length === 0) return;
+  if (Date.now() < serverFirestoreQuotaExceededUntil) return;
+
   try {
     const entries = Object.entries(embeddingsMap);
     const BATCH_SIZE = 30; // ~30 vectors per doc (keeps doc well below 1MB limit)
@@ -139,8 +149,13 @@ async function persistEmbeddingsToFirestore(embeddingsMap: Record<string, number
       }, { merge: true });
     }
     console.log(`Saved ${entries.length} vector embeddings to Firestore persistent storage.`);
-  } catch (err) {
-    console.warn("Failed to persist vector embeddings to Firestore:", (err as any)?.message || err);
+  } catch (err: any) {
+    if (isServerQuotaError(err)) {
+      serverFirestoreQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+      console.info("Firestore daily write quota reached for embeddings; cached locally on disk.");
+    } else {
+      console.warn("Notice: Vector embeddings saved locally on disk (Firestore sync deferred):", err?.message || err);
+    }
   }
 }
 
@@ -363,7 +378,8 @@ app.get("/api/admin/security",auth,requireRole("admin","manager","auditor"),(_re
 
 // -------------------- Knowledge base --------------------
 const PRODUCT_LABELS: Record<string, string> = {
-  property: "Գույքի ապահովագրություն",
+  property: "Գույքի ապահովագրություն (թվարկված ռիսկեր)",
+  "property-all-risks": "Գույքի ապահովագրություն բոլոր ռիսկերից (Property All Risks)",
   cargo: "Բեռների ապահովագրություն",
   "general-liability": "Ընդհանուր պատասխանատվության ապահովագրություն",
   "cash-in-transit": "Ինկասացիոն ռիսկ",
@@ -383,6 +399,7 @@ const PRODUCT_LABELS: Record<string, string> = {
 
 const PRODUCT_KEYWORDS: Record<string, string[]> = {
   property: ["գույք", "շենք", "պահեստ", "սարքավորում", "հրդեհ", "գողություն", "ջրհեղեղ", "վանդալիզմ"],
+  "property-all-risks": ["գույք բոլոր ռիսկերից", "բոլոր ռիսկերից", "all risks", "property all risks", "գույք all risks", "համալիր գույքային"],
   cargo: ["բեռ", "բեռնափոխադրում", "տրանսպորտ", "բեռնափոխադրող"],
   "general-liability": ["պատասխանատվություն", "երրորդ անձ", "երրորդ անձանց", "tpl", "cgl"],
   "cash-in-transit": ["ինկաս", "կանխիկ", "դրամական միջոց", "փոխադրում"],
@@ -410,7 +427,8 @@ function ensureKnowledgeBaseTextFiles() {
 
   // Pre-populate missing files with clean Armenian text in UTF-8
   const fallbacks: Record<string, string> = {
-    "text/guyqi_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԳՈՒՅՔԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրվող օբյեկտներ՝ շենքեր, շինություններ, բնակարաններ, հիմնական միջոցներ, ապրանքանյութական արժեքներ, սարքավորումներ։\n2. Հիմնական ռիսկեր (ներառված)՝ Հրդեհ, կայծակ, պայթյուն, երկրաշարժ, սողանք, ջրհեղեղ, գողություն, վանդալիզմ։`,
+    "text/guyqi_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԳՈՒՅՔԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ (ԹՎԱՐԿՎԱԾ ՌԻՍԿԵՐ)\n1. Ապահովագրվող օբյեկտներ՝ շենքեր, շինություններ, բնակարաններ, հիմնական միջոցներ, ապրանքանյութական արժեքներ, սարքավորումներ։\n2. Հիմնական ռիսկեր (ներառված)՝ Հրդեհ, կայծակ, պայթյուն, երկրաշարժ, սողանք, ջրհեղեղ, գողություն, վանդալիզմ։`,
+    "text/guyqi_apahovagrutyun_bolor_riskeric.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԳՈՒՅՔԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅՈՒՆ ԲՈԼՈՐ ՌԻՍԿԵՐԻՑ (PROPERTY ALL RISKS)\n1. Ծածկույթի սկզբունք՝ Ապահովագրվում են գույքի ցանկացած անսպասելի և հանկարծակի ֆիզիկական վնասները կամ կորուստը, որոնք ուղղակիորեն բացառված չեն պայմանագրով (All Risks ծածկույթ)։\n2. Օբյեկտներ՝ շենքեր, շինություններ, սարքավորումներ, ապրանքանյութական պաշարներ, հարդարանք, կահավորանք։\n3. Ռիսկեր՝ հրդեհ, պայթյուն, բնական աղետներ, ջրի արտահոսք, գողություն, վանդալիզմ, մեխանիկական պատահական վնասներ։`,
     "text/beri_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԲԵՌՆԵՐԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ (ICC A, B, C)\n1. Ծածկույթի տեսակներ՝ ICC (A) - Բոլոր ռիսկերով ապահովագրություն (All Risks), ICC (B) - Հիմնական ռիսկեր, ICC (C) - Սահմանափակ ռիսկեր։\n2. Ապահովագրական գումար՝ բեռի արժեք՝ գումարած փոխադրման ծախսերը։`,
     "text/yndhanur_pataskhanatvutyan_paymanner.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԸՆԴՀԱՆՈՒՐ ՊԱՏԱՍԽԱՆԱՏՎՈՒԹՅԱՆ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրական պատասխանատվություն՝ երրորդ անձանց կյանքին, առողջությանը կամ գույքին պատճառված վնասների հատուցում։\n2. Բացառություններ՝ պայմանագրային պատասխանատվություն, մասնագիտական սխալներ, տույժեր։`,
     "text/inkasacyon_risk.docx.txt": `ՍԻԼ ԻՆՇՈՒՐԱՆՍ ԱՓԲԸ - ԻՆԿԱՍԱՑԻՈՆ ՌԻՍԿԵՐԻ ԵՎ ԴՐԱՄԱԿԱՆ ՄԻՋՈՑՆԵՐԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ՊԱՅՄԱՆՆԵՐ\n1. Ապահովագրական օբյեկտ՝ կանխիկ դրամական միջոցներ տեղափոխման ընթացքում կամ պահպանման վայրում։\n2. Հիմնական ռիսկեր՝ զինված կողոպուտ, հափշտակություն, ավազակություն։`,
@@ -437,6 +455,7 @@ function loadKnowledgeBase() {
   const indexPath = path.join(KB, "index.json");
   const defaultProducts = [
     { productId: "property", sourceFile: "Գույք Պայմաններ.docx", textFile: "text/guyqi_paymanner.docx.txt" },
+    { productId: "property-all-risks", sourceFile: "Գույքի ապահովագրություն բոլոր ռիսկերից Պայմաններ.docx", textFile: "text/guyqi_apahovagrutyun_bolor_riskeric.docx.txt" },
     { productId: "cargo", sourceFile: "Բեռի Պայմաններ.docx", textFile: "text/beri_paymanner.docx.txt" },
     { productId: "general-liability", sourceFile: "Ընդհանուր Պատասխանատվության պայմաներ.docx", textFile: "text/yndhanur_pataskhanatvutyan_paymanner.docx.txt" },
     { productId: "cash-in-transit", sourceFile: "Ինկասացիոն Ռիսկ.docx", textFile: "text/inkasacyon_risk.docx.txt" },

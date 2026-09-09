@@ -1,5 +1,6 @@
 export type InsuranceProductType =
   | "property"
+  | "property-all-risks"
   | "mortgage"
   | "casco"
   | "health"
