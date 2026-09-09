@@ -46,6 +46,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Knowledge base embeddings cache
+    match /kb_embeddings_cache/{docId} {
+      allow read, write: if true;
+    }
+
     // Quotations & Proposals collection (shared among SIL agents)
     match /quotations/{quoteId} {
       allow read, write: if true;

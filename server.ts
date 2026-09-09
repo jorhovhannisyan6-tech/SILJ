@@ -98,8 +98,49 @@ async function syncKnowledgeBaseFromFirestore() {
     fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), "utf8");
     reloadKnowledgeBase();
     console.log(`Knowledge Base Firestore sync completed. Synchronized ${firebaseDocs.length} documents.`);
+
+    // Synchronize Cloud Firestore Embeddings Cache
+    try {
+      const cacheDocsSnap = await getDocs(collection(db, "kb_embeddings_cache"));
+      if (!cacheDocsSnap.empty) {
+        let cloudMergedCount = 0;
+        cacheDocsSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data && data.embeddings && typeof data.embeddings === "object") {
+            Object.assign(embeddingCache, data.embeddings);
+            cloudMergedCount += Object.keys(data.embeddings).length;
+          }
+        });
+        if (cloudMergedCount > 0) {
+          fs.writeFileSync(cachePath, JSON.stringify(embeddingCache), "utf8");
+          console.log(`Knowledge Base Firestore: Synchronized and cached ${cloudMergedCount} vectors from cloud.`);
+          buildKnowledgeChunks();
+        }
+      }
+    } catch (e) {
+      console.warn("Notice: Firestore embeddings cache check:", (e as any)?.message || e);
+    }
   } catch (err) {
     console.error("Failed to sync Knowledge Base from Firestore:", err);
+  }
+}
+
+async function persistEmbeddingsToFirestore(embeddingsMap: Record<string, number[]>) {
+  if (!db || Object.keys(embeddingsMap).length === 0) return;
+  try {
+    const entries = Object.entries(embeddingsMap);
+    const BATCH_SIZE = 30; // ~30 vectors per doc (keeps doc well below 1MB limit)
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const slice = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
+      const chunkId = `cache_batch_${Math.floor(i / BATCH_SIZE)}`;
+      await setDoc(doc(db, "kb_embeddings_cache", chunkId), {
+        embeddings: slice,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+    console.log(`Saved ${entries.length} vector embeddings to Firestore persistent storage.`);
+  } catch (err) {
+    console.warn("Failed to persist vector embeddings to Firestore:", (err as any)?.message || err);
   }
 }
 
@@ -277,7 +318,8 @@ app.post("/api/auth/register", (req, res) => {
   const cleanUsername = String(username).trim();
   const exists = [...users.values()].some(u => u.username.toLowerCase() === cleanUsername.toLowerCase() || (email && u.email.toLowerCase() === String(email).toLowerCase()));
   if (exists) return res.status(409).json({ error: "Մուտքանունը կամ էլ․ հասցեն արդեն գրանցված է" });
-  const userRole: Role = (role && ["agent", "underwriter", "manager", "auditor", "admin"].includes(role)) ? role : "agent";
+  // Public registration is restricted to 'agent' role for security. Admin/Manager roles must be assigned by Admin.
+  const userRole: Role = (role && ["agent", "underwriter"].includes(role)) ? role : "agent";
   const u: User = {
     id: crypto.randomUUID(),
     username: cleanUsername,
@@ -723,6 +765,7 @@ async function triggerEmbeddingGeneration(forceAll = false) {
     try {
       fs.writeFileSync(cachePath, JSON.stringify(embeddingCache), "utf8");
       console.log(`Vector embedding generation complete! Generated and saved ${newlyGeneratedCount} new embeddings.`);
+      persistEmbeddingsToFirestore(embeddingCache).catch(e => console.warn("Background Firestore embedding save:", e));
     } catch (e) {
       console.error("Failed to save final embeddings cache to disk:", e);
     }

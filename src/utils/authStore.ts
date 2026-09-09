@@ -24,11 +24,13 @@ export function getCurrentUser(): PortalUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) {
-      return DEFAULT_ADMIN;
+      return null;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.username || !parsed.role) return null;
+    return parsed;
   } catch {
-    return DEFAULT_ADMIN;
+    return null;
   }
 }
 

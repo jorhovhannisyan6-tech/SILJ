@@ -5,7 +5,6 @@ import { getSiteContent } from "../utils/rulesStore";
 import { SIL_PRODUCTS_CATALOG } from "../data/productsCatalog";
 import type { InsuranceProductType } from "../types";
 import { fetchCBARates, subscribeCBARates, DEFAULT_CBA_RATES, type ExchangeRate } from "../utils/exchangeRates";
-import { ROLE_LABELS, type UserRole } from "../utils/authStore";
 
 interface HeaderProps { onTabChange?: (tab: string) => void; onStartQuotation?: (productId: InsuranceProductType) => void; user?: {name:string; role:string}; onLogout?:()=>void; }
 
@@ -113,15 +112,6 @@ export function Header({ onTabChange, onStartQuotation, user, onLogout }: Header
           <button className="sil-nav-link" onClick={() => go("legal")}>Հաճախ տրվող հարցեր</button>
         </nav>
         <div className="hidden lg:flex items-center gap-3">
-          {user && (
-            <div className="flex items-center gap-2 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-              <span className="text-[11px] font-bold text-slate-800">{user.name.split(' ')[0]}</span>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 px-2 py-0.5 rounded-md">
-                {ROLE_LABELS[user.role as UserRole] || user.role}
-              </span>
-            </div>
-          )}
           <button
             type="button"
             onClick={() => onTabChange?.("express-share")}

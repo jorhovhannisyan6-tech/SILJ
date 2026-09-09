@@ -21,7 +21,7 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
   const [regUsername, setRegUsername] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regRole, setRegRole] = useState<UserRole>('agent');
+  const regRole: UserRole = 'agent';
 
   async function handleGoogleLogin() {
     setBusy(true);
@@ -321,31 +321,16 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Մուտքանուն *</label>
-                  <input
-                    type="text"
-                    required
-                    value={regUsername}
-                    onChange={(e) => setRegUsername(e.target.value)}
-                    placeholder="armen.p"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-blue-500 text-xs text-slate-800 font-medium transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Դեր</label>
-                  <select
-                    value={regRole}
-                    onChange={(e) => setRegRole(e.target.value as UserRole)}
-                    className="w-full px-2.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-blue-500 text-xs text-slate-800 font-medium transition"
-                  >
-                    <option value="agent">Գործակալ</option>
-                    <option value="underwriter">Անդերռայթեր</option>
-                    <option value="manager">Մենեջեր</option>
-                    <option value="admin">Ադմին</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Մուտքանուն *</label>
+                <input
+                  type="text"
+                  required
+                  value={regUsername}
+                  onChange={(e) => setRegUsername(e.target.value)}
+                  placeholder="օր․ armen.p"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-blue-500 text-xs text-slate-800 font-medium transition"
+                />
               </div>
 
               <div>
