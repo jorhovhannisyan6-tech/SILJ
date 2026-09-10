@@ -398,8 +398,16 @@ const PRODUCT_LABELS: Record<string, string> = {
 };
 
 const PRODUCT_KEYWORDS: Record<string, string[]> = {
-  property: ["գույք", "շենք", "պահեստ", "սարքավորում", "հրդեհ", "գողություն", "ջրհեղեղ", "վանդալիզմ"],
-  "property-all-risks": ["գույք բոլոր ռիսկերից", "բոլոր ռիսկերից", "all risks", "property all risks", "գույք all risks", "համալիր գույքային"],
+  property: [
+    "գույք", "գույքի ապահովագրություն", "շենք", "շինություն", "պահեստ", "սարքավորում", 
+    "հրդեհ", "գողություն", "ջրհեղեղ", "վանդալիզմ", "նշված ռիսկեր", "թվարկված ռիսկեր", 
+    "flexa", "հրդեհից և բնական աղետներից", "գույքային վնաս", "կարկուտ", "երկրաշարժ"
+  ],
+  "property-all-risks": [
+    "գույք բոլոր ռիսկերից", "գույքի ապահովագրություն բոլոր ռիսկերից", "բոլոր ռիսկերից", 
+    "all risks", "property all risks", "գույք all risks", "համալիր գույքային", 
+    "par", "ամբողջական ռիսկեր", "անսպասելի ֆիզիկական վնաս", "լիարժեք գույքային"
+  ],
   cargo: ["բեռ", "բեռնափոխադրում", "տրանսպորտ", "բեռնափոխադրող"],
   "general-liability": ["պատասխանատվություն", "երրորդ անձ", "երրորդ անձանց", "tpl", "cgl"],
   "cash-in-transit": ["ինկաս", "կանխիկ", "դրամական միջոց", "փոխադրում"],
@@ -1019,13 +1027,39 @@ function findDirectArticleMatches(queryText: string): string[] {
   return matches;
 }
 
+let cachedAdvisorBotInstruction: { instruction: string; fetchedAt: number } | null = null;
+
+async function getAdvisorBotInstruction(): Promise<string> {
+  if (cachedAdvisorBotInstruction && Date.now() - cachedAdvisorBotInstruction.fetchedAt < 10 * 60 * 1000) {
+    return cachedAdvisorBotInstruction.instruction;
+  }
+  if (!db || Date.now() < serverFirestoreQuotaExceededUntil) {
+    return cachedAdvisorBotInstruction?.instruction || SYSTEM_INSTRUCTION;
+  }
+  try {
+    const docRef = doc(db, "bot_configs", "advisor_bot");
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists() && docSnap.data().systemInstruction) {
+      cachedAdvisorBotInstruction = {
+        instruction: docSnap.data().systemInstruction,
+        fetchedAt: Date.now(),
+      };
+      return cachedAdvisorBotInstruction.instruction;
+    }
+  } catch (err: any) {
+    if (isServerQuotaError(err)) {
+      serverFirestoreQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+      console.info("Firestore read quota reached for bot instruction; using cached/default system instruction.");
+    }
+  }
+  return cachedAdvisorBotInstruction?.instruction || SYSTEM_INSTRUCTION;
+}
+
 async function buildKnowledgePrompt(query: string, context = "") {
   const queryText = `${query || ""} ${context || ""}`.trim();
   if (!queryText) return "";
 
-  console.log(`RAG Retrieval: processing query "${queryText.slice(0, 60)}..."`);
-  
-  const MAX_TOTAL_KNOWLEDGE_CHARS = 250000;
+  const MAX_TOTAL_KNOWLEDGE_CHARS = 35000; // Optimal context window (~7k-8k tokens) to stay well within rate limits
   let totalChars = 0;
   const promptParts: string[] = [];
 
@@ -1043,12 +1077,6 @@ async function buildKnowledgePrompt(query: string, context = "") {
   const queryWords = getStemmedWordList(queryText);
   
   if (queryVec || queryWords.length > 0) {
-    if (queryVec) {
-      console.log("Vector Semantic Retrieval active! Computing cosine similarities...");
-    } else {
-      console.log("Retrieving via high-fidelity text-matching.");
-    }
-    
     const scoredChunks = KNOWLEDGE_CHUNKS.map(chunk => {
       let sim = 0;
       if (queryVec && chunk.vector) {
@@ -1082,11 +1110,9 @@ async function buildKnowledgePrompt(query: string, context = "") {
     // Sort descending
     validScoredChunks.sort((a, b) => b.sim - a.sim);
 
-    // Take top matching chunks (expanded to 35 chunks)
-    const topScored = validScoredChunks.slice(0, 35);
+    // Take top matching chunks (precision-focused top 12 chunks)
+    const topScored = validScoredChunks.slice(0, 12);
     if (topScored.length > 0) {
-      console.log(`Top match chunk similarities: ${topScored.slice(0, 3).map(t => `${t.chunk.productId} (${t.sim.toFixed(3)})`).join(", ")}`);
-
       for (const item of topScored) {
         if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
         const c = item.chunk;
@@ -1110,10 +1136,9 @@ async function buildKnowledgePrompt(query: string, context = "") {
   }
 
   // 2. High-fidelity Hybrid Fallback / Supplementary full document coverage
-  if (promptParts.length === 0 || totalChars < 60000) {
-    console.log("Adding comprehensive knowledge base documents to context...");
-    const docs = selectKnowledge(query, context).slice(0, 8);
-    const MAX_CHARS_PER_DOC = 50000;
+  if (promptParts.length === 0 || totalChars < 12000) {
+    const docs = selectKnowledge(query, context).slice(0, 4);
+    const MAX_CHARS_PER_DOC = 8000;
     
     for (const d of docs) {
       if (totalChars >= MAX_TOTAL_KNOWLEDGE_CHARS) break;
@@ -1122,7 +1147,7 @@ async function buildKnowledgePrompt(query: string, context = "") {
       const remainingBudget = MAX_TOTAL_KNOWLEDGE_CHARS - totalChars;
       const sliceLen = Math.min(MAX_CHARS_PER_DOC, remainingBudget);
       
-      if (sliceLen < 500 && promptParts.length > 0) {
+      if (sliceLen < 300 && promptParts.length > 0) {
         break;
       }
       
@@ -1191,6 +1216,17 @@ const SYSTEM_INSTRUCTION = `
 }
 \`\`\`
 10. Պատասխանիր պարզ, գրագետ և բարձրակարգ մասնագիտական հայերենով։
+11. ԳՈՒՅՔԻ ԱՊԱՀՈՎԱԳՐՈՒԹՅԱՆ ԵՐԿՈՒ ՏԵՍԱԿՆԵՐԻ ԽՍՏԱԳՈՒՅՆ ՏԱՐԲԵՐԱԿՈՒՄ (PROPERTY VS PROPERTY ALL RISKS).
+ԱԲ-ն ՊԱՐՏԱՎՈՐ Է հստակ տարբերակել և երբեք չխառնել հետևյալ երկու պրոդուկտները.
+ա) «Գույքի ապահովագրություն» (Named Perils / Թվարկված/նշված ռիսկերով, Product ID: "property"):
+   - Գործում է «Նշված ռիսկերի» սկզբունքով (FLEXA + լրացուցիչ ռիսկեր)։
+   - Հատուցվում է ՄԻԱՅՆ այն վնասը, որը առաջացել է պայմանագրում ՀՍՏԱԿ ԹՎԱՐԿՎԱԾ ռիսկերից (օր․՝ հրդեհ, կայծակ, պայթյուն, ջրի արտահոսք/վթար, բնական աղետներ՝ կարկուտ/փոթորիկ/երկրաշարժ, գողություն, վանդալիզմ, տրանսպորտային միջոցի հարված)։
+   - Եթե վնասի պատճառը նշված չէ ցանկում, այն հատուցման ենթակա ՉԷ։ Ապացուցման բեռը (որ դեպքը տեղի է ունեցել նշված ռիսկից) կրում է Ապահովադիրը։
+բ) «Գույքի ապահովագրություն բոլոր ռիսկերից» (Property All Risks / PAR, Product ID: "property-all-risks"):
+   - Գործում է «Բոլոր ռիսկերի» (All Risks) սկզբունքով։
+   - Ծածկում է ապահովագրված գույքի ՑԱՆԿԱՑԱԾ ՀԱՆԿԱՐԾԱԿԻ, ԱՆՍՊԱՍԵԼԻ ԵՎ ՉՆԱԽԱՏԵՍՎԱԾ ՖԻԶԻԿԱԿԱՆ ՎՆԱՍ, ԿՈՐՈՒՍՏ ԿԱՄ ՈՉՆՉԱՑՈՒՄ՝ ԲԱՑԱՌՈՒԹՅԱՄԲ պայմանագրում ուղղակիորեն թվարկված բացառությունների (Exclusions - օր․՝ մաշվածություն/ժանգոտում, ներքին էլեկտրական/մեխանիկական խափանում, դիտավորություն, շինարարական/նախագծային արատ, ռազմական ռիսկեր)։
+   - Ծածկույթն ավելի լայն է, իսկ ապացուցման բեռը (որ կիրառելի է որևէ բացառություն) կրում է Ապահովագրողը։
+գ) Գնառաջարկ կազմելիս կամ խորհրդատվություն տրամադրելիս ԱԲ-ն պարտավոր է պարզաբանել այս տարբերությունը, առաջարկել ճիշտ պրոդուկտը և JSON Proposal Draft-ում նշել ճշգրիտ type-ը ("property" կամ "property-all-risks")։
 `;
 
 const VISION_PROPERTY_SYSTEM_INSTRUCTION = `
@@ -1264,7 +1300,12 @@ async function callGemini(contents: any, systemInstruction: string, options?: { 
       if (response?.text) return { text: response.text, modelUsed: `Gemini (${model})` };
     } catch (e: any) {
       lastError = e;
-      console.warn(`Gemini model ${model} failed:`, e?.message || e);
+      const isRateLimit = String(e?.message || "").includes("429") || String(e?.message || "").includes("RESOURCE_EXHAUSTED") || String(e?.status || "").includes("RESOURCE_EXHAUSTED");
+      if (isRateLimit) {
+        console.info(`Gemini model ${model} reached rate limit, switching to fallback model...`);
+      } else {
+        console.warn(`Gemini model ${model} notice:`, e?.message || e);
+      }
     }
   }
   throw lastError || new Error("Gemini unavailable");
@@ -1410,18 +1451,7 @@ const handleChatRequest = async (req: any, res: any) => {
   const lastUserMsg = messages.filter((m: any) => m.role === "user").pop()?.content || message || prompt || "";
   const knowledge = await buildKnowledgePrompt(lastUserMsg, context);
 
-  let activeInstruction = SYSTEM_INSTRUCTION;
-  if (db) {
-    try {
-      const docRef = doc(db, "bot_configs", "advisor_bot");
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists() && docSnap.data().systemInstruction) {
-        activeInstruction = docSnap.data().systemInstruction;
-      }
-    } catch (err) {
-      console.warn("Firestore bot instruction load failed, using default:", err);
-    }
-  }
+  const activeInstruction = await getAdvisorBotInstruction();
 
   const dynamicSystem = `${activeInstruction}\n\n[ՊՐՈԴՈՒԿՏՆԵՐ]\n${JSON.stringify(products, null, 2)}\n\n[UNDERWRITING ԿԱՆՈՆՆԵՐ]\n${JSON.stringify(underwritingRules, null, 2)}\n\n[ԱՂԲՅՈՒՐԱՅԻՆ ՊԱՅՄԱՆՆԵՐ]\n${knowledge}`;
   const contents = messages.map((m: any) => ({
@@ -3598,35 +3628,16 @@ async function start() {
       console.log("Vite development middleware mounted successfully.");
     } catch (err) {
       console.error("Failed to start Vite middleware, falling back to static files:", err);
-      const indexPath = path.join(DIST, "index.html");
-      if (fs.existsSync(indexPath)) {
-        app.use(express.static(DIST, { index: "index.html" }));
-        app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => res.sendFile(indexPath));
-      }
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
     }
   } else {
-    const indexPath = path.join(DIST, "index.html");
-    if (fs.existsSync(indexPath)) {
-      app.use(express.static(DIST, {
-        index: "index.html",
-        maxAge: "1h",
-      }));
-      app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => {
-        res.sendFile(indexPath);
-      });
-    } else {
-      console.warn("dist/index.html not found in production mode, falling back to Vite middleware");
-      try {
-        const { createServer: createViteServer } = await import("vite");
-        const vite = await createViteServer({
-          server: { middlewareMode: true, hmr: false },
-          appType: "spa",
-        });
-        app.use(vite.middlewares);
-      } catch (e) {
-        console.error("Failed to start fallback Vite middleware in production:", e);
-      }
-    }
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
 
   const server = app.listen(PORT, "0.0.0.0", () => {

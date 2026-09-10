@@ -131,8 +131,9 @@ export function listenToCloudQuotations(
   onError?: (error: any) => void
 ): () => void {
   try {
+    let unsubscribe: () => void = () => {};
     const q = query(collection(db, QUOTES_COLLECTION), limit(300));
-    const unsubscribe = onSnapshot(
+    unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const cloudQuotes: QuotationProposal[] = [];
@@ -165,7 +166,10 @@ export function listenToCloudQuotations(
       },
       (err) => {
         if (isQuotaOrQueueError(err)) {
-          console.info("[Firestore] Quotations live stream running in local cache mode (quota limit).");
+          console.info("[Firestore] Quotations live stream running in offline local mode (quota reached).");
+          try {
+            unsubscribe();
+          } catch {}
         } else {
           console.warn("Firestore Quotations live stream notice:", err?.message || err);
         }
@@ -232,8 +236,9 @@ export function listenToCloudContracts(
   onError?: (error: any) => void
 ): () => void {
   try {
+    let unsubscribe: () => void = () => {};
     const q = query(collection(db, CONTRACTS_COLLECTION), limit(300));
-    const unsubscribe = onSnapshot(
+    unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const cloudContracts: any[] = [];
@@ -256,7 +261,10 @@ export function listenToCloudContracts(
       },
       (err) => {
         if (isQuotaOrQueueError(err)) {
-          console.info("[Firestore] Contracts live stream running in local cache mode (quota limit).");
+          console.info("[Firestore] Contracts live stream running in offline local mode (quota reached).");
+          try {
+            unsubscribe();
+          } catch {}
         }
         if (onError) onError(err);
         try {
