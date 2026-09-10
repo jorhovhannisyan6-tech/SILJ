@@ -27,11 +27,27 @@ const CLIENTS_COLLECTION = "clients";
 const LOCAL_STORAGE_QUOTES_KEY = "sil-quote-history";
 const LOCAL_STORAGE_CONTRACTS_KEY = "sil-issued-contracts-v1";
 const LOCAL_STORAGE_CLIENTS_KEY = "sil-crm-clients-v1";
+const QUOTA_EXCEEDED_STORAGE_KEY = "sil-firestore-quota-exceeded-until";
 
-// Circuit breaker for Firestore write operations when daily quota is reached
+// Circuit breaker for Firestore operations when daily quota is reached
 let cloudWriteQuotaExceededUntil = 0;
 
-function isQuotaOrQueueError(err: any): boolean {
+export function isCloudWriteQuotaExceeded(): boolean {
+  if (Date.now() < cloudWriteQuotaExceededUntil) return true;
+  try {
+    const stored = localStorage.getItem(QUOTA_EXCEEDED_STORAGE_KEY);
+    if (stored) {
+      const until = Number(stored);
+      if (until && Date.now() < until) {
+        cloudWriteQuotaExceededUntil = until;
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+
+export function isQuotaOrQueueError(err: any): boolean {
   if (!err) return false;
   const msg = String(err?.message || err?.code || err || "").toLowerCase();
   return (
@@ -39,14 +55,19 @@ function isQuotaOrQueueError(err: any): boolean {
     msg.includes("quota") ||
     msg.includes("exhausted maximum allowed queued writes") ||
     msg.includes("write stream") ||
-    msg.includes("free daily write units")
+    msg.includes("free daily write units") ||
+    msg.includes("free daily read units")
   );
 }
 
-function handleCloudWriteError(operation: string, err: any) {
+export function handleCloudWriteError(operation: string, err: any) {
   if (isQuotaOrQueueError(err)) {
-    // Trip the circuit breaker for 15 minutes to prevent spamming the write queue
-    cloudWriteQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+    // Trip the circuit breaker for 2 hours to prevent spamming the write queue and triggering console warnings
+    const until = Date.now() + 2 * 60 * 60 * 1000;
+    cloudWriteQuotaExceededUntil = until;
+    try {
+      localStorage.setItem(QUOTA_EXCEEDED_STORAGE_KEY, String(until));
+    } catch {}
     console.info(`[Firestore] Cloud write quota reached for ${operation}. Seamlessly operating in offline-first mode (LocalStorage active).`);
   } else {
     console.warn(`[Firestore] ${operation} write warning (offline copy preserved):`, err?.message || err);
@@ -70,7 +91,7 @@ export async function syncQuotationToCloud(quote: QuotationProposal): Promise<vo
   }
 
   // Check circuit breaker before attempting Firestore write
-  if (Date.now() < cloudWriteQuotaExceededUntil) {
+  if (isCloudWriteQuotaExceeded()) {
     return;
   }
 
@@ -110,7 +131,7 @@ export async function deleteQuotationFromCloud(quoteId: string): Promise<void> {
     console.warn("Local storage delete error:", err);
   }
 
-  if (Date.now() < cloudWriteQuotaExceededUntil) {
+  if (isCloudWriteQuotaExceeded()) {
     return;
   }
 
@@ -207,7 +228,7 @@ export async function syncContractToCloud(contract: any): Promise<void> {
     console.warn("Local contract cache error:", err);
   }
 
-  if (Date.now() < cloudWriteQuotaExceededUntil) {
+  if (isCloudWriteQuotaExceeded()) {
     return;
   }
 

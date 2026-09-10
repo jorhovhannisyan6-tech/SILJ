@@ -4,6 +4,7 @@ import { SilLogo } from './SilLogo';
 import { setCurrentUser, type PortalUser, type UserRole } from '../utils/authStore';
 import { signInWithGoogle, db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { isCloudWriteQuotaExceeded, handleCloudWriteError } from '../lib/firestoreSync';
 import { safeFetchJson } from '../utils/apiClient';
 
 export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => void }) {
@@ -49,10 +50,12 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
           createdAt: data.createdAt || new Date().toISOString(),
           lastLogin: new Date().toISOString()
         };
-        try {
-          await setDoc(userRef, { lastLogin: new Date().toISOString() }, { merge: true });
-        } catch (writeErr) {
-          console.info("Firestore user lastLogin update skipped (local session active):", writeErr);
+        if (!isCloudWriteQuotaExceeded()) {
+          try {
+            await setDoc(userRef, { lastLogin: new Date().toISOString() }, { merge: true });
+          } catch (writeErr) {
+            handleCloudWriteError("user lastLogin", writeErr);
+          }
         }
       } else {
         const isAdmin = firebaseUser.email === 'jor.hovhannisyan6@gmail.com';
@@ -66,10 +69,12 @@ export function LoginScreen({ onLoggedIn }: { onLoggedIn: (u: PortalUser) => voi
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString()
         };
-        try {
-          await setDoc(userRef, portalUser);
-        } catch (writeErr) {
-          console.info("Firestore user creation skipped (local session active):", writeErr);
+        if (!isCloudWriteQuotaExceeded()) {
+          try {
+            await setDoc(userRef, portalUser);
+          } catch (writeErr) {
+            handleCloudWriteError("user registration", writeErr);
+          }
         }
       }
 

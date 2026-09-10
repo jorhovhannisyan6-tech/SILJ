@@ -4,9 +4,9 @@ import { getFirestore, setLogLevel } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import config from "../../firebase-applet-config.json";
 
-// Silence benign idle stream disconnect warnings
+// Silence benign stream disconnects and quota background retries
 try {
-  setLogLevel("error");
+  setLogLevel("silent");
 } catch {
   // Ignore if already set
 }

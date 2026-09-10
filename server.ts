@@ -21,7 +21,7 @@ import {
 dotenv.config();
 
 try {
-  setLogLevel("error");
+  setLogLevel("silent");
 } catch {}
 
 const app = express();
@@ -733,13 +733,17 @@ async function triggerEmbeddingGeneration(forceAll = false) {
           const optimizedVector = vector.map(v => Math.round(v * 10000) / 10000);
           chunk.vector = optimizedVector;
           embeddingCache[chunk.id] = optimizedVector;
+          const fullTextHash = getChunkHash(chunk.text);
+          embeddingCache[fullTextHash] = optimizedVector;
           newlyGeneratedCount++;
           success = true;
           consecutiveErrors = 0;
           
-          // Save dynamically on every 5 new generation steps so progress is never lost
-          if (newlyGeneratedCount % 5 === 0) {
+          // Save dynamically to disk on every single new vector generation step so it is permanently cached in local files
+          try {
             fs.writeFileSync(cachePath, JSON.stringify(embeddingCache), "utf8");
+          } catch (writeErr) {
+            console.warn("Failed to write embedding cache to disk file:", writeErr);
           }
           
           // Respect free-tier API limits with 3.5s sleep spacing to stay well within limits
