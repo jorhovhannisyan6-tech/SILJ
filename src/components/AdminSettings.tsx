@@ -26,7 +26,8 @@ export function AdminSettings(){
  const token=localStorage.getItem('sil-auth-token') || localStorage.getItem('sil_token') || ''; const headers:any=token?{Authorization:`Bearer ${token}`}:{};
  const load=async()=>{try{if(['admin','manager'].includes(me?.role||'')){const r=await fetch('/api/admin/users',{headers});if(r.ok)setUsers((await r.json()).users||[])} if(['admin','manager','auditor'].includes(me?.role||'')){const r=await fetch('/api/admin/audit',{headers});if(r.ok)setServerLogs((await r.json()).events||[])}}catch{}};
  useEffect(()=>{load()},[]);
- const rule=rules[product] as FixedProductRule; const save=()=>{saveQuotationRules(rules);saveSiteContent(content);setSaved(true);addAuditEvent({action:'admin.settings.save',entity:'settings',details:{product}});setTimeout(()=>setSaved(false),1200)};
+  const rule = (rules?.[product] || FIXED_QUOTATION_RULES[product as keyof typeof FIXED_QUOTATION_RULES] || FIXED_QUOTATION_RULES.property) as FixedProductRule;
+  const save=()=>{saveQuotationRules(rules);saveSiteContent(content);setSaved(true);addAuditEvent({action:'admin.settings.save',entity:'settings',details:{product}});setTimeout(()=>setSaved(false),1200)};
  const publish=()=>{saveQuotationRules(rules);publishQuotationRules(rules);const v=publishRules();setVersion(v);setSaved(true)};
  const approve=async(id:string,ok:boolean)=>{const r=await fetch(`/api/admin/users/${id}/${ok?'approve':'reject'}`,{method:'POST',headers});if(r.ok){await load();addAuditEvent({action:ok?'user.approve':'user.reject',entity:'user',entityId:id});}};
  const updateUser=async(id:string,patch:any)=>{const r=await fetch(`/api/admin/users/${id}`,{method:'PATCH',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(patch)});if(r.ok)await load()};
@@ -460,8 +461,44 @@ function Security({users,logs}:{users:any[];logs:any[]}){
 }
 function Analytics({users,logs}:{users:any[];logs:any[]}){const byAction=logs.reduce((a:any,x:any)=>(a[x.action]=(a[x.action]||0)+1,a),{});return <div className="sil-card p-6"><h2 className="text-xl font-black mb-5">Գործունեության Analytics</h2><div className="grid md:grid-cols-3 gap-4"><Metric title="Ընդհանուր events" value={logs.length}/><Metric title="Ակտիվ users" value={users.filter(u=>u.status==='active').length}/><Metric title="Տարբեր գործողություններ" value={Object.keys(byAction).length}/></div><div className="mt-6 space-y-2">{Object.entries(byAction).sort((a:any,b:any)=>b[1]-a[1]).slice(0,15).map(([k,v]:any)=><div key={k} className="flex justify-between p-3 rounded-xl bg-slate-50"><span>{k}</span><b>{v}</b></div>)}</div></div>}
 function Metric({title,value}:{title:string;value:any}){return <div className="rounded-2xl bg-slate-50 p-5"><div className="text-2xl font-black">{value}</div><div className="text-xs text-slate-500 mt-1">{title}</div></div>}
-function Templates(){return <div className="sil-card p-6"><h2 className="text-xl font-black">Quotation Templates</h2><p className="text-sm text-slate-500 mt-2">Յուրաքանչյուր պրոդուկտի template-ը պահվում է առանձին և quotation engine-ը ընտրում է համապատասխան ձևը։</p><div className="grid md:grid-cols-3 gap-3 mt-5">{productKeys.map(k=><div key={k} className="rounded-2xl border p-4"><FileText className="text-[#075bd5]"/><b className="block mt-3">{FIXED_QUOTATION_RULES[k].nameArm}</b><span className="text-xs text-emerald-700">Product-specific template ✓</span></div>)}</div></div>}
-function Rules({rules,setRules,product,setProduct,version,onHealth,health,onRegression,regression}:{rules:any;setRules:any;product:any;setProduct:any;version:string;onHealth:any;health:any;onRegression:any;regression:any}){const rule=rules[product];const patch=(p:any)=>setRules((r:any)=>({...r,[product]:{...r[product],...p}}));return <div className="space-y-5"><div className="sil-card p-6"><div className="flex gap-2 overflow-auto mb-5">{productKeys.map(k=><button key={k} onClick={()=>setProduct(k)} className={`px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap ${k===product?'bg-[#075bd5] text-white':'bg-slate-100'}`}>{rules[k].nameArm}</button>)}</div><h2 className="text-xl font-black">{rule.nameArm}</h2><div className="grid md:grid-cols-3 gap-4 mt-4"><Field l="Անվանում" v={rule.nameArm} c={(v:string)=>patch({nameArm:v})}/><Num l="Min insured" v={rule.minInsuredAmount} c={(v:number)=>patch({minInsuredAmount:v})}/><Num l="Max insured" v={rule.maxInsuredAmount||0} c={(v:number)=>patch({maxInsuredAmount:v||undefined})}/><Num l="Min tariff %" v={rule.minTariff} c={(v:number)=>patch({minTariff:v})}/><Num l="Default tariff %" v={rule.defaultTariff} c={(v:number)=>patch({defaultTariff:v})}/><Num l="Max tariff %" v={rule.maxTariff} c={(v:number)=>patch({maxTariff:v})}/></div><Text l="Available risks" v={(rule.availableRisks||[]).join('\n')} c={(v:string)=>patch({availableRisks:v.split('\n').filter(Boolean)})}/></div><div className="grid md:grid-cols-2 gap-5"><div className="sil-card p-6"><h3 className="font-black">CASCO Regression Lab</h3><button onClick={onRegression} className="mt-3 px-4 py-2 rounded-xl bg-[#061A40] text-white font-bold">Run Excel regression</button>{regression&&<div className="mt-3 text-sm font-bold">{regression.filter((x:any)=>x.pass).length}/{regression.length} PASS</div>}</div><div className="sil-card p-6"><h3 className="font-black">System Health</h3><button onClick={onHealth} className="mt-3 px-4 py-2 rounded-xl bg-[#061A40] text-white font-bold">Run health check</button>{health&&<div className="mt-3 space-y-1">{health.map((h:any)=><div key={h.key} className="text-xs">{h.status==='ok'?'✓':'⚠'} {h.label}: {h.detail}</div>)}</div>}</div></div></div>}
+function Templates(){return <div className="sil-card p-6"><h2 className="text-xl font-black">Quotation Templates</h2><p className="text-sm text-slate-500 mt-2">Յուրաքանչյուր պրոդուկտի template-ը պահվում է առանձին և quotation engine-ը ընտրում է համապատասխան ձևը։</p><div className="grid md:grid-cols-3 gap-3 mt-5">{productKeys.map(k=><div key={k} className="rounded-2xl border p-4"><FileText className="text-[#075bd5]"/><b className="block mt-3">{FIXED_QUOTATION_RULES[k]?.nameArm || k}</b><span className="text-xs text-emerald-700">Product-specific template ✓</span></div>)}</div></div>}
+function Rules({rules,setRules,product,setProduct,version,onHealth,health,onRegression,regression}:{rules:any;setRules:any;product:any;setProduct:any;version:string;onHealth:any;health:any;onRegression:any;regression:any}){
+  const rule = rules?.[product] || FIXED_QUOTATION_RULES[product as keyof typeof FIXED_QUOTATION_RULES] || FIXED_QUOTATION_RULES.property;
+  const patch = (p:any) => setRules((r:any) => ({ ...r, [product]: { ...(r?.[product] || rule), ...p } }));
+  return <div className="space-y-5">
+    <div className="sil-card p-6">
+      <div className="flex gap-2 overflow-auto mb-5">
+        {productKeys.map(k => (
+          <button key={k} onClick={() => setProduct(k)} className={`px-3 py-2 rounded-xl text-xs font-black whitespace-nowrap ${k === product ? 'bg-[#075bd5] text-white' : 'bg-slate-100'}`}>
+            {rules?.[k]?.nameArm || FIXED_QUOTATION_RULES[k]?.nameArm || k}
+          </button>
+        ))}
+      </div>
+      <h2 className="text-xl font-black">{rule?.nameArm || product}</h2>
+      <div className="grid md:grid-cols-3 gap-4 mt-4">
+        <Field l="Անվանում" v={rule?.nameArm || ''} c={(v:string) => patch({nameArm: v})}/>
+        <Num l="Min insured" v={rule?.minInsuredAmount ?? 0} c={(v:number) => patch({minInsuredAmount: v})}/>
+        <Num l="Max insured" v={rule?.maxInsuredAmount || 0} c={(v:number) => patch({maxInsuredAmount: v || undefined})}/>
+        <Num l="Min tariff %" v={rule?.minTariff ?? 0} c={(v:number) => patch({minTariff: v})}/>
+        <Num l="Default tariff %" v={rule?.defaultTariff ?? 0} c={(v:number) => patch({defaultTariff: v})}/>
+        <Num l="Max tariff %" v={rule?.maxTariff ?? 0} c={(v:number) => patch({maxTariff: v})}/>
+      </div>
+      <Text l="Available risks" v={(rule?.availableRisks || []).join('\n')} c={(v:string) => patch({availableRisks: v.split('\n').filter(Boolean)})}/>
+    </div>
+    <div className="grid md:grid-cols-2 gap-5">
+      <div className="sil-card p-6">
+        <h3 className="font-black">CASCO Regression Lab</h3>
+        <button onClick={onRegression} className="mt-3 px-4 py-2 rounded-xl bg-[#061A40] text-white font-bold">Run Excel regression</button>
+        {regression && <div className="mt-3 text-sm font-bold">{regression.filter((x:any) => x.pass).length}/{regression.length} PASS</div>}
+      </div>
+      <div className="sil-card p-6">
+        <h3 className="font-black">System Health</h3>
+        <button onClick={onHealth} className="mt-3 px-4 py-2 rounded-xl bg-[#061A40] text-white font-bold">Run health check</button>
+        {health && <div className="mt-3 space-y-1">{health.map((h:any) => <div key={h.key} className="text-xs">{h.status === 'ok' ? '✓' : '⚠'} {h.label}: {h.detail}</div>)}</div>}
+      </div>
+    </div>
+  </div>;
+}
 function SystemSettings({content,setContent}:{content:any;setContent:any}){return <div className="sil-card p-6"><h2 className="text-xl font-black mb-4">System Settings</h2><div className="grid md:grid-cols-2 gap-4">{Object.entries(content).map(([k,v]:any)=><div key={k}><Field l={k} v={v} c={(x:string)=>setContent((c:any)=>({...c,[k]:x}))}/></div>)}</div></div>}
 function Field({l,v,c}:{l:string;v:any;c:(v:string)=>void}){return <label className="text-sm font-bold block">{l}<input value={v??''} onChange={e=>c(e.target.value)} className="sil-input"/></label>}
 function Num({l,v,c}:{l:string;v:any;c:(v:number)=>void}){return <label className="text-sm font-bold block">{l}<input type="number" value={v??0} onChange={e=>c(Number(e.target.value))} className="sil-input"/></label>}

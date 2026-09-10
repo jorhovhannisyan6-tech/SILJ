@@ -13,7 +13,18 @@ function clone<T>(value: T): T {
 export function getQuotationRules(): Record<InsuranceProductType, FixedProductRule> {
   try {
     const raw = localStorage.getItem(ACTIVE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const merged: any = clone(FIXED_QUOTATION_RULES);
+        for (const key of Object.keys(FIXED_QUOTATION_RULES) as InsuranceProductType[]) {
+          if (parsed[key]) {
+            merged[key] = { ...merged[key], ...parsed[key] };
+          }
+        }
+        return merged;
+      }
+    }
   } catch {}
   return clone(FIXED_QUOTATION_RULES);
 }
@@ -21,7 +32,22 @@ export function getQuotationRules(): Record<InsuranceProductType, FixedProductRu
 export function getDraftQuotationRules(): Record<InsuranceProductType, FixedProductRule> {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        const merged: any = clone(FIXED_QUOTATION_RULES);
+        const base = getQuotationRules();
+        for (const key of Object.keys(FIXED_QUOTATION_RULES) as InsuranceProductType[]) {
+          if (base[key]) {
+            merged[key] = { ...merged[key], ...base[key] };
+          }
+          if (parsed[key]) {
+            merged[key] = { ...merged[key], ...parsed[key] };
+          }
+        }
+        return merged;
+      }
+    }
   } catch {}
   return clone(getQuotationRules());
 }
